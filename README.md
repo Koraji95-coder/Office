@@ -18,6 +18,25 @@ C:\Dev\Daily
 
 `Suite Runtime Control` resolves Office from workstation-local config first, then `C:\Dev\Daily`, and only falls back to the old OneDrive path for compatibility.
 
+## GitHub Remote Setup
+
+After you create the GitHub repo, wire this local repo to it:
+
+```powershell
+git remote add origin https://github.com/<YOUR_GITHUB_USER>/Daily.git
+git push -u origin main
+```
+
+## Other Workstation Setup
+
+On the other PC, clone this repo directly into the standard path:
+
+```powershell
+git clone https://github.com/<YOUR_GITHUB_USER>/Daily.git C:\Dev\Daily
+```
+
+Then clone `Suite` into `C:\Dev\Suite` and run Suite's workstation bootstrap from the `Suite` repo. If both repos are already in their standard roots, Suite does not need a `-DailyRepoUrl` argument.
+
 ## Build
 
 ```powershell
