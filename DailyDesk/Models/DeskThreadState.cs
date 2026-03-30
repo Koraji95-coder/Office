@@ -1,0 +1,14 @@
+namespace DailyDesk.Models;
+
+public sealed class DeskThreadState
+{
+    public string DeskId { get; set; } = string.Empty;
+    public string DeskTitle { get; set; } = string.Empty;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
+    public List<DeskMessageRecord> Messages { get; set; } = [];
+
+    public string DisplaySummary =>
+        Messages.Count == 0
+            ? $"{DeskTitle} | no thread activity yet"
+            : $"{DeskTitle} | {Messages.Count} messages | updated {UpdatedAt:MMM d, h:mm tt}";
+}
