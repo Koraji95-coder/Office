@@ -23,7 +23,7 @@ C:\Dev\Daily
 After you create the GitHub repo, wire this local repo to it:
 
 ```powershell
-git remote add origin https://github.com/<YOUR_GITHUB_USER>/Daily.git
+git remote add origin https://github.com/Koraji95-coder/Office.git
 git push -u origin main
 ```
 
@@ -32,7 +32,7 @@ git push -u origin main
 On the other PC, clone this repo directly into the standard path:
 
 ```powershell
-git clone https://github.com/<YOUR_GITHUB_USER>/Daily.git C:\Dev\Daily
+git clone https://github.com/Koraji95-coder/Office.git C:\Dev\Daily
 ```
 
 Then clone `Suite` into `C:\Dev\Suite` and run Suite's workstation bootstrap from the `Suite` repo. If both repos are already in their standard roots, Suite does not need a `-DailyRepoUrl` argument.
