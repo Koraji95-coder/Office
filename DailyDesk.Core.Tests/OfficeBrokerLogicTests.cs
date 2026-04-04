@@ -57,8 +57,13 @@ public sealed class OfficeBrokerLogicTests
 
         Assert.NotNull(resolveMethod);
 
+        // Derive the real repo root by walking up from the test project directory
+        // until we find the DailyDesk/DailyDesk.csproj marker.
+        var repoRoot = FindRepoRoot();
+        Assert.NotNull(repoRoot);
+
         var baseDirectory = Path.Combine(
-            @"C:\Users\DustinWard\Documents\GitHub\Office",
+            repoRoot!,
             "artifacts",
             "DailyDesk.Broker",
             "publish"
@@ -67,7 +72,7 @@ public sealed class OfficeBrokerLogicTests
         var actual = (string?)resolveMethod!.Invoke(null, [baseDirectory]);
 
         Assert.Equal(
-            Path.GetFullPath(@"C:\Users\DustinWard\Documents\GitHub\Office"),
+            Path.GetFullPath(repoRoot!),
             actual
         );
     }
@@ -92,16 +97,17 @@ public sealed class OfficeBrokerLogicTests
     public void LearningProfileBuild_UsesHumanFriendlyKnowledgeLibraryLanguage()
     {
         var service = new LearningProfileService();
+        var knowledgePath = Path.Combine(Path.GetTempPath(), "OfficeTestKnowledge");
         var library = new LearningLibrary
         {
-            RootPath = @"C:\Users\DustinWard\Documents\GitHub\Office\Knowledge",
+            RootPath = knowledgePath,
             Documents = [],
         };
 
         var profile = service.Build(library, new TrainingHistorySummary(), new SuiteSnapshot());
 
         Assert.Contains("knowledge library", profile.CurrentNeed, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(@"C:\Users\DustinWard", profile.CurrentNeed, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(knowledgePath, profile.CurrentNeed, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -199,5 +205,24 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal("1.0.0", artifact.Version);
         Assert.Equal("office-ml-pipeline", artifact.Source);
         Assert.True(artifact.ReviewRequired);
+    }
+
+    private static string? FindRepoRoot()
+    {
+        // Walk up from the test assembly's directory to find the repo root
+        // (the directory containing DailyDesk/DailyDesk.csproj).
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            var marker = Path.Combine(dir, "DailyDesk", "DailyDesk.csproj");
+            if (File.Exists(marker))
+            {
+                return dir;
+            }
+
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return null;
     }
 }

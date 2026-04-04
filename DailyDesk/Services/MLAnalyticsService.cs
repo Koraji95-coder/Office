@@ -281,7 +281,7 @@ public sealed class MLAnalyticsService
 
         return new MLAnalyticsResult
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
             WeakTopics = weak.OrderBy(t => t.Accuracy).ToList(),
             StrongTopics = strong.OrderByDescending(t => t.Accuracy).ToList(),
@@ -313,21 +313,21 @@ public sealed class MLAnalyticsService
     private static MLEmbeddingsResult BuildFallbackEmbeddings() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
         };
 
     private static MLForecastResult BuildFallbackForecast() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
         };
 
     private static SuiteMLArtifactBundle BuildFallbackArtifacts() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             GeneratedAt = DateTimeOffset.UtcNow.ToString("O"),
         };
 }
