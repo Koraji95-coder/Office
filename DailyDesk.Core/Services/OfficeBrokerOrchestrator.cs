@@ -33,6 +33,8 @@ public sealed class OfficeBrokerOrchestrator
     private readonly OperatorMemoryStore _operatorMemoryStore;
     private readonly OfficeSessionStateStore _sessionStore;
     private readonly MLAnalyticsService _mlAnalyticsService;
+    private readonly OfficeDatabase _officeDatabase;
+    private readonly OfficeJobStore _jobStore;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -61,8 +63,17 @@ public sealed class OfficeBrokerOrchestrator
         Directory.CreateDirectory(_stateRootPath);
         _additionalKnowledgePaths = _settings.ResolveAdditionalKnowledgePaths();
 
+        // Resilience pipelines
+        var ollamaPipeline = OfficeResiliencePipelines.BuildOllamaPipeline();
+        var webResearchPipeline = OfficeResiliencePipelines.BuildWebResearchPipeline();
+        var pythonPipeline = OfficeResiliencePipelines.BuildPythonSubprocessPipeline();
+
+        // LiteDB persistence
+        _officeDatabase = new OfficeDatabase(_stateRootPath);
+        _jobStore = new OfficeJobStore(_officeDatabase);
+
         var processRunner = new ProcessRunner();
-        _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner);
+        _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner, ollamaPipeline);
         _suiteSnapshotService = new SuiteSnapshotService(
             processRunner,
             _settings.SuiteRuntimeStatusEndpoint
@@ -71,22 +82,28 @@ public sealed class OfficeBrokerOrchestrator
             _modelProvider,
             _settings.TrainingModel
         );
-        _trainingStore = new TrainingStore(_stateRootPath);
+        _trainingStore = new TrainingStore(_stateRootPath, _officeDatabase);
         _knowledgeImportService = new KnowledgeImportService(
             processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts", "extract_document_text.py")
         );
         _learningProfileService = new LearningProfileService();
         _oralDefenseService = new OralDefenseService(_modelProvider, _settings.MentorModel);
-        _liveResearchService = new LiveResearchService(_modelProvider);
-        _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath);
-        _sessionStore = new OfficeSessionStateStore(_stateRootPath);
+        _liveResearchService = new LiveResearchService(_modelProvider, webResearchPipeline);
+        _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath, _officeDatabase);
+        _sessionStore = new OfficeSessionStateStore(_stateRootPath, _officeDatabase);
         _mlAnalyticsService = new MLAnalyticsService(
             processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts"),
-            new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx"))
+            new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx")),
+            resiliencePipeline: pythonPipeline
         );
     }
+
+    /// <summary>
+    /// Provides access to the job store for the background worker and job endpoints.
+    /// </summary>
+    public OfficeJobStore JobStore => _jobStore;
 
     public async Task<object> GetHealthAsync(CancellationToken cancellationToken = default)
     {

@@ -21,7 +21,7 @@ Before proposing changes, it is important to recognize what the codebase already
 
 ---
 
-## Phase 1 — Foundation (Logging, Parsing, Validation, Ollama Client)
+## Phase 1 — Foundation (Logging, Parsing, Validation, Ollama Client) ✅ COMPLETE
 
 **Goal:** Improve observability, correctness, and client reliability without changing architecture.
 
@@ -106,9 +106,11 @@ Before proposing changes, it is important to recognize what the codebase already
 
 ---
 
-## Phase 2 — Persistence & Resilience (LiteDB, Polly)
+## Phase 2 — Persistence & Resilience (LiteDB, Polly) ✅ COMPLETE
 
 **Goal:** Replace fragile JSON file I/O with a proper embedded database. Add retry/circuit-breaker patterns to all external calls.
+
+**Packages added:** `LiteDB` 5.0.21, `Polly.Core` 8.6.6 to `DailyDesk.Core.csproj`.
 
 ### 2.1 LiteDB Local Persistence
 
@@ -157,9 +159,11 @@ Before proposing changes, it is important to recognize what the codebase already
 
 ---
 
-## Phase 3 — Async Job Model for ML Work
+## Phase 3 — Async Job Model for ML Work ✅ COMPLETE
 
 **Goal:** Move ML pipeline execution from synchronous broker endpoints to a background job system with persistent state.
+
+**Implementation:** `OfficeJob` model + `OfficeJobStore` (LiteDB) + `OfficeJobWorker` (`BackgroundService`) + 3 new endpoints + `?sync=true` backward compatibility on ML endpoints.
 
 ### 3.1 Job Record Model
 

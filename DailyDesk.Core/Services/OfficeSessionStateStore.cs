@@ -1,16 +1,19 @@
 using System.IO;
 using System.Text.Json;
 using DailyDesk.Models;
+using LiteDB;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace DailyDesk.Services;
 
 public sealed class OfficeSessionStateStore
 {
     private readonly string _storePath;
+    private readonly OfficeDatabase? _db;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
-    public OfficeSessionStateStore(string? stateRootPath = null)
+    public OfficeSessionStateStore(string? stateRootPath = null, OfficeDatabase? db = null)
     {
         var root = string.IsNullOrWhiteSpace(stateRootPath)
             ? Path.Combine(
@@ -20,12 +23,29 @@ public sealed class OfficeSessionStateStore
             : Path.GetFullPath(stateRootPath);
         Directory.CreateDirectory(root);
         _storePath = Path.Combine(root, "broker-live-session.json");
+        _db = db;
+
+        if (_db is not null)
+        {
+            MigrateFromJsonIfNeeded();
+        }
     }
 
     public string StorePath => _storePath;
 
     public async Task<OfficeLiveSessionState> LoadAsync(CancellationToken cancellationToken = default)
     {
+        if (_db is not null)
+        {
+            var doc = _db.SessionState.FindById("current");
+            if (doc is not null)
+            {
+                var state = BsonMapper.Global.Deserialize<OfficeLiveSessionState>(doc);
+                return Normalize(state);
+            }
+            return Normalize(new OfficeLiveSessionState());
+        }
+
         if (!File.Exists(_storePath))
         {
             return new OfficeLiveSessionState();
@@ -52,6 +72,15 @@ public sealed class OfficeSessionStateStore
     {
         var normalized = Normalize(state);
         normalized.UpdatedAt = DateTimeOffset.Now;
+
+        if (_db is not null)
+        {
+            var doc = BsonMapper.Global.Serialize(normalized);
+            doc.AsDocument["_id"] = "current";
+            _db.SessionState.Upsert(doc.AsDocument);
+            return;
+        }
+
         var payload = JsonSerializer.Serialize(normalized, _jsonOptions);
         await File.WriteAllTextAsync(_storePath, payload, cancellationToken);
     }
@@ -63,6 +92,40 @@ public sealed class OfficeSessionStateStore
         var state = Normalize(new OfficeLiveSessionState());
         await SaveAsync(state, cancellationToken);
         return state;
+    }
+
+    /// <summary>
+    /// Migrates existing JSON session state into LiteDB on first run.
+    /// Only called from constructor when _db is guaranteed non-null.
+    /// </summary>
+    private void MigrateFromJsonIfNeeded()
+    {
+        if (_db is null) return;
+        if (_db.HasMigrated("session-state")) return;
+        if (!File.Exists(_storePath)) { _db.MarkMigrated("session-state"); return; }
+
+        try
+        {
+            var json = File.ReadAllText(_storePath);
+            var state = JsonSerializer.Deserialize<OfficeLiveSessionState>(json, _jsonOptions)
+                ?? new OfficeLiveSessionState();
+            var normalized = Normalize(state);
+            var doc = BsonMapper.Global.Serialize(normalized);
+            doc.AsDocument["_id"] = "current";
+            _db.SessionState.Upsert(doc.AsDocument);
+
+            _db.MarkMigrated("session-state");
+
+            var migratedPath = _storePath + ".migrated";
+            if (!File.Exists(migratedPath))
+            {
+                File.Move(_storePath, migratedPath);
+            }
+        }
+        catch
+        {
+            // Migration failure is non-fatal.
+        }
     }
 
     private static OfficeLiveSessionState Normalize(OfficeLiveSessionState state)

@@ -383,6 +383,264 @@ public sealed class OfficeBrokerLogicTests
         engine.Dispose(); // Should not throw
     }
 
+    // --- Phase 2: LiteDB Persistence Tests ---
+
+    [Fact]
+    public void OfficeDatabase_CreatesAndDisposes()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            var db = new OfficeDatabase(tempDir);
+            Assert.NotNull(db.Jobs);
+            Assert.NotNull(db.PracticeAttempts);
+            db.Dispose();
+
+            Assert.True(File.Exists(Path.Combine(tempDir, "office.db")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeDatabase_MigrationTracking()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            Assert.False(db.HasMigrated("test-store"));
+            db.MarkMigrated("test-store");
+            Assert.True(db.HasMigrated("test-store"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // --- Phase 3: Job Model Tests ---
+
+    [Fact]
+    public void OfficeJob_DefaultValues()
+    {
+        var job = new OfficeJob();
+        Assert.NotNull(job.Id);
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+        Assert.Equal(string.Empty, job.Type);
+        Assert.Null(job.Error);
+        Assert.Null(job.ResultJson);
+    }
+
+    [Fact]
+    public void OfficeJobStore_EnqueueAndRetrieve()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "test");
+            Assert.Equal(OfficeJobStatus.Queued, job.Status);
+            Assert.Equal(OfficeJobType.MLAnalytics, job.Type);
+
+            var retrieved = store.GetById(job.Id);
+            Assert.NotNull(retrieved);
+            Assert.Equal(job.Id, retrieved!.Id);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DequeueNextSetsRunning()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLForecast, "test");
+            var dequeued = store.DequeueNext();
+
+            Assert.NotNull(dequeued);
+            Assert.Equal(job.Id, dequeued!.Id);
+            Assert.Equal(OfficeJobStatus.Running, dequeued.Status);
+            Assert.NotNull(dequeued.StartedAt);
+
+            // No more queued jobs
+            Assert.Null(store.DequeueNext());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_MarkSucceeded()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLPipeline, "test");
+            store.MarkSucceeded(job.Id, "{\"ok\":true}");
+
+            var completed = store.GetById(job.Id);
+            Assert.NotNull(completed);
+            Assert.Equal(OfficeJobStatus.Succeeded, completed!.Status);
+            Assert.NotNull(completed.CompletedAt);
+            Assert.Equal("{\"ok\":true}", completed.ResultJson);
+            Assert.Null(completed.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_MarkFailed()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLEmbeddings, "test");
+            store.MarkFailed(job.Id, "Something went wrong");
+
+            var failed = store.GetById(job.Id);
+            Assert.NotNull(failed);
+            Assert.Equal(OfficeJobStatus.Failed, failed!.Status);
+            Assert.NotNull(failed.CompletedAt);
+            Assert.Equal("Something went wrong", failed.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_ListRecentReturnsInOrder()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            store.Enqueue(OfficeJobType.MLAnalytics, "first");
+            store.Enqueue(OfficeJobType.MLForecast, "second");
+            store.Enqueue(OfficeJobType.MLPipeline, "third");
+
+            var jobs = store.ListRecent(10);
+            Assert.Equal(3, jobs.Count);
+            Assert.Equal("third", jobs[0].RequestedBy);
+            Assert.Equal("first", jobs[2].RequestedBy);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // --- Phase 2: Polly Resilience Pipeline Tests ---
+
+    [Fact]
+    public void OfficeResiliencePipelines_OllamaBuilds()
+    {
+        var pipeline = OfficeResiliencePipelines.BuildOllamaPipeline();
+        Assert.NotNull(pipeline);
+    }
+
+    [Fact]
+    public void OfficeResiliencePipelines_WebResearchBuilds()
+    {
+        var pipeline = OfficeResiliencePipelines.BuildWebResearchPipeline();
+        Assert.NotNull(pipeline);
+    }
+
+    [Fact]
+    public void OfficeResiliencePipelines_PythonSubprocessBuilds()
+    {
+        var pipeline = OfficeResiliencePipelines.BuildPythonSubprocessPipeline();
+        Assert.NotNull(pipeline);
+    }
+
+    // --- Phase 2: LiteDB-backed TrainingStore Tests ---
+
+    [Fact]
+    public async Task TrainingStore_LiteDB_SaveAndLoadPracticeAttempt()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new TrainingStore(tempDir, db);
+
+            var attempt = new TrainingAttemptRecord
+            {
+                CompletedAt = DateTimeOffset.Now,
+                QuestionCount = 2,
+                CorrectCount = 1,
+                Questions =
+                [
+                    new TrainingAttemptQuestionRecord { Topic = "grounding", Correct = true },
+                    new TrainingAttemptQuestionRecord { Topic = "protection", Correct = false },
+                ],
+            };
+
+            var summary = await store.SavePracticeAttemptAsync(attempt);
+            Assert.Equal(1, summary.TotalAttempts);
+            Assert.Equal(2, summary.TotalQuestions);
+            Assert.Equal(1, summary.CorrectAnswers);
+
+            var allAttempts = store.LoadAllAttempts();
+            Assert.Single(allAttempts);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task TrainingStore_LiteDB_Reset()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new TrainingStore(tempDir, db);
+
+            await store.SavePracticeAttemptAsync(new TrainingAttemptRecord
+            {
+                CompletedAt = DateTimeOffset.Now,
+                Questions = [new TrainingAttemptQuestionRecord { Topic = "test", Correct = true }],
+            });
+
+            var summary = await store.ResetAsync();
+            Assert.Equal(0, summary.TotalAttempts);
+            Assert.Empty(store.LoadAllAttempts());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

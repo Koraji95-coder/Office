@@ -49,6 +49,7 @@ builder.Services.AddSingleton(
     }
 );
 builder.Services.AddSingleton<OfficeBrokerOrchestrator>();
+builder.Services.AddHostedService<OfficeJobWorker>();
 
 var app = builder.Build();
 var logger = app.Logger;
@@ -591,8 +592,16 @@ app.MapPost("/api/workspace/reset", async (OfficeBrokerOrchestrator orchestrator
     }
 });
 
-app.MapPost("/api/ml/analytics", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/ml/analytics", async (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.MLAnalytics, "broker");
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
     try
     {
         var analytics = await orchestrator.RunMLAnalyticsAsync(ct);
@@ -610,8 +619,16 @@ app.MapPost("/api/ml/analytics", async (OfficeBrokerOrchestrator orchestrator, C
     }
 });
 
-app.MapPost("/api/ml/forecast", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/ml/forecast", async (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.MLForecast, "broker");
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
     try
     {
         var forecast = await orchestrator.RunMLForecastAsync(ct);
@@ -629,8 +646,17 @@ app.MapPost("/api/ml/forecast", async (OfficeBrokerOrchestrator orchestrator, Ca
     }
 });
 
-app.MapPost("/api/ml/embeddings", async (MLEmbeddingsRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/ml/embeddings", async (HttpContext httpContext, MLEmbeddingsRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var payload = request.Query is not null ? System.Text.Json.JsonSerializer.Serialize(new { query = request.Query }) : null;
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.MLEmbeddings, "broker", payload);
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
     try
     {
         var embeddings = await orchestrator.RunMLEmbeddingsAsync(request.Query, ct);
@@ -648,8 +674,16 @@ app.MapPost("/api/ml/embeddings", async (MLEmbeddingsRequest request, OfficeBrok
     }
 });
 
-app.MapPost("/api/ml/pipeline", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/ml/pipeline", async (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.MLPipeline, "broker");
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
     try
     {
         var result = await orchestrator.RunFullMLPipelineAsync(ct);
@@ -683,6 +717,61 @@ app.MapPost("/api/ml/export-artifacts", async (OfficeBrokerOrchestrator orchestr
             title: "Failed to export ML artifacts",
             statusCode: StatusCodes.Status500InternalServerError
         );
+    }
+});
+
+// --- Job Status Endpoints (Phase 3) ---
+
+app.MapGet("/api/jobs", (OfficeBrokerOrchestrator orchestrator) =>
+{
+    var jobs = orchestrator.JobStore.ListRecent(50);
+    return Results.Ok(new { jobs });
+});
+
+app.MapGet("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var job = orchestrator.JobStore.GetById(jobId);
+    if (job is null)
+    {
+        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+    }
+    return Results.Ok(new
+    {
+        job.Id,
+        job.Type,
+        job.Status,
+        job.CreatedAt,
+        job.StartedAt,
+        job.CompletedAt,
+        job.Error,
+        job.RequestedBy,
+    });
+});
+
+app.MapGet("/api/jobs/{jobId}/result", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var job = orchestrator.JobStore.GetById(jobId);
+    if (job is null)
+    {
+        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+    }
+    if (job.Status != DailyDesk.Models.OfficeJobStatus.Succeeded)
+    {
+        return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Result is only available for succeeded jobs." });
+    }
+    if (string.IsNullOrWhiteSpace(job.ResultJson))
+    {
+        return Results.Ok(new { result = (object?)null });
+    }
+
+    try
+    {
+        var result = System.Text.Json.JsonSerializer.Deserialize<object>(job.ResultJson);
+        return Results.Ok(new { result });
+    }
+    catch
+    {
+        return Results.Ok(new { result = job.ResultJson });
     }
 });
 

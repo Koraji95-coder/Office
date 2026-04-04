@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using DailyDesk.Models;
+using Polly;
 
 namespace DailyDesk.Services;
 
@@ -14,6 +15,7 @@ public sealed class MLAnalyticsService
     private readonly string _scriptsDirectory;
     private readonly OnnxMLEngine? _onnxEngine;
     private readonly TimeSpan _cacheTtl;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
@@ -33,12 +35,14 @@ public sealed class MLAnalyticsService
         ProcessRunner processRunner,
         string scriptsDirectory,
         OnnxMLEngine? onnxEngine = null,
-        TimeSpan? cacheTtl = null)
+        TimeSpan? cacheTtl = null,
+        ResiliencePipeline? resiliencePipeline = null)
     {
         _processRunner = processRunner;
         _scriptsDirectory = scriptsDirectory;
         _onnxEngine = onnxEngine;
         _cacheTtl = cacheTtl ?? DefaultCacheTtl;
+        _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
     }
 
     /// <summary>
@@ -405,10 +409,13 @@ public sealed class MLAnalyticsService
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(ScriptTimeout);
 
-            var output = await _processRunner.RunAsync(
-                "python",
-                $"\"{scriptPath}\" --input \"{tempInputPath}\"",
-                _scriptsDirectory,
+            var output = await _resiliencePipeline.ExecuteAsync(
+                async ct => await _processRunner.RunAsync(
+                    "python",
+                    $"\"{scriptPath}\" --input \"{tempInputPath}\"",
+                    _scriptsDirectory,
+                    ct
+                ),
                 timeoutCts.Token
             );
 

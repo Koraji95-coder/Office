@@ -2,6 +2,7 @@ using System.Text.Json;
 using OllamaSharp;
 using OllamaSharp.Models;
 using OllamaSharp.Models.Chat;
+using Polly;
 
 namespace DailyDesk.Services;
 
@@ -12,13 +13,14 @@ public sealed class OllamaService : IModelProvider
 
     private readonly OllamaApiClient _client;
     private readonly ProcessRunner _processRunner;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
     public string ProviderId => OllamaProviderId;
     public string ProviderLabel => OllamaProviderLabel;
 
-    public OllamaService(string endpoint, ProcessRunner processRunner)
+    public OllamaService(string endpoint, ProcessRunner processRunner, ResiliencePipeline? resiliencePipeline = null)
     {
         var uri = new Uri(endpoint.EndsWith("/") ? endpoint : $"{endpoint}/");
         var httpClient = new System.Net.Http.HttpClient
@@ -28,6 +30,7 @@ public sealed class OllamaService : IModelProvider
         };
         _client = new OllamaApiClient(httpClient);
         _processRunner = processRunner;
+        _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
     }
 
     public async Task<IReadOnlyList<string>> GetInstalledModelsAsync(
@@ -36,7 +39,10 @@ public sealed class OllamaService : IModelProvider
     {
         try
         {
-            var modelsResponse = await _client.ListLocalModelsAsync(cancellationToken);
+            var modelsResponse = await _resiliencePipeline.ExecuteAsync(
+                async ct => await _client.ListLocalModelsAsync(ct),
+                cancellationToken
+            );
             var models = modelsResponse
                 .Select(m => m.Name)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -88,15 +94,18 @@ public sealed class OllamaService : IModelProvider
             ],
         };
 
-        var responseStream = _client.ChatAsync(request, cancellationToken);
-        ChatResponseStream? lastChunk = null;
-
-        await foreach (var chunk in responseStream.WithCancellation(cancellationToken))
+        return await _resiliencePipeline.ExecuteAsync(async ct =>
         {
-            lastChunk = chunk;
-        }
+            var responseStream = _client.ChatAsync(request, ct);
+            ChatResponseStream? lastChunk = null;
 
-        return lastChunk?.Message?.Content?.Trim() ?? string.Empty;
+            await foreach (var chunk in responseStream.WithCancellation(ct))
+            {
+                lastChunk = chunk;
+            }
+
+            return lastChunk?.Message?.Content?.Trim() ?? string.Empty;
+        }, cancellationToken);
     }
 
     public async Task<T?> GenerateJsonAsync<T>(
@@ -118,20 +127,23 @@ public sealed class OllamaService : IModelProvider
             ],
         };
 
-        var responseStream = _client.ChatAsync(request, cancellationToken);
-        ChatResponseStream? lastChunk = null;
-
-        await foreach (var chunk in responseStream.WithCancellation(cancellationToken))
+        return await _resiliencePipeline.ExecuteAsync(async ct =>
         {
-            lastChunk = chunk;
-        }
+            var responseStream = _client.ChatAsync(request, ct);
+            ChatResponseStream? lastChunk = null;
 
-        var json = lastChunk?.Message?.Content?.Trim();
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return default;
-        }
+            await foreach (var chunk in responseStream.WithCancellation(ct))
+            {
+                lastChunk = chunk;
+            }
 
-        return JsonSerializer.Deserialize<T>(json, _jsonOptions);
+            var json = lastChunk?.Message?.Content?.Trim();
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return default;
+            }
+
+            return JsonSerializer.Deserialize<T>(json, _jsonOptions);
+        }, cancellationToken);
     }
 }
