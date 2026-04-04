@@ -591,7 +591,8 @@
                                FontSize="22"
                                Foreground="{StaticResource BrushCopper}"
                                HorizontalAlignment="Center"
-                               ToolTip="Daily Office" />
+                               ToolTip="Daily Office"
+                               AutomationProperties.Name="Daily Office" />
                 </Border>
 
                 <!-- Bottom: status dot -->
@@ -609,7 +610,7 @@
                          ItemContainerStyle="{StaticResource SidebarNavItemStyle}"
                          SelectedIndex="{Binding SelectedPrimaryTabIndex, Mode=TwoWay}"
                          Margin="0,4,0,0">
-                    <ListBoxItem ToolTip="Office">
+                    <ListBoxItem ToolTip="Office" AutomationProperties.Name="Office">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="&#xE80F;"
                                        FontFamily="Segoe MDL2 Assets"
@@ -621,7 +622,7 @@
                                        HorizontalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Inbox">
+                    <ListBoxItem ToolTip="Inbox" AutomationProperties.Name="Inbox">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="&#xE715;"
                                        FontFamily="Segoe MDL2 Assets"
@@ -633,7 +634,7 @@
                                        HorizontalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Library">
+                    <ListBoxItem ToolTip="Library" AutomationProperties.Name="Library">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="&#xE736;"
                                        FontFamily="Segoe MDL2 Assets"
@@ -645,7 +646,7 @@
                                        HorizontalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Guide">
+                    <ListBoxItem ToolTip="Guide" AutomationProperties.Name="Guide">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="&#xE82D;"
                                        FontFamily="Segoe MDL2 Assets"
@@ -702,6 +703,7 @@
                                 FontSize="14"
                                 Padding="10,8"
                                 ToolTip="Open Knowledge Folder"
+                                AutomationProperties.Name="Open Knowledge Folder"
                                 Style="{StaticResource AccentButton}"
                                 Command="{Binding OpenKnowledgeFolderCommand}" />
                         <Border Style="{StaticResource AccentBadge}"
@@ -935,7 +937,7 @@
                                         Margin="12,20,0,0"
                                         VerticalAlignment="Top"
                                         Style="{StaticResource AccentButton}"
-                                        Content="Send &#x2192;"
+                                        Content="Send"
                                         Command="{Binding SendDeskMessageCommand}" />
                             </Grid>
                         </Border>
