@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using AngleSharp;
 using AngleSharp.Html.Parser;
 using DailyDesk.Models;
+using Polly;
 
 namespace DailyDesk.Services;
 
@@ -13,10 +14,12 @@ public sealed class LiveResearchService
 
     private readonly HttpClient _httpClient;
     private readonly IModelProvider _modelProvider;
+    private readonly ResiliencePipeline _resiliencePipeline;
 
-    public LiveResearchService(IModelProvider modelProvider)
+    public LiveResearchService(IModelProvider modelProvider, ResiliencePipeline? resiliencePipeline = null)
     {
         _modelProvider = modelProvider;
+        _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
 
         var handler = new HttpClientHandler
         {
@@ -103,7 +106,10 @@ public sealed class LiveResearchService
     {
         var endpoint =
             $"https://html.duckduckgo.com/html/?q={Uri.EscapeDataString(query)}";
-        using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+        using var response = await _resiliencePipeline.ExecuteAsync(
+            async ct => await _httpClient.GetAsync(endpoint, ct),
+            cancellationToken
+        );
         response.EnsureSuccessStatusCode();
 
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -175,7 +181,10 @@ public sealed class LiveResearchService
     {
         try
         {
-            using var response = await _httpClient.GetAsync(source.Url, cancellationToken);
+            using var response = await _resiliencePipeline.ExecuteAsync(
+                async ct => await _httpClient.GetAsync(source.Url, ct),
+                cancellationToken
+            );
             response.EnsureSuccessStatusCode();
 
             var mediaType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
