@@ -64,9 +64,9 @@ public partial class MainWindow : Window
             }
 
             var useDark = 1;
-            var captionColor = ColorToColorRef(0x12, 0x18, 0x21);
-            var textColor = ColorToColorRef(0xEF, 0xE8, 0xDC);
-            var borderColor = ColorToColorRef(0x25, 0x30, 0x40);
+            var captionColor = ColorToColorRef(0x0A, 0x0E, 0x14);
+            var textColor = ColorToColorRef(0xED, 0xE6, 0xDA);
+            var borderColor = ColorToColorRef(0x1E, 0x2A, 0x38);
 
             _ = DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref useDark, sizeof(int));
             _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref captionColor, sizeof(uint));

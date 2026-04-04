@@ -13,6 +13,7 @@ public sealed class OfficeBrokerOrchestrator
     private static readonly TimeSpan OperatorMemoryLoadTimeout = TimeSpan.FromSeconds(5);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _mlGate = new(1, 1);
     private readonly OfficeBrokerRuntimeMetadata _brokerMetadata;
     private readonly DailySettings _settings;
     private readonly string _officeRootPath;
@@ -82,7 +83,8 @@ public sealed class OfficeBrokerOrchestrator
         _sessionStore = new OfficeSessionStateStore(_stateRootPath);
         _mlAnalyticsService = new MLAnalyticsService(
             processRunner,
-            Path.Combine(_officeRootPath, "DailyDesk", "Scripts")
+            Path.Combine(_officeRootPath, "DailyDesk", "Scripts"),
+            new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx"))
         );
     }
 
@@ -2933,23 +2935,46 @@ public sealed class OfficeBrokerOrchestrator
         CancellationToken cancellationToken = default
     )
     {
+        IReadOnlyList<TrainingAttemptRecord> attempts;
+        IReadOnlyList<OperatorActivityRecord> decisions;
+
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureInitializedLockedAsync(cancellationToken);
-            var attempts = _trainingStore.LoadAllAttempts();
-            var decisions = _operatorMemoryState.Activities;
-            _latestMLAnalytics = await _mlAnalyticsService.RunLearningAnalyticsAsync(
-                attempts,
-                decisions,
-                cancellationToken
-            );
-            _lastMLRunAt = DateTimeOffset.Now;
-            return _latestMLAnalytics;
+            attempts = _trainingStore.LoadAllAttempts();
+            decisions = _operatorMemoryState.Activities;
         }
         finally
         {
             _gate.Release();
+        }
+
+        await _mlGate.WaitAsync(cancellationToken);
+        try
+        {
+            var result = await _mlAnalyticsService.RunLearningAnalyticsAsync(
+                attempts,
+                decisions,
+                cancellationToken
+            );
+
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                _latestMLAnalytics = result;
+                _lastMLRunAt = DateTimeOffset.Now;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return result;
+        }
+        finally
+        {
+            _mlGate.Release();
         }
     }
 
@@ -2957,21 +2982,43 @@ public sealed class OfficeBrokerOrchestrator
         CancellationToken cancellationToken = default
     )
     {
+        IReadOnlyList<TrainingAttemptRecord> attempts;
+
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureInitializedLockedAsync(cancellationToken);
-            var attempts = _trainingStore.LoadAllAttempts();
-            _latestMLForecast = await _mlAnalyticsService.RunProgressForecastAsync(
-                attempts,
-                cancellationToken
-            );
-            _lastMLRunAt = DateTimeOffset.Now;
-            return _latestMLForecast;
+            attempts = _trainingStore.LoadAllAttempts();
         }
         finally
         {
             _gate.Release();
+        }
+
+        await _mlGate.WaitAsync(cancellationToken);
+        try
+        {
+            var result = await _mlAnalyticsService.RunProgressForecastAsync(
+                attempts,
+                cancellationToken
+            );
+
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                _latestMLForecast = result;
+                _lastMLRunAt = DateTimeOffset.Now;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return result;
+        }
+        finally
+        {
+            _mlGate.Release();
         }
     }
 
@@ -2980,21 +3027,44 @@ public sealed class OfficeBrokerOrchestrator
         CancellationToken cancellationToken = default
     )
     {
+        IReadOnlyList<LearningDocument> documents;
+
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureInitializedLockedAsync(cancellationToken);
-            _latestMLEmbeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
-                _learningLibrary.Documents,
-                query,
-                cancellationToken
-            );
-            _lastMLRunAt = DateTimeOffset.Now;
-            return _latestMLEmbeddings;
+            documents = _learningLibrary.Documents;
         }
         finally
         {
             _gate.Release();
+        }
+
+        await _mlGate.WaitAsync(cancellationToken);
+        try
+        {
+            var result = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+                documents,
+                query,
+                cancellationToken
+            );
+
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                _latestMLEmbeddings = result;
+                _lastMLRunAt = DateTimeOffset.Now;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return result;
+        }
+        finally
+        {
+            _mlGate.Release();
         }
     }
 
@@ -3002,72 +3072,47 @@ public sealed class OfficeBrokerOrchestrator
         CancellationToken cancellationToken = default
     )
     {
+        IReadOnlyList<TrainingAttemptRecord> attempts;
+        IReadOnlyList<OperatorActivityRecord> decisions;
+        IReadOnlyList<LearningDocument> documents;
+
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await EnsureInitializedLockedAsync(cancellationToken);
-
-            var attempts = _trainingStore.LoadAllAttempts();
-            var decisions = _operatorMemoryState.Activities;
-
-            _latestMLAnalytics = await _mlAnalyticsService.RunLearningAnalyticsAsync(
-                attempts,
-                decisions,
-                cancellationToken
-            );
-            _latestMLForecast = await _mlAnalyticsService.RunProgressForecastAsync(
-                attempts,
-                cancellationToken
-            );
-            _latestMLEmbeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
-                _learningLibrary.Documents,
-                null,
-                cancellationToken
-            );
-
-            var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
-                _latestMLAnalytics,
-                _latestMLEmbeddings,
-                _latestMLForecast,
-                cancellationToken
-            );
-
-            var exportPath = await _mlAnalyticsService.ExportArtifactsAsync(
-                artifacts,
-                _stateRootPath,
-                cancellationToken
-            );
-
-            _lastMLArtifactExportPath = exportPath;
-            _lastMLRunAt = DateTimeOffset.Now;
-
-            return new
-            {
-                analytics = _latestMLAnalytics,
-                forecast = _latestMLForecast,
-                embeddings = _latestMLEmbeddings,
-                artifacts,
-                exportPath,
-            };
+            attempts = _trainingStore.LoadAllAttempts();
+            decisions = _operatorMemoryState.Activities;
+            documents = _learningLibrary.Documents;
         }
         finally
         {
             _gate.Release();
         }
-    }
 
-    public async Task<SuiteMLArtifactBundle> ExportSuiteArtifactsAsync(
-        CancellationToken cancellationToken = default
-    )
-    {
-        await _gate.WaitAsync(cancellationToken);
+        await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureInitializedLockedAsync(cancellationToken);
+            // Run analytics, forecast, and embeddings in parallel — they are independent
+            var analyticsTask = _mlAnalyticsService.RunLearningAnalyticsAsync(
+                attempts,
+                decisions,
+                cancellationToken
+            );
+            var forecastTask = _mlAnalyticsService.RunProgressForecastAsync(
+                attempts,
+                cancellationToken
+            );
+            var embeddingsTask = _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+                documents,
+                null,
+                cancellationToken
+            );
 
-            var analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = false, Engine = "not-run" };
-            var embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = false, Engine = "not-run" };
-            var forecast = _latestMLForecast ?? new MLForecastResult { Ok = false, Engine = "not-run" };
+            await Task.WhenAll(analyticsTask, forecastTask, embeddingsTask);
+
+            var analytics = await analyticsTask;
+            var forecast = await forecastTask;
+            var embeddings = await embeddingsTask;
 
             var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
                 analytics,
@@ -3082,12 +3127,87 @@ public sealed class OfficeBrokerOrchestrator
                 cancellationToken
             );
 
-            _lastMLArtifactExportPath = exportPath;
-            return artifacts;
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                _latestMLAnalytics = analytics;
+                _latestMLForecast = forecast;
+                _latestMLEmbeddings = embeddings;
+                _lastMLArtifactExportPath = exportPath;
+                _lastMLRunAt = DateTimeOffset.Now;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return new
+            {
+                analytics,
+                forecast,
+                embeddings,
+                artifacts,
+                exportPath,
+            };
+        }
+        finally
+        {
+            _mlGate.Release();
+        }
+    }
+
+    public async Task<SuiteMLArtifactBundle> ExportSuiteArtifactsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        MLAnalyticsResult analytics;
+        MLEmbeddingsResult embeddings;
+        MLForecastResult forecast;
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = false, Engine = "not-run" };
+            embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = false, Engine = "not-run" };
+            forecast = _latestMLForecast ?? new MLForecastResult { Ok = false, Engine = "not-run" };
         }
         finally
         {
             _gate.Release();
+        }
+
+        await _mlGate.WaitAsync(cancellationToken);
+        try
+        {
+            var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
+                analytics,
+                embeddings,
+                forecast,
+                cancellationToken
+            );
+
+            var exportPath = await _mlAnalyticsService.ExportArtifactsAsync(
+                artifacts,
+                _stateRootPath,
+                cancellationToken
+            );
+
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                _lastMLArtifactExportPath = exportPath;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            return artifacts;
+        }
+        finally
+        {
+            _mlGate.Release();
         }
     }
 

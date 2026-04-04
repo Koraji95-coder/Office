@@ -8,16 +8,49 @@ namespace DailyDesk.Services;
 public sealed class MLAnalyticsService
 {
     private static readonly TimeSpan ScriptTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromMinutes(5);
 
     private readonly ProcessRunner _processRunner;
     private readonly string _scriptsDirectory;
+    private readonly OnnxMLEngine? _onnxEngine;
+    private readonly TimeSpan _cacheTtl;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
-    public MLAnalyticsService(ProcessRunner processRunner, string scriptsDirectory)
+    // Python environment check (lazily evaluated, cached)
+    private bool? _pythonAvailable;
+    private readonly object _pythonCheckLock = new();
+
+    // Result cache
+    private MLAnalyticsResult? _cachedAnalytics;
+    private DateTimeOffset _analyticsCachedAt;
+    private MLEmbeddingsResult? _cachedEmbeddings;
+    private DateTimeOffset _embeddingsCachedAt;
+    private MLForecastResult? _cachedForecast;
+    private DateTimeOffset _forecastCachedAt;
+
+    public MLAnalyticsService(
+        ProcessRunner processRunner,
+        string scriptsDirectory,
+        OnnxMLEngine? onnxEngine = null,
+        TimeSpan? cacheTtl = null)
     {
         _processRunner = processRunner;
         _scriptsDirectory = scriptsDirectory;
+        _onnxEngine = onnxEngine;
+        _cacheTtl = cacheTtl ?? DefaultCacheTtl;
+    }
+
+    /// <summary>
+    /// Reports the current engine availability in priority order: onnx > python > fallback.
+    /// </summary>
+    public string ResolveAvailableEngine()
+    {
+        if (_onnxEngine?.IsAnalyticsModelAvailable == true)
+            return "onnx";
+        if (IsPythonAvailable())
+            return "python";
+        return "fallback";
     }
 
     public async Task<MLAnalyticsResult> RunLearningAnalyticsAsync(
@@ -26,6 +59,12 @@ public sealed class MLAnalyticsService
         CancellationToken cancellationToken = default
     )
     {
+        // Check cache
+        if (_cachedAnalytics is not null && DateTimeOffset.Now - _analyticsCachedAt < _cacheTtl)
+        {
+            return _cachedAnalytics;
+        }
+
         var input = new
         {
             trainingAttempts = attempts.Select(a => new
@@ -44,20 +83,57 @@ public sealed class MLAnalyticsService
             }).ToArray(),
         };
 
-        try
+        // 1. Try ONNX (fastest, in-process)
+        if (_onnxEngine is not null)
         {
-            var result = await RunPythonScriptAsync<MLAnalyticsResult>(
-                "ml_learning_analytics.py",
-                input,
-                cancellationToken
-            );
+            var onnxResult = _onnxEngine.RunAnalytics(attempts, decisions);
+            if (onnxResult is not null)
+            {
+                CacheAnalytics(onnxResult);
+                return onnxResult;
+            }
+        }
 
-            return result ?? BuildFallbackAnalytics(attempts);
-        }
-        catch
+        // 2. Try Python script
+        if (IsPythonAvailable())
         {
-            return BuildFallbackAnalytics(attempts);
+            try
+            {
+                var result = await RunPythonScriptAsync<MLAnalyticsResult>(
+                    "ml_learning_analytics.py",
+                    input,
+                    cancellationToken
+                );
+
+                if (result is not null)
+                {
+                    CacheAnalytics(result);
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Python failed — fall through to fallback with error reporting
+                var fallback = BuildFallbackAnalytics(attempts);
+                return new MLAnalyticsResult
+                {
+                    Ok = fallback.Ok,
+                    Engine = fallback.Engine,
+                    WeakTopics = fallback.WeakTopics,
+                    StrongTopics = fallback.StrongTopics,
+                    OverallReadiness = fallback.OverallReadiness,
+                    OperatorPattern = fallback.OperatorPattern,
+                    AdaptiveSchedule = fallback.AdaptiveSchedule,
+                    ReadinessBreakdown = fallback.ReadinessBreakdown,
+                    SklearnError = ex.Message,
+                };
+            }
         }
+
+        // 3. Heuristic fallback
+        var fallbackResult = BuildFallbackAnalytics(attempts);
+        CacheAnalytics(fallbackResult);
+        return fallbackResult;
     }
 
     public async Task<MLEmbeddingsResult> RunDocumentEmbeddingsAsync(
@@ -66,6 +142,12 @@ public sealed class MLAnalyticsService
         CancellationToken cancellationToken = default
     )
     {
+        // Check cache
+        if (_cachedEmbeddings is not null && DateTimeOffset.Now - _embeddingsCachedAt < _cacheTtl)
+        {
+            return _cachedEmbeddings;
+        }
+
         var input = new
         {
             documents = documents.Select(d => new
@@ -79,20 +161,49 @@ public sealed class MLAnalyticsService
             query,
         };
 
-        try
+        // 1. Try ONNX
+        if (_onnxEngine is not null)
         {
-            var result = await RunPythonScriptAsync<MLEmbeddingsResult>(
-                "ml_document_embeddings.py",
-                input,
-                cancellationToken
-            );
+            var onnxResult = _onnxEngine.RunEmbeddings(documents, query);
+            if (onnxResult is not null)
+            {
+                CacheEmbeddings(onnxResult);
+                return onnxResult;
+            }
+        }
 
-            return result ?? BuildFallbackEmbeddings();
-        }
-        catch
+        // 2. Try Python
+        if (IsPythonAvailable())
         {
-            return BuildFallbackEmbeddings();
+            try
+            {
+                var result = await RunPythonScriptAsync<MLEmbeddingsResult>(
+                    "ml_document_embeddings.py",
+                    input,
+                    cancellationToken
+                );
+
+                if (result is not null)
+                {
+                    CacheEmbeddings(result);
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                return new MLEmbeddingsResult
+                {
+                    Ok = false,
+                    Engine = "fallback",
+                    PytorchError = ex.Message,
+                };
+            }
         }
+
+        // 3. Fallback
+        var fallbackResult = BuildFallbackEmbeddings();
+        CacheEmbeddings(fallbackResult);
+        return fallbackResult;
     }
 
     public async Task<MLForecastResult> RunProgressForecastAsync(
@@ -100,6 +211,12 @@ public sealed class MLAnalyticsService
         CancellationToken cancellationToken = default
     )
     {
+        // Check cache
+        if (_cachedForecast is not null && DateTimeOffset.Now - _forecastCachedAt < _cacheTtl)
+        {
+            return _cachedForecast;
+        }
+
         var input = new
         {
             trainingAttempts = attempts.Select(a => new
@@ -113,20 +230,49 @@ public sealed class MLAnalyticsService
             }).ToArray(),
         };
 
-        try
+        // 1. Try ONNX
+        if (_onnxEngine is not null)
         {
-            var result = await RunPythonScriptAsync<MLForecastResult>(
-                "ml_progress_forecast.py",
-                input,
-                cancellationToken
-            );
+            var onnxResult = _onnxEngine.RunForecast(attempts);
+            if (onnxResult is not null)
+            {
+                CacheForecast(onnxResult);
+                return onnxResult;
+            }
+        }
 
-            return result ?? BuildFallbackForecast();
-        }
-        catch
+        // 2. Try Python
+        if (IsPythonAvailable())
         {
-            return BuildFallbackForecast();
+            try
+            {
+                var result = await RunPythonScriptAsync<MLForecastResult>(
+                    "ml_progress_forecast.py",
+                    input,
+                    cancellationToken
+                );
+
+                if (result is not null)
+                {
+                    CacheForecast(result);
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                return new MLForecastResult
+                {
+                    Ok = false,
+                    Engine = "fallback",
+                    TensorflowError = ex.Message,
+                };
+            }
         }
+
+        // 3. Fallback
+        var fallbackResult = BuildFallbackForecast();
+        CacheForecast(fallbackResult);
+        return fallbackResult;
     }
 
     public async Task<SuiteMLArtifactBundle> GenerateSuiteArtifactsAsync(
@@ -143,20 +289,27 @@ public sealed class MLAnalyticsService
             forecast,
         };
 
-        try
+        // Artifacts generation only uses Python (no ONNX model for this)
+        if (IsPythonAvailable())
         {
-            var result = await RunPythonScriptAsync<SuiteMLArtifactBundle>(
-                "ml_suite_artifacts.py",
-                input,
-                cancellationToken
-            );
+            try
+            {
+                var result = await RunPythonScriptAsync<SuiteMLArtifactBundle>(
+                    "ml_suite_artifacts.py",
+                    input,
+                    cancellationToken
+                );
 
-            return result ?? BuildFallbackArtifacts();
+                if (result is not null)
+                    return result;
+            }
+            catch
+            {
+                return BuildFallbackArtifacts();
+            }
         }
-        catch
-        {
-            return BuildFallbackArtifacts();
-        }
+
+        return BuildFallbackArtifacts();
     }
 
     public async Task<string> ExportArtifactsAsync(
@@ -181,6 +334,54 @@ public sealed class MLAnalyticsService
         return filePath;
     }
 
+    /// <summary>
+    /// Invalidates the result cache, forcing the next call to re-run inference.
+    /// </summary>
+    public void InvalidateCache()
+    {
+        _cachedAnalytics = null;
+        _cachedEmbeddings = null;
+        _cachedForecast = null;
+    }
+
+    private bool IsPythonAvailable()
+    {
+        if (_pythonAvailable.HasValue)
+            return _pythonAvailable.Value;
+
+        lock (_pythonCheckLock)
+        {
+            if (_pythonAvailable.HasValue)
+                return _pythonAvailable.Value;
+
+            try
+            {
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "python",
+                        Arguments = "--version",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    },
+                };
+
+                process.Start();
+                process.WaitForExit(5000);
+                _pythonAvailable = process.ExitCode == 0;
+            }
+            catch
+            {
+                _pythonAvailable = false;
+            }
+
+            return _pythonAvailable.Value;
+        }
+    }
+
     private async Task<T?> RunPythonScriptAsync<T>(
         string scriptName,
         object input,
@@ -200,11 +401,15 @@ public sealed class MLAnalyticsService
         {
             await File.WriteAllTextAsync(tempInputPath, inputJson, cancellationToken);
 
+            // Enforce script timeout
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(ScriptTimeout);
+
             var output = await _processRunner.RunAsync(
                 "python",
                 $"\"{scriptPath}\" --input \"{tempInputPath}\"",
                 _scriptsDirectory,
-                cancellationToken
+                timeoutCts.Token
             );
 
             if (string.IsNullOrWhiteSpace(output))
@@ -228,6 +433,24 @@ public sealed class MLAnalyticsService
                 // Best effort cleanup.
             }
         }
+    }
+
+    private void CacheAnalytics(MLAnalyticsResult result)
+    {
+        _cachedAnalytics = result;
+        _analyticsCachedAt = DateTimeOffset.Now;
+    }
+
+    private void CacheEmbeddings(MLEmbeddingsResult result)
+    {
+        _cachedEmbeddings = result;
+        _embeddingsCachedAt = DateTimeOffset.Now;
+    }
+
+    private void CacheForecast(MLForecastResult result)
+    {
+        _cachedForecast = result;
+        _forecastCachedAt = DateTimeOffset.Now;
     }
 
     private static MLAnalyticsResult BuildFallbackAnalytics(
@@ -281,7 +504,7 @@ public sealed class MLAnalyticsService
 
         return new MLAnalyticsResult
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
             WeakTopics = weak.OrderBy(t => t.Accuracy).ToList(),
             StrongTopics = strong.OrderByDescending(t => t.Accuracy).ToList(),
@@ -313,21 +536,21 @@ public sealed class MLAnalyticsService
     private static MLEmbeddingsResult BuildFallbackEmbeddings() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
         };
 
     private static MLForecastResult BuildFallbackForecast() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             Engine = "fallback",
         };
 
     private static SuiteMLArtifactBundle BuildFallbackArtifacts() =>
         new()
         {
-            Ok = true,
+            Ok = false,
             GeneratedAt = DateTimeOffset.UtcNow.ToString("O"),
         };
 }
