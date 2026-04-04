@@ -83,7 +83,8 @@ public sealed class OfficeBrokerOrchestrator
         _sessionStore = new OfficeSessionStateStore(_stateRootPath);
         _mlAnalyticsService = new MLAnalyticsService(
             processRunner,
-            Path.Combine(_officeRootPath, "DailyDesk", "Scripts")
+            Path.Combine(_officeRootPath, "DailyDesk", "Scripts"),
+            new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx"))
         );
     }
 
@@ -3091,20 +3092,27 @@ public sealed class OfficeBrokerOrchestrator
         await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            var analytics = await _mlAnalyticsService.RunLearningAnalyticsAsync(
+            // Run analytics, forecast, and embeddings in parallel — they are independent
+            var analyticsTask = _mlAnalyticsService.RunLearningAnalyticsAsync(
                 attempts,
                 decisions,
                 cancellationToken
             );
-            var forecast = await _mlAnalyticsService.RunProgressForecastAsync(
+            var forecastTask = _mlAnalyticsService.RunProgressForecastAsync(
                 attempts,
                 cancellationToken
             );
-            var embeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+            var embeddingsTask = _mlAnalyticsService.RunDocumentEmbeddingsAsync(
                 documents,
                 null,
                 cancellationToken
             );
+
+            await Task.WhenAll(analyticsTask, forecastTask, embeddingsTask);
+
+            var analytics = await analyticsTask;
+            var forecast = await forecastTask;
+            var embeddings = await embeddingsTask;
 
             var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
                 analytics,

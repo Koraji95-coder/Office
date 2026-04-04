@@ -207,6 +207,182 @@ public sealed class OfficeBrokerLogicTests
         Assert.True(artifact.ReviewRequired);
     }
 
+    [Fact]
+    public void OnnxMLEngine_ReportsNoModelsWhenDirectoryMissing()
+    {
+        var engine = new OnnxMLEngine(Path.Combine(Path.GetTempPath(), "non-existent-dir"));
+        Assert.False(engine.HasAnyModel);
+        Assert.False(engine.IsAnalyticsModelAvailable);
+        Assert.False(engine.IsEmbeddingsModelAvailable);
+        Assert.False(engine.IsForecastModelAvailable);
+    }
+
+    [Fact]
+    public void OnnxMLEngine_ReturnsNullWhenNoModels()
+    {
+        var engine = new OnnxMLEngine(Path.Combine(Path.GetTempPath(), "non-existent-dir"));
+
+        var analyticsResult = engine.RunAnalytics([], []);
+        Assert.Null(analyticsResult);
+
+        var embeddingsResult = engine.RunEmbeddings([], null);
+        Assert.Null(embeddingsResult);
+
+        var forecastResult = engine.RunForecast([]);
+        Assert.Null(forecastResult);
+    }
+
+    [Fact]
+    public async Task MLAnalyticsService_FallsBackWhenNoPythonOrOnnx()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            onnxEngine: new OnnxMLEngine(Path.Combine(Path.GetTempPath(), "no-models")),
+            cacheTtl: TimeSpan.Zero
+        );
+
+        var attempts = new List<TrainingAttemptRecord>
+        {
+            new()
+            {
+                CompletedAt = DateTimeOffset.Now,
+                Questions =
+                [
+                    new TrainingAttemptQuestionRecord { Topic = "grounding", Correct = true },
+                    new TrainingAttemptQuestionRecord { Topic = "grounding", Correct = false },
+                    new TrainingAttemptQuestionRecord { Topic = "protection", Correct = true },
+                ],
+            },
+        };
+
+        var result = await service.RunLearningAnalyticsAsync(attempts, []);
+
+        Assert.Equal("fallback", result.Engine);
+        Assert.False(result.Ok);
+        Assert.Equal(0.5, result.WeakTopics.First(t => t.Topic == "grounding").Accuracy);
+        Assert.Equal(1.0, result.StrongTopics.First(t => t.Topic == "protection").Accuracy);
+    }
+
+    [Fact]
+    public async Task MLAnalyticsService_CachesResults()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            onnxEngine: null,
+            cacheTtl: TimeSpan.FromMinutes(10)
+        );
+
+        var attempts = new List<TrainingAttemptRecord>
+        {
+            new()
+            {
+                CompletedAt = DateTimeOffset.Now,
+                Questions =
+                [
+                    new TrainingAttemptQuestionRecord { Topic = "test", Correct = true },
+                ],
+            },
+        };
+
+        var result1 = await service.RunLearningAnalyticsAsync(attempts, []);
+        var result2 = await service.RunLearningAnalyticsAsync(attempts, []);
+
+        // Same object reference means the cache was used
+        Assert.Same(result1, result2);
+    }
+
+    [Fact]
+    public async Task MLAnalyticsService_CacheInvalidation()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            onnxEngine: null,
+            cacheTtl: TimeSpan.FromMinutes(10)
+        );
+
+        var attempts = new List<TrainingAttemptRecord>
+        {
+            new()
+            {
+                CompletedAt = DateTimeOffset.Now,
+                Questions =
+                [
+                    new TrainingAttemptQuestionRecord { Topic = "test", Correct = true },
+                ],
+            },
+        };
+
+        var result1 = await service.RunLearningAnalyticsAsync(attempts, []);
+        service.InvalidateCache();
+        var result2 = await service.RunLearningAnalyticsAsync(attempts, []);
+
+        // After invalidation, a new result should be computed
+        Assert.NotSame(result1, result2);
+        Assert.Equal(result1.Engine, result2.Engine);
+    }
+
+    [Fact]
+    public async Task MLAnalyticsService_ForecastFallbackReturnsEngineField()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            cacheTtl: TimeSpan.Zero
+        );
+
+        var result = await service.RunProgressForecastAsync([]);
+
+        Assert.False(result.Ok);
+        Assert.Equal("fallback", result.Engine);
+    }
+
+    [Fact]
+    public async Task MLAnalyticsService_EmbeddingsFallbackReturnsEngineField()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            cacheTtl: TimeSpan.Zero
+        );
+
+        var result = await service.RunDocumentEmbeddingsAsync([]);
+
+        Assert.False(result.Ok);
+        Assert.Equal("fallback", result.Engine);
+    }
+
+    [Fact]
+    public void MLAnalyticsService_ResolveAvailableEngine_ReportsFallback()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(Path.GetTempPath(), "no-scripts"),
+            onnxEngine: new OnnxMLEngine(Path.Combine(Path.GetTempPath(), "no-models"))
+        );
+
+        // Without ONNX models and possibly without Python,
+        // the engine should be either "python" or "fallback"
+        var engine = service.ResolveAvailableEngine();
+        Assert.NotEqual("onnx", engine);
+    }
+
+    [Fact]
+    public void OnnxMLEngine_Dispose_IsIdempotent()
+    {
+        var engine = new OnnxMLEngine(Path.Combine(Path.GetTempPath(), "no-models"));
+        engine.Dispose();
+        engine.Dispose(); // Should not throw
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root
