@@ -202,7 +202,7 @@ public sealed class MLAnalyticsService
 
             var output = await _processRunner.RunAsync(
                 "python",
-                $"\"{scriptPath}\" < \"{tempInputPath}\"",
+                $"\"{scriptPath}\" --input \"{tempInputPath}\"",
                 _scriptsDirectory,
                 cancellationToken
             );

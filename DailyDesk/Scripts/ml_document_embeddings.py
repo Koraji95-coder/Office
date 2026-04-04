@@ -264,7 +264,7 @@ def _torch_embeddings(
 
 def main() -> None:
     try:
-        raw = sys.stdin.read()
+        raw = _read_input()
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
         print(json.dumps({"ok": False, "error": "Invalid JSON input."}))
@@ -283,6 +283,16 @@ def main() -> None:
         result = _tfidf_embeddings(documents, query)
 
     print(json.dumps(result, ensure_ascii=False))
+
+
+def _read_input() -> str:
+    """Read input from --input file argument or stdin."""
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg == "--input" and i < len(sys.argv) - 1:
+            from pathlib import Path
+
+            return Path(sys.argv[i + 1]).read_text(encoding="utf-8")
+    return sys.stdin.read()
 
 
 if __name__ == "__main__":

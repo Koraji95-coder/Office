@@ -3065,9 +3065,9 @@ public sealed class OfficeBrokerOrchestrator
         {
             await EnsureInitializedLockedAsync(cancellationToken);
 
-            var analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = true, Engine = "not-run" };
-            var embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = true, Engine = "not-run" };
-            var forecast = _latestMLForecast ?? new MLForecastResult { Ok = true, Engine = "not-run" };
+            var analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = false, Engine = "not-run" };
+            var embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = false, Engine = "not-run" };
+            var forecast = _latestMLForecast ?? new MLForecastResult { Ok = false, Engine = "not-run" };
 
             var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
                 analytics,
