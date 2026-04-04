@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using AngleSharp;
 using AngleSharp.Html.Parser;
 using DailyDesk.Models;
@@ -437,7 +438,7 @@ public sealed class LiveResearchService
             return string.Empty;
         }
 
-        return System.Text.RegularExpressions.Regex.Replace(value, "\\s+", " ").Trim();
+        return Regex.Replace(value, "\\s+", " ").Trim();
     }
 
     private static string JoinOrNone(IReadOnlyList<string> items) =>
