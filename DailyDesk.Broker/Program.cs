@@ -1,8 +1,25 @@
 using System.Net;
+using DailyDesk.Broker;
 using DailyDesk.Models;
 using DailyDesk.Services;
+using FluentValidation;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine("State", "logs", "office-broker-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        fileSizeLimitBytes: 10_485_760,
+        shared: true)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 var configuredHost = builder.Configuration["Broker:Host"] ?? OfficeBrokerDefaults.Host;
 var configuredPort =
@@ -90,6 +107,12 @@ app.MapGet("/api/chat/threads", async (OfficeBrokerOrchestrator orchestrator, Ca
 
 app.MapPost("/api/chat/route", async (ChatRouteRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new ChatRouteRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var route = await orchestrator.SetChatRouteAsync(request.Route, ct);
@@ -113,6 +136,12 @@ app.MapPost("/api/chat/route", async (ChatRouteRequest request, OfficeBrokerOrch
 
 app.MapPost("/api/chat/send", async (ChatSendRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new ChatSendRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var message = await orchestrator.SendChatAsync(request.Prompt, request.RouteOverride, ct);
@@ -232,6 +261,12 @@ app.MapPost("/api/study/generate-defense", async (StudyGenerateDefenseRequest re
 
 app.MapPost("/api/study/score-defense", async (StudyScoreDefenseRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new StudyScoreDefenseRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var attempt = await orchestrator.ScoreDefenseAsync(request.Answer, ct);
@@ -259,6 +294,12 @@ app.MapPost("/api/study/score-defense", async (StudyScoreDefenseRequest request,
 
 app.MapPost("/api/study/save-reflection", async (StudySaveReflectionRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new StudySaveReflectionRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var reflection = await orchestrator.SaveReflectionAsync(request.Reflection, ct);
@@ -286,6 +327,12 @@ app.MapPost("/api/study/save-reflection", async (StudySaveReflectionRequest requ
 
 app.MapPost("/api/research/run", async (ResearchRunRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new ResearchRunRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var report = await orchestrator.RunResearchAsync(request.Query, request.Perspective, request.SaveToLibrary ?? false, ct);
@@ -340,6 +387,12 @@ app.MapPost("/api/research/save", async (ResearchSaveRequest request, OfficeBrok
 
 app.MapPost("/api/watchlists/run", async (WatchlistRunRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new WatchlistRunRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var report = await orchestrator.RunWatchlistAsync(
@@ -388,6 +441,12 @@ app.MapGet("/api/inbox", async (OfficeBrokerOrchestrator orchestrator, Cancellat
 
 app.MapPost("/api/inbox/resolve", async (InboxResolveRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var validation = new InboxResolveRequestValidator().Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
     try
     {
         var suggestion = await orchestrator.ResolveSuggestionAsync(

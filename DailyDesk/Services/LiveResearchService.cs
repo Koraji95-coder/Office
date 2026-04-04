@@ -1,31 +1,15 @@
 using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using AngleSharp;
+using AngleSharp.Html.Parser;
 using DailyDesk.Models;
 
 namespace DailyDesk.Services;
 
 public sealed class LiveResearchService
 {
-    private static readonly Regex ResultLinkRegex = new(
-        "<a rel=\"nofollow\" class=\"result__a\" href=\"(?<href>[^\"]+)\">(?<title>.*?)</a>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-    );
-
-    private static readonly Regex ResultSnippetRegex = new(
-        "<a class=\"result__snippet\"[^>]*>(?<snippet>.*?)</a>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-    );
-
-    private static readonly Regex DescriptionMetaRegex = new(
-        "<meta[^>]+name=[\"']description[\"'][^>]+content=[\"'](?<content>.*?)[\"'][^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-    );
-
-    private static readonly Regex OgDescriptionMetaRegex = new(
-        "<meta[^>]+property=[\"']og:description[\"'][^>]+content=[\"'](?<content>.*?)[\"'][^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled
-    );
+    private static readonly HtmlParser HtmlParser = new();
 
     private readonly HttpClient _httpClient;
     private readonly IModelProvider _modelProvider;
@@ -123,13 +107,16 @@ public sealed class LiveResearchService
         response.EnsureSuccessStatusCode();
 
         var html = await response.Content.ReadAsStringAsync(cancellationToken);
-        var titleMatches = ResultLinkRegex.Matches(html);
-        var snippetMatches = ResultSnippetRegex.Matches(html);
+        var document = HtmlParser.ParseDocument(html);
+
+        var linkElements = document.QuerySelectorAll("a.result__a[href]");
+        var snippetElements = document.QuerySelectorAll("a.result__snippet");
         var results = new List<ResearchSource>();
 
-        for (var index = 0; index < titleMatches.Count && results.Count < 8; index++)
+        for (var index = 0; index < linkElements.Length && results.Count < 8; index++)
         {
-            var href = titleMatches[index].Groups["href"].Value;
+            var element = linkElements[index];
+            var href = element.GetAttribute("href") ?? string.Empty;
             var url = NormalizeSearchUrl(href);
             if (string.IsNullOrWhiteSpace(url))
             {
@@ -141,9 +128,9 @@ public sealed class LiveResearchService
                 continue;
             }
 
-            var title = CleanHtml(titleMatches[index].Groups["title"].Value);
-            var snippet = index < snippetMatches.Count
-                ? CleanHtml(snippetMatches[index].Groups["snippet"].Value)
+            var title = element.TextContent.Trim();
+            var snippet = index < snippetElements.Length
+                ? snippetElements[index].TextContent.Trim()
                 : string.Empty;
 
             if (string.IsNullOrWhiteSpace(title))
@@ -412,58 +399,46 @@ public sealed class LiveResearchService
 
     private static string ExtractPreview(string html)
     {
-        var metaDescription = TryExtractMetaDescription(html);
+        var document = HtmlParser.ParseDocument(html);
+
+        var metaDescription = TryExtractMetaDescription(document);
         if (!string.IsNullOrWhiteSpace(metaDescription))
         {
             return metaDescription;
         }
 
-        var withoutNoise = Regex.Replace(
-            html,
-            "<(script|style|noscript|svg|iframe)[^>]*>.*?</\\1>",
-            " ",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline
-        );
-        withoutNoise = Regex.Replace(
-            withoutNoise,
-            "<(br|p|div|li|h1|h2|h3|h4|h5|h6)[^>]*>",
-            " ",
-            RegexOptions.IgnoreCase
-        );
-        withoutNoise = Regex.Replace(withoutNoise, "<[^>]+>", " ");
-        withoutNoise = CleanHtml(withoutNoise);
-
-        if (withoutNoise.Length > 900)
+        // Remove script/style/noscript/svg/iframe elements before extracting text.
+        foreach (var element in document.QuerySelectorAll("script, style, noscript, svg, iframe").ToList())
         {
-            return $"{withoutNoise[..897]}...";
+            element.Remove();
         }
 
-        return withoutNoise;
+        var text = NormalizeWhitespace(document.Body?.TextContent ?? string.Empty);
+
+        if (text.Length > 900)
+        {
+            return $"{text[..897]}...";
+        }
+
+        return text;
     }
 
-    private static string TryExtractMetaDescription(string html)
+    private static string TryExtractMetaDescription(AngleSharp.Dom.IDocument document)
     {
-        var metaMatch = DescriptionMetaRegex.Match(html);
-        if (metaMatch.Success)
-        {
-            return CleanHtml(metaMatch.Groups["content"].Value);
-        }
-
-        metaMatch = OgDescriptionMetaRegex.Match(html);
-        return metaMatch.Success ? CleanHtml(metaMatch.Groups["content"].Value) : string.Empty;
+        var meta = document.QuerySelector("meta[name='description']")
+                   ?? document.QuerySelector("meta[property='og:description']");
+        var content = meta?.GetAttribute("content");
+        return NormalizeWhitespace(content ?? string.Empty);
     }
 
-    private static string CleanHtml(string value)
+    private static string NormalizeWhitespace(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return string.Empty;
         }
 
-        var normalized = Regex.Replace(value, "<[^>]+>", " ");
-        normalized = WebUtility.HtmlDecode(normalized);
-        normalized = Regex.Replace(normalized, "\\s+", " ").Trim();
-        return normalized;
+        return Regex.Replace(value, "\\s+", " ").Trim();
     }
 
     private static string JoinOrNone(IReadOnlyList<string> items) =>

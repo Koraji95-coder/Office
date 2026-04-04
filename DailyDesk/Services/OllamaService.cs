@@ -1,6 +1,7 @@
-using System.Net.Http;
-using System.Text;
 using System.Text.Json;
+using OllamaSharp;
+using OllamaSharp.Models;
+using OllamaSharp.Models.Chat;
 
 namespace DailyDesk.Services;
 
@@ -9,7 +10,7 @@ public sealed class OllamaService : IModelProvider
     public const string OllamaProviderId = "ollama";
     public const string OllamaProviderLabel = "Ollama (local)";
 
-    private readonly HttpClient _httpClient;
+    private readonly OllamaApiClient _client;
     private readonly ProcessRunner _processRunner;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
@@ -19,11 +20,13 @@ public sealed class OllamaService : IModelProvider
 
     public OllamaService(string endpoint, ProcessRunner processRunner)
     {
-        _httpClient = new HttpClient
+        var uri = new Uri(endpoint.EndsWith("/") ? endpoint : $"{endpoint}/");
+        var httpClient = new System.Net.Http.HttpClient
         {
-            BaseAddress = new Uri(endpoint.EndsWith("/") ? endpoint : $"{endpoint}/"),
+            BaseAddress = uri,
             Timeout = TimeSpan.FromSeconds(90),
         };
+        _client = new OllamaApiClient(httpClient);
         _processRunner = processRunner;
     }
 
@@ -33,19 +36,14 @@ public sealed class OllamaService : IModelProvider
     {
         try
         {
-            using var response = await _httpClient.GetAsync("api/tags", cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-            var tags = JsonSerializer.Deserialize<OllamaTagsResponse>(payload, _jsonOptions);
-            var models = tags?.Models?
-                .Select(model => model.Model ?? model.Name)
-                .Where(model => !string.IsNullOrWhiteSpace(model))
-                .Select(model => model!)
+            var modelsResponse = await _client.ListLocalModelsAsync(cancellationToken);
+            var models = modelsResponse
+                .Select(m => m.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            if (models is { Count: > 0 })
+            if (models.Count > 0)
             {
                 return models;
             }
@@ -79,27 +77,26 @@ public sealed class OllamaService : IModelProvider
         CancellationToken cancellationToken = default
     )
     {
-        var request = new OllamaChatRequest(
-            model,
-            new[]
-            {
-                new OllamaMessage("system", systemPrompt),
-                new OllamaMessage("user", userPrompt),
-            },
-            Stream: false
-        );
+        var request = new ChatRequest
+        {
+            Model = model,
+            Stream = false,
+            Messages =
+            [
+                new Message(ChatRole.System, systemPrompt),
+                new Message(ChatRole.User, userPrompt),
+            ],
+        };
 
-        using var content = new StringContent(
-            JsonSerializer.Serialize(request, _jsonOptions),
-            Encoding.UTF8,
-            "application/json"
-        );
-        using var response = await _httpClient.PostAsync("api/chat", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var responseStream = _client.ChatAsync(request, cancellationToken);
+        ChatResponseStream? lastChunk = null;
 
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-        var chat = JsonSerializer.Deserialize<OllamaChatResponse>(payload, _jsonOptions);
-        return chat?.Message?.Content?.Trim() ?? string.Empty;
+        await foreach (var chunk in responseStream.WithCancellation(cancellationToken))
+        {
+            lastChunk = chunk;
+        }
+
+        return lastChunk?.Message?.Content?.Trim() ?? string.Empty;
     }
 
     public async Task<T?> GenerateJsonAsync<T>(
@@ -109,28 +106,27 @@ public sealed class OllamaService : IModelProvider
         CancellationToken cancellationToken = default
     )
     {
-        var request = new OllamaChatRequest(
-            model,
-            new[]
-            {
-                new OllamaMessage("system", systemPrompt),
-                new OllamaMessage("user", userPrompt),
-            },
-            Stream: false,
-            Format: "json"
-        );
+        var request = new ChatRequest
+        {
+            Model = model,
+            Stream = false,
+            Format = "json",
+            Messages =
+            [
+                new Message(ChatRole.System, systemPrompt),
+                new Message(ChatRole.User, userPrompt),
+            ],
+        };
 
-        using var content = new StringContent(
-            JsonSerializer.Serialize(request, _jsonOptions),
-            Encoding.UTF8,
-            "application/json"
-        );
-        using var response = await _httpClient.PostAsync("api/chat", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var responseStream = _client.ChatAsync(request, cancellationToken);
+        ChatResponseStream? lastChunk = null;
 
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-        var chat = JsonSerializer.Deserialize<OllamaChatResponse>(payload, _jsonOptions);
-        var json = chat?.Message?.Content?.Trim();
+        await foreach (var chunk in responseStream.WithCancellation(cancellationToken))
+        {
+            lastChunk = chunk;
+        }
+
+        var json = lastChunk?.Message?.Content?.Trim();
         if (string.IsNullOrWhiteSpace(json))
         {
             return default;
@@ -138,15 +134,4 @@ public sealed class OllamaService : IModelProvider
 
         return JsonSerializer.Deserialize<T>(json, _jsonOptions);
     }
-
-    private sealed record OllamaTagsResponse(IReadOnlyList<OllamaModelTag>? Models);
-    private sealed record OllamaModelTag(string? Name, string? Model);
-    private sealed record OllamaChatRequest(
-        string Model,
-        IReadOnlyList<OllamaMessage> Messages,
-        bool Stream,
-        string? Format = null
-    );
-    private sealed record OllamaMessage(string Role, string Content);
-    private sealed record OllamaChatResponse(OllamaMessage? Message);
 }
