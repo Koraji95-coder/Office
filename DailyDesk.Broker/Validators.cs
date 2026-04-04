@@ -9,7 +9,18 @@ internal sealed class ChatRouteRequestValidator : AbstractValidator<ChatRouteReq
     {
         RuleFor(x => x.Route)
             .NotEmpty()
-            .WithMessage("Route is required.");
+            .WithMessage("Route is required.")
+            .Must(route =>
+            {
+                var normalized = OfficeRouteCatalog.NormalizeRoute(route);
+                // NormalizeRoute falls back to "chief" for unknown routes.
+                // If the raw input is not empty but normalizes to a different value,
+                // the input was not a known route.
+                var trimmed = route?.Trim().ToLowerInvariant();
+                return !string.IsNullOrWhiteSpace(trimmed)
+                    && OfficeRouteCatalog.KnownRoutes.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
+            })
+            .WithMessage($"Route must be one of: {string.Join(", ", OfficeRouteCatalog.KnownRoutes)}.");
     }
 }
 

@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text.Json;
 using DailyDesk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DailyDesk.Services;
 
@@ -8,11 +10,13 @@ public sealed class TrainingStore
 {
     private readonly string _storePath;
     private readonly OfficeDatabase? _db;
+    private readonly ILogger<TrainingStore> _logger;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
-    public TrainingStore(string? stateRootPath = null, OfficeDatabase? db = null)
+    public TrainingStore(string? stateRootPath = null, OfficeDatabase? db = null, ILogger<TrainingStore>? logger = null)
     {
+        _logger = logger ?? NullLogger<TrainingStore>.Instance;
         var root = string.IsNullOrWhiteSpace(stateRootPath)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -189,8 +193,9 @@ public sealed class TrainingStore
                 .OrderByDescending(item => item.CompletedAt)
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to load practice attempts from JSON, returning empty.");
             return Array.Empty<TrainingAttemptRecord>();
         }
     }
@@ -225,9 +230,9 @@ public sealed class TrainingStore
                 File.Move(_storePath, migratedPath);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Migration failure is non-fatal — JSON fallback continues to work.
+            _logger.LogWarning(ex, "Training JSON-to-LiteDB migration failed (non-fatal, JSON fallback continues).");
         }
     }
 
@@ -266,8 +271,9 @@ public sealed class TrainingStore
             deserialized.HydrateLegacyPracticeAttempts();
             return deserialized;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to load training payload from JSON, returning empty.");
             return new TrainingStorePayload();
         }
     }

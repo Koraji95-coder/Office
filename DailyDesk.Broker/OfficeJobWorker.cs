@@ -104,9 +104,9 @@ public sealed class OfficeJobWorker : BackgroundService
                 var payload = JsonSerializer.Deserialize<MLEmbeddingsJobPayload>(requestPayload, _jsonOptions);
                 query = payload?.Query;
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore malformed payload
+                _logger.LogWarning(ex, "Malformed embeddings job payload, proceeding with default query.");
             }
         }
 

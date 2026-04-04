@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OllamaSharp;
 using OllamaSharp.Models;
 using OllamaSharp.Models.Chat;
@@ -14,13 +16,14 @@ public sealed class OllamaService : IModelProvider
     private readonly OllamaApiClient _client;
     private readonly ProcessRunner _processRunner;
     private readonly ResiliencePipeline _resiliencePipeline;
+    private readonly ILogger<OllamaService> _logger;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
     public string ProviderId => OllamaProviderId;
     public string ProviderLabel => OllamaProviderLabel;
 
-    public OllamaService(string endpoint, ProcessRunner processRunner, ResiliencePipeline? resiliencePipeline = null)
+    public OllamaService(string endpoint, ProcessRunner processRunner, ResiliencePipeline? resiliencePipeline = null, ILogger<OllamaService>? logger = null)
     {
         var uri = new Uri(endpoint.EndsWith("/") ? endpoint : $"{endpoint}/");
         var httpClient = new System.Net.Http.HttpClient
@@ -31,6 +34,7 @@ public sealed class OllamaService : IModelProvider
         _client = new OllamaApiClient(httpClient);
         _processRunner = processRunner;
         _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
+        _logger = logger ?? NullLogger<OllamaService>.Instance;
     }
 
     public async Task<IReadOnlyList<string>> GetInstalledModelsAsync(
@@ -54,9 +58,9 @@ public sealed class OllamaService : IModelProvider
                 return models;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fall back to CLI.
+            _logger.LogWarning(ex, "Ollama API model listing failed, falling back to CLI.");
         }
 
         try
@@ -70,8 +74,9 @@ public sealed class OllamaService : IModelProvider
                 .Cast<string>()
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Ollama CLI model listing failed, returning empty list.");
             return Array.Empty<string>();
         }
     }

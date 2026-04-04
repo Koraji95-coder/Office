@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text;
 using DailyDesk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DailyDesk.Services;
 
@@ -51,8 +53,9 @@ public sealed class OfficeBrokerOrchestrator
     private string? _lastMLArtifactExportPath;
     private DateTimeOffset? _lastMLRunAt;
 
-    public OfficeBrokerOrchestrator(OfficeBrokerRuntimeMetadata brokerMetadata)
+    public OfficeBrokerOrchestrator(OfficeBrokerRuntimeMetadata brokerMetadata, ILoggerFactory? loggerFactory = null)
     {
+        var lf = loggerFactory ?? NullLoggerFactory.Instance;
         _brokerMetadata = brokerMetadata;
         _officeRootPath = ResolveOfficeRootPath(AppContext.BaseDirectory);
         var settingsRoot = Path.Combine(_officeRootPath, "DailyDesk");
@@ -72,8 +75,8 @@ public sealed class OfficeBrokerOrchestrator
         _officeDatabase = new OfficeDatabase(_stateRootPath);
         _jobStore = new OfficeJobStore(_officeDatabase);
 
-        var processRunner = new ProcessRunner();
-        _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner, ollamaPipeline);
+        var processRunner = new ProcessRunner(lf.CreateLogger<ProcessRunner>());
+        _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner, ollamaPipeline, lf.CreateLogger<OllamaService>());
         _suiteSnapshotService = new SuiteSnapshotService(
             processRunner,
             _settings.SuiteRuntimeStatusEndpoint
@@ -82,7 +85,7 @@ public sealed class OfficeBrokerOrchestrator
             _modelProvider,
             _settings.TrainingModel
         );
-        _trainingStore = new TrainingStore(_stateRootPath, _officeDatabase);
+        _trainingStore = new TrainingStore(_stateRootPath, _officeDatabase, lf.CreateLogger<TrainingStore>());
         _knowledgeImportService = new KnowledgeImportService(
             processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts", "extract_document_text.py")
@@ -90,13 +93,14 @@ public sealed class OfficeBrokerOrchestrator
         _learningProfileService = new LearningProfileService();
         _oralDefenseService = new OralDefenseService(_modelProvider, _settings.MentorModel);
         _liveResearchService = new LiveResearchService(_modelProvider, webResearchPipeline);
-        _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath, _officeDatabase);
+        _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath, _officeDatabase, lf.CreateLogger<OperatorMemoryStore>());
         _sessionStore = new OfficeSessionStateStore(_stateRootPath, _officeDatabase);
         _mlAnalyticsService = new MLAnalyticsService(
             processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts"),
             new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx")),
-            resiliencePipeline: pythonPipeline
+            resiliencePipeline: pythonPipeline,
+            logger: lf.CreateLogger<MLAnalyticsService>()
         );
     }
 

@@ -641,6 +641,30 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    [Theory]
+    [InlineData("chief", true)]
+    [InlineData("engineering", true)]
+    [InlineData("suite", true)]
+    [InlineData("business", true)]
+    [InlineData("ml", true)]
+    [InlineData("CHIEF", true)]
+    [InlineData("unknown", false)]
+    [InlineData("admin", false)]
+    [InlineData("", false)]
+    public void KnownRoutes_ContainsExpectedRoutes(string route, bool expected)
+    {
+        var isKnown = !string.IsNullOrWhiteSpace(route)
+            && OfficeRouteCatalog.KnownRoutes.Contains(route, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(expected, isKnown);
+    }
+
+    [Fact]
+    public void ProcessRunner_CanBeCreatedWithoutLogger()
+    {
+        var runner = new ProcessRunner();
+        Assert.NotNull(runner);
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

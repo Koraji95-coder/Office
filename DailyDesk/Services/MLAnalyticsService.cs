@@ -2,6 +2,8 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using DailyDesk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Polly;
 
 namespace DailyDesk.Services;
@@ -16,6 +18,7 @@ public sealed class MLAnalyticsService
     private readonly OnnxMLEngine? _onnxEngine;
     private readonly TimeSpan _cacheTtl;
     private readonly ResiliencePipeline _resiliencePipeline;
+    private readonly ILogger<MLAnalyticsService> _logger;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
 
@@ -36,13 +39,15 @@ public sealed class MLAnalyticsService
         string scriptsDirectory,
         OnnxMLEngine? onnxEngine = null,
         TimeSpan? cacheTtl = null,
-        ResiliencePipeline? resiliencePipeline = null)
+        ResiliencePipeline? resiliencePipeline = null,
+        ILogger<MLAnalyticsService>? logger = null)
     {
         _processRunner = processRunner;
         _scriptsDirectory = scriptsDirectory;
         _onnxEngine = onnxEngine;
         _cacheTtl = cacheTtl ?? DefaultCacheTtl;
         _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
+        _logger = logger ?? NullLogger<MLAnalyticsService>.Instance;
     }
 
     /// <summary>
@@ -307,8 +312,9 @@ public sealed class MLAnalyticsService
                 if (result is not null)
                     return result;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Python artifact generation failed, using fallback.");
                 return BuildFallbackArtifacts();
             }
         }
@@ -360,7 +366,7 @@ public sealed class MLAnalyticsService
 
             try
             {
-                var process = new System.Diagnostics.Process
+                using var process = new System.Diagnostics.Process
                 {
                     StartInfo = new System.Diagnostics.ProcessStartInfo
                     {
@@ -377,8 +383,9 @@ public sealed class MLAnalyticsService
                 process.WaitForExit(5000);
                 _pythonAvailable = process.ExitCode == 0;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogInformation(ex, "Python not available on this system.");
                 _pythonAvailable = false;
             }
 
@@ -435,9 +442,9 @@ public sealed class MLAnalyticsService
                     File.Delete(tempInputPath);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best effort cleanup.
+                _logger.LogDebug(ex, "Best effort cleanup of temp file failed.");
             }
         }
     }
