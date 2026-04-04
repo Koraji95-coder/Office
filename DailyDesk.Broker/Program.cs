@@ -532,6 +532,101 @@ app.MapPost("/api/workspace/reset", async (OfficeBrokerOrchestrator orchestrator
     }
 });
 
+app.MapPost("/api/ml/analytics", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var analytics = await orchestrator.RunMLAnalyticsAsync(ct);
+        var state = await orchestrator.GetStateAsync(ct);
+        return Results.Ok(new { analytics, state });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Office broker ML analytics endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to run ML analytics",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+app.MapPost("/api/ml/forecast", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var forecast = await orchestrator.RunMLForecastAsync(ct);
+        var state = await orchestrator.GetStateAsync(ct);
+        return Results.Ok(new { forecast, state });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Office broker ML forecast endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to run ML forecast",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+app.MapPost("/api/ml/embeddings", async (MLEmbeddingsRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var embeddings = await orchestrator.RunMLEmbeddingsAsync(request.Query, ct);
+        var state = await orchestrator.GetStateAsync(ct);
+        return Results.Ok(new { embeddings, state });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Office broker ML embeddings endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to run ML embeddings",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+app.MapPost("/api/ml/pipeline", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var result = await orchestrator.RunFullMLPipelineAsync(ct);
+        var state = await orchestrator.GetStateAsync(ct);
+        return Results.Ok(new { result, state });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Office broker full ML pipeline endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to run full ML pipeline",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+app.MapPost("/api/ml/export-artifacts", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var artifacts = await orchestrator.ExportSuiteArtifactsAsync(ct);
+        var state = await orchestrator.GetStateAsync(ct);
+        return Results.Ok(new { artifacts, state });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Office broker ML artifact export endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to export ML artifacts",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
 app.Run();
 
 internal sealed record ChatRouteRequest(string Route);
@@ -553,3 +648,4 @@ internal sealed record InboxResolveRequest(
 internal sealed record InboxQueueRequest(string SuggestionId, bool? ApproveFirst);
 internal sealed record LibraryImportRequest(IReadOnlyList<string>? Paths);
 internal sealed record OfficeHistoryResetRequest(bool? ClearTrainingHistory);
+internal sealed record MLEmbeddingsRequest(string? Query);

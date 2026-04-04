@@ -5,8 +5,72 @@ Separate repo for the `Office` desktop app (`DailyDesk`) and its local knowledge
 ## Layout
 
 - `DailyDesk/`: WPF application source
+- `DailyDesk.Broker/`: ASP.NET Core web service broker (localhost:57420)
+- `DailyDesk.Core/`: Shared business logic & models library
+- `DailyDesk.Core.Tests/`: Unit tests (xUnit)
 - `Knowledge/`: repo-owned knowledge and seed content
 - `Mockups/`: UI mockups and experiments
+
+## Agent Desks
+
+Office includes five Ollama-powered agent routes, each with its own personality and focus:
+
+| Route | Title | Purpose |
+|-------|-------|---------|
+| `chief` | Chief of Staff | Routes the day across Suite, engineering, CAD, and growth |
+| `engineering` | Engineering Desk | EE coaching, CAD workflow judgment, practice tests, oral defense |
+| `suite` | Suite Context | Read-only awareness of Suite repo, trust, and runtime signals |
+| `business` | Growth Ops | Monetization discipline, offers, career proof |
+| `ml` | ML Engineer | Machine learning insights, forecasts, and Suite-ready artifacts |
+
+## ML Pipeline
+
+Office includes a local machine learning pipeline that analyzes training data and produces actionable insights. The pipeline runs Python scripts as subprocesses and falls back to heuristic analysis when ML libraries are not installed.
+
+### ML Engines
+
+| Engine | Library | Purpose |
+|--------|---------|---------|
+| Learning Analytics | Scikit-learn | Topic clustering, readiness prediction, adaptive study scheduling, operator pattern classification |
+| Document Embeddings | PyTorch | Semantic embeddings for knowledge library, document similarity, relevance-ranked search |
+| Progress Forecast | TensorFlow | Time-series accuracy forecasting, plateau detection, anomaly alerts, mastery estimation |
+
+### Suite Integration Artifacts
+
+The ML pipeline produces versioned artifacts that Suite can consume through its deterministic workflows:
+
+- **operator-readiness**: Skill readiness signals for project task assignment
+- **knowledge-index**: Semantic document index for Suite's standards checker
+- **study-schedule**: Adaptive study plan for Suite's project timeline
+- **watchdog-baseline**: Anomaly detection baselines for Suite's watchdog telemetry
+
+Artifacts are exported to `State/ml-artifacts/` and follow Suite's review-first design philosophy.
+
+### ML Setup (Optional)
+
+The ML pipeline works without any Python ML libraries installed (uses heuristic fallbacks). For full ML capability:
+
+```powershell
+pip install scikit-learn torch tensorflow
+```
+
+Enable the pipeline in `dailydesk.settings.json`:
+
+```json
+{
+  "enableMLPipeline": true
+}
+```
+
+### ML Broker Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/ml/analytics` | Run Scikit-learn learning analytics |
+| POST | `/api/ml/forecast` | Run TensorFlow progress forecast |
+| POST | `/api/ml/embeddings` | Run PyTorch document embeddings (optional query) |
+| POST | `/api/ml/pipeline` | Run full ML pipeline (all three engines + artifact export) |
+| POST | `/api/ml/export-artifacts` | Export Suite integration artifacts |
 
 ## Local Roots
 
@@ -54,8 +118,16 @@ cd DailyDesk
 dotnet run
 ```
 
+## Test
+
+```powershell
+dotnet test DailyDesk.Core.Tests
+```
+
 ## Relationship To Suite
 
 - `Suite` stays in its own repo.
 - `Daily Office` stays in this repo.
 - `Suite Runtime Control` lives in `Suite` and launches the built Office executable from the workstation-local path.
+- Office's ML pipeline produces artifacts that Suite can consume through its deterministic, review-first workflows.
+- Suite does **not** host an agent product surface. Office owns local chat, orchestration, and operator-assistant work.

@@ -6,6 +6,7 @@ public static class OfficeRouteCatalog
     public const string EngineeringRoute = "engineering";
     public const string SuiteRoute = "suite";
     public const string BusinessRoute = "business";
+    public const string MLRoute = "ml";
 
     public static readonly IReadOnlyList<string> KnownRoutes =
     [
@@ -13,6 +14,7 @@ public static class OfficeRouteCatalog
         EngineeringRoute,
         SuiteRoute,
         BusinessRoute,
+        MLRoute,
     ];
 
     public static string NormalizeRoute(string? route)
@@ -35,6 +37,7 @@ public static class OfficeRouteCatalog
             EngineeringRoute => "Engineering Desk",
             SuiteRoute => "Suite Context",
             BusinessRoute => "Business Ops",
+            MLRoute => "ML Engineer",
             _ => "Desk",
         };
 
@@ -42,6 +45,7 @@ public static class OfficeRouteCatalog
         NormalizeRoute(route) switch
         {
             BusinessRoute => "Growth Ops",
+            MLRoute => "ML Engineer",
             _ => ResolveRouteTitle(route),
         };
 
@@ -51,6 +55,7 @@ public static class OfficeRouteCatalog
             ChiefRoute => "Chief of Staff",
             SuiteRoute => "Chief of Staff",
             BusinessRoute => "Business Strategist",
+            MLRoute => "ML Engineer",
             _ => "EE Mentor",
         };
 }

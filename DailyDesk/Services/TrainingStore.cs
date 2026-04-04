@@ -102,6 +102,30 @@ public sealed class TrainingStore
         return BuildSummary(payload.PracticeAttempts, payload.DefenseAttempts, payload.Reflections);
     }
 
+    public IReadOnlyList<TrainingAttemptRecord> LoadAllAttempts()
+    {
+        if (!File.Exists(_storePath))
+        {
+            return Array.Empty<TrainingAttemptRecord>();
+        }
+
+        try
+        {
+            var payload = File.ReadAllText(_storePath);
+            var deserialized =
+                JsonSerializer.Deserialize<TrainingStorePayload>(payload, _jsonOptions)
+                ?? new TrainingStorePayload();
+            deserialized.HydrateLegacyPracticeAttempts();
+            return deserialized.PracticeAttempts
+                .OrderByDescending(item => item.CompletedAt)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<TrainingAttemptRecord>();
+        }
+    }
+
     private async Task<TrainingStorePayload> LoadPayloadAsync(CancellationToken cancellationToken)
     {
         if (!File.Exists(_storePath))
