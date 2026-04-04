@@ -67,7 +67,7 @@ ML results are cached to avoid redundant subprocess execution. The cache key inc
 
 ### 7. Request Models as Immutable Records
 
-**Where:** `DailyDesk.Broker/Program.cs` — 15 `record` types defined at lines 632–651.
+**Where:** `DailyDesk.Broker/Program.cs` — 15 `record` types.
 
 All broker request types are `sealed record` with init-only properties. This makes them ideal targets for FluentValidation — validators can target the record type directly without needing mutable state.
 
@@ -75,17 +75,17 @@ All broker request types are `sealed record` with init-only properties. This mak
 
 **Where:** `OfficeSessionStateStore.Normalize()`, `OperatorMemoryStore.NormalizeState()`.
 
-Both stores normalize state after loading from JSON:
+Both stores normalize state after loading:
 - Default values for missing properties.
 - Route normalization via `OfficeRouteCatalog.NormalizeRoute()`.
 - Numeric clamping (`Math.Clamp`).
 - Legacy data migration (`HydrateLegacyPracticeAttempts`).
 
-**Implication:** LiteDB migration (Phase 2) can use the same normalization logic. On first LiteDB load, import from JSON and normalize.
+**Implication:** LiteDB migration (Phase 2) uses the same normalization logic. On first LiteDB load, data is imported from JSON and normalized.
 
 ### 9. Consistent Error Response Pattern
 
-**Where:** `DailyDesk.Broker/Program.cs` — all 25 endpoints follow the same pattern:
+**Where:** `DailyDesk.Broker/Program.cs` — all endpoints follow the same pattern:
 
 ```
 try { ... Results.Ok(...) }
@@ -98,24 +98,49 @@ catch (Exception) { logger.LogError(); Results.Problem() }
 
 ### 10. Shared Code via Compile-Link
 
-**Where:** `DailyDesk.Core.csproj` — `<Compile Include="..\DailyDesk\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />`.
+**Where:** `DailyDesk.Core.csproj` — `<Compile Include="..\DailyDesk\Models\**\*.cs" Link="..." />`.
 
-Models and Services from `DailyDesk/` are compiled into `DailyDesk.Core` via linked compilation. This means:
-- NuGet packages added to `DailyDesk.Core.csproj` are available to both the WPF app and the Broker.
-- New libraries (AngleSharp, OllamaSharp, LiteDB, Polly) added to Core are automatically available everywhere.
+Models and Services from `DailyDesk/` are compiled into `DailyDesk.Core` via linked compilation. NuGet packages added to `DailyDesk.Core.csproj` are available to both the WPF app and the Broker.
+
+### 11. LiteDB Local Persistence (Phase 2)
+
+**Where:** `OfficeDatabase.cs`, `TrainingStore.cs`, `OperatorMemoryStore.cs`, `OfficeSessionStateStore.cs`.
+
+All three stores now support LiteDB as the primary persistence backend with JSON file fallback:
+- Single `office.db` file in the state root directory (shared connection mode).
+- Automatic migration from JSON files on first run (renames originals with `.migrated` suffix).
+- Collection-based storage with indexes on query fields.
+- Max-item limits enforced at the collection level (120 attempts, 240 suggestions, 600 activities).
+
+### 12. Polly Resilience Pipelines (Phase 2)
+
+**Where:** `OfficeResiliencePipelines.cs`, wired into `OllamaService`, `LiveResearchService`, `MLAnalyticsService`.
+
+Three named pipelines:
+- **ollama**: 3× retry (exponential 2s/4s/8s) + circuit breaker (5 failures → 30s open) + 90s timeout.
+- **web-research**: 2× retry (exponential 1s/2s) + 25s timeout.
+- **python-subprocess**: 1× retry (1s constant) + 90s timeout.
+
+### 13. Async Job Model (Phase 3)
+
+**Where:** `OfficeJob.cs`, `OfficeJobStore.cs`, `OfficeJobWorker.cs`, `Program.cs`.
+
+ML endpoints now return a job ID immediately instead of blocking:
+- Job lifecycle: `queued` → `running` → `succeeded`/`failed`.
+- Background worker (`IHostedService`) polls for queued jobs and executes one at a time.
+- Status endpoints: `GET /api/jobs`, `GET /api/jobs/{jobId}`, `GET /api/jobs/{jobId}/result`.
+- Backward compatibility: `?sync=true` query parameter on ML endpoints for blocking behavior.
 
 ---
 
-## Current Dependencies (Minimal)
+## Current Dependencies
 
 | Project | NuGet Packages |
 |---------|---------------|
 | `DailyDesk` | None (project ref to Core only) |
-| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4 |
-| `DailyDesk.Broker` | None (inherits from SDK Web, project ref to Core) |
+| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4, `AngleSharp` 1.4.0, `OllamaSharp` 5.4.25, `LiteDB` 5.0.21, `Polly.Core` 8.6.6 |
+| `DailyDesk.Broker` | `FluentValidation` 12.1.1, `Serilog.AspNetCore` 10.0.0 |
 | `DailyDesk.Core.Tests` | `xunit` 2.9.3, `xunit.runner.visualstudio` 2.8.2, `Microsoft.NET.Test.Sdk` 17.14.1, `coverlet.collector` 6.0.4 |
-
-**Implication:** The codebase has a deliberately minimal dependency footprint. Each new library should be justified by a specific problem it solves. Do not add libraries speculatively.
 
 ---
 
@@ -125,7 +150,7 @@ Models and Services from `DailyDesk/` are compiled into `DailyDesk.Core` via lin
 # Build Core + Tests (works on Linux)
 dotnet build DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
 
-# Run tests
+# Run tests (45 tests)
 dotnet test DailyDesk.Core.Tests
 
 # Build WPF (Windows-only, but can cross-compile on Linux)
@@ -143,11 +168,54 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 
 | Data | Path | Format |
 |------|------|--------|
-| Training history | `%LOCALAPPDATA%\DailyDesk\training-history.json` | JSON |
-| Operator memory | `%LOCALAPPDATA%\DailyDesk\operator-memory.json` | JSON |
-| Session state | `%LOCALAPPDATA%\DailyDesk\broker-live-session.json` | JSON |
+| LiteDB database | `{state-root}/office.db` | LiteDB |
+| Training history (legacy) | `%LOCALAPPDATA%\DailyDesk\training-history.json` | JSON |
+| Operator memory (legacy) | `%LOCALAPPDATA%\DailyDesk\operator-memory.json` | JSON |
+| Session state (legacy) | `%LOCALAPPDATA%\DailyDesk\broker-live-session.json` | JSON |
 | Knowledge library | `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge` | Mixed (md, txt, pdf, docx) |
 | State root | `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\State` | Mixed |
 | ML artifacts | `State/ml-artifacts/` | JSON |
 | Python scripts | `DailyDesk/Scripts/` | Python |
 | ONNX models | `DailyDesk/Models/onnx/` | ONNX |
+
+---
+
+## API Endpoints
+
+### Core Endpoints (25 existing)
+- Health, state, chat, study, research, watchlist, inbox, library, history, workspace, ML.
+
+### Job Endpoints (Phase 3 — 3 new)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/jobs` | List recent jobs (last 50) |
+| GET | `/api/jobs/{jobId}` | Get job status and metadata |
+| GET | `/api/jobs/{jobId}/result` | Get job result JSON (succeeded only) |
+
+### ML Endpoints (Updated)
+| Method | Endpoint | Default | `?sync=true` |
+|--------|----------|---------|-------------|
+| POST | `/api/ml/analytics` | Returns `{ jobId, status }` | Blocks and returns result |
+| POST | `/api/ml/forecast` | Returns `{ jobId, status }` | Blocks and returns result |
+| POST | `/api/ml/embeddings` | Returns `{ jobId, status }` | Blocks and returns result |
+| POST | `/api/ml/pipeline` | Returns `{ jobId, status }` | Blocks and returns result |
+| POST | `/api/ml/export-artifacts` | Blocks (no async mode) | N/A |
+
+---
+
+## Phase 4 — Future Evaluation (Not Started)
+
+### Qdrant for Persistent Semantic Retrieval
+- **Prerequisite:** Phase 3 complete (async jobs running, LiteDB storing results).
+- **Integration point:** Replace `ml_document_embeddings.py` with Ollama embeddings API (via OllamaSharp) + Qdrant (local Docker) for vector storage. `KnowledgePromptContextBuilder` queries Qdrant instead of in-memory search.
+- **Evaluate when:** Document embeddings are being generated regularly via the job model.
+
+### Semantic Kernel for Agent Orchestration
+- **Prerequisite:** Phase 3 complete + stable tool/plugin boundary in the broker.
+- **Integration point:** Replace `PromptComposer` + `OfficeRouteCatalog` with SK agents. Each desk becomes an SK agent with its own tools and system prompt.
+- **Evaluate when:** The 5 agent desks need tool-calling capabilities.
+
+### Docling for Richer Document Extraction
+- **Prerequisite:** None (optional at any phase).
+- **Integration point:** Replace `extract_document_text.py` with Docling pipeline. Keep the same `ProcessRunner` subprocess model.
+- **Evaluate when:** PDF table extraction, PowerPoint content extraction, or OCR for scanned documents is needed.
