@@ -4,12 +4,12 @@ namespace DailyDesk.Services;
 
 public sealed class TrainingGeneratorService
 {
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _modelProvider;
     private readonly string _model;
 
-    public TrainingGeneratorService(OllamaService ollamaService, string model)
+    public TrainingGeneratorService(IModelProvider modelProvider, string model)
     {
-        _ollamaService = ollamaService;
+        _modelProvider = modelProvider;
         _model = model;
     }
 
@@ -29,7 +29,7 @@ public sealed class TrainingGeneratorService
 
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<PracticeTestContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<PracticeTestContract>(
                 _model,
                 BuildSystemPrompt(safeCount),
                 BuildUserPrompt(
@@ -208,7 +208,7 @@ public sealed class TrainingGeneratorService
                 : contract.Overview.Trim(),
             Focus = focus,
             Difficulty = difficulty,
-            GenerationSource = $"ollama:{questionCount} via {_model}",
+            GenerationSource = $"{_modelProvider.ProviderId}:{questionCount} via {_model}",
             Questions = questions,
         };
     }

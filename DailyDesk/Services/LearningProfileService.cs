@@ -28,7 +28,7 @@ public sealed class LearningProfileService
             : $"The desk is coaching toward {weakestTopic.Topic} while tying the work back to {repoTie}. Imported material currently emphasizes {ToSentence(library.TopicHeadlines.Take(5).ToList())}.";
 
         var currentNeed = weakestTopic is null
-            ? $"Generate a mixed baseline test, then add more personal notes or reference docs to {library.RootPath}."
+            ? "Run a mixed baseline practice set, then add more personal notes or reference docs to the knowledge library."
             : $"Retest {weakestTopic.Topic}, then explain how it changes a design or review decision in {repoTie}.";
 
         var coachingRules = new List<string>

@@ -10,6 +10,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\**\*.cs" />
+    <Compile Remove="Services\**\*.cs" />
+    <Compile Remove="ViewModels\ObservableObject.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DailyDesk.Core\DailyDesk.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="AGENT_REPLY_GUIDE.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

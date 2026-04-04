@@ -1,7 +1,7 @@
 <Window x:Class="DailyDesk.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:models="clr-namespace:DailyDesk.Models"
+        xmlns:models="clr-namespace:DailyDesk.Models;assembly=DailyDesk.Core"
         Title="Office"
         Icon="Assets/office.ico"
         Width="1680"

@@ -4,12 +4,12 @@ namespace DailyDesk.Services;
 
 public sealed class SuiteCoachService
 {
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _modelProvider;
     private readonly string _model;
 
-    public SuiteCoachService(OllamaService ollamaService, string model)
+    public SuiteCoachService(IModelProvider modelProvider, string model)
     {
-        _ollamaService = ollamaService;
+        _modelProvider = modelProvider;
         _model = model;
     }
 
@@ -24,7 +24,7 @@ public sealed class SuiteCoachService
     {
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<SuiteCoachContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<SuiteCoachContract>(
                 _model,
                 BuildSystemPrompt(),
                 BuildUserPrompt(

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Runtime\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\DailyDesk\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\DailyDesk\Services\**\*.cs" Link="Services\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\DailyDesk\ViewModels\ObservableObject.cs" Link="ViewModels\ObservableObject.cs" />
+  </ItemGroup>
+
+</Project>

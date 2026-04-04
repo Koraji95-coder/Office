@@ -4,12 +4,12 @@ namespace DailyDesk.Services;
 
 public sealed class DailyOperatorService
 {
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _modelProvider;
     private readonly string _model;
 
-    public DailyOperatorService(OllamaService ollamaService, string model)
+    public DailyOperatorService(IModelProvider modelProvider, string model)
     {
-        _ollamaService = ollamaService;
+        _modelProvider = modelProvider;
         _model = model;
     }
 
@@ -24,7 +24,7 @@ public sealed class DailyOperatorService
     {
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<DailyRunContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<DailyRunContract>(
                 _model,
                 BuildSystemPrompt(),
                 BuildUserPrompt(
@@ -131,7 +131,7 @@ public sealed class DailyOperatorService
                 .Select(item => item!.Trim())
                 .Take(5)
                 .ToList() ?? [],
-            GenerationSource = $"ollama via {_model}",
+            GenerationSource = $"{_modelProvider.ProviderId} via {_model}",
             GeneratedAt = DateTimeOffset.Now,
         };
     }

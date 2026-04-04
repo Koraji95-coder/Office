@@ -18,7 +18,7 @@ public sealed partial class MainViewModel : ObservableObject
     private static readonly TimeSpan OperatorMemoryLoadTimeout = TimeSpan.FromSeconds(5);
 
     private readonly DailySettings _settings;
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _ollamaService;
     private readonly SuiteSnapshotService _suiteSnapshotService;
     private readonly TrainingGeneratorService _trainingGeneratorService;
     private readonly TrainingStore _trainingStore;
@@ -27,6 +27,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly OralDefenseService _oralDefenseService;
     private readonly LiveResearchService _liveResearchService;
     private readonly string _knowledgeLibraryPath;
+    private readonly string _stateRootPath;
     private readonly IReadOnlyList<string> _additionalKnowledgePaths;
 
     private readonly RelayCommand _refreshContextCommand;
@@ -61,7 +62,7 @@ public sealed partial class MainViewModel : ObservableObject
         "Generate a business map to tie current Suite work to a future paid offer.";
     private string _suitePulse = "Suite awareness will appear after the first refresh.";
     private string _statusMessage = "Ready.";
-    private string _installedModelSummary = "Waiting on Ollama model discovery.";
+    private string _installedModelSummary = "Waiting on local model discovery.";
     private string _practiceFocusText =
         "Protection, grounding, standards, drafting safety";
     private string _practiceQuestionCountText = "6";
@@ -109,8 +110,21 @@ public sealed partial class MainViewModel : ObservableObject
         _settings = DailySettings.Load(AppContext.BaseDirectory);
 
         var processRunner = new ProcessRunner();
+        var configuredProviderId = (_settings.PrimaryModelProvider ?? string.Empty).Trim();
         _knowledgeLibraryPath = _settings.ResolveKnowledgeLibraryPath(AppContext.BaseDirectory);
+        _stateRootPath = _settings.ResolveStateRootPath(AppContext.BaseDirectory);
         _ollamaService = new OllamaService(_settings.OllamaEndpoint, processRunner);
+        if (
+            !configuredProviderId.Equals(
+                OllamaService.OllamaProviderId,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            _installedModelSummary =
+                $"Configured provider '{configuredProviderId}' is not available yet. Using {OllamaService.OllamaProviderLabel}.";
+        }
+
         _suiteSnapshotService = new SuiteSnapshotService(
             processRunner,
             _settings.SuiteRuntimeStatusEndpoint
@@ -119,7 +133,7 @@ public sealed partial class MainViewModel : ObservableObject
             _ollamaService,
             _settings.TrainingModel
         );
-        _trainingStore = new TrainingStore();
+        _trainingStore = new TrainingStore(_stateRootPath);
         _knowledgeImportService = new KnowledgeImportService(
             processRunner,
             Path.Combine(AppContext.BaseDirectory, "Scripts", "extract_document_text.py")
@@ -1472,7 +1486,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             apply(fallbackFactory());
             StatusMessage =
-                $"Ollama generation fell back to local heuristics: {exception.Message}";
+                $"{_ollamaService.ProviderLabel} generation fell back to local heuristics: {exception.Message}";
         }
         finally
         {

@@ -28,11 +28,11 @@ public sealed class LiveResearchService
     );
 
     private readonly HttpClient _httpClient;
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _modelProvider;
 
-    public LiveResearchService(OllamaService ollamaService)
+    public LiveResearchService(IModelProvider modelProvider)
     {
-        _ollamaService = ollamaService;
+        _modelProvider = modelProvider;
 
         var handler = new HttpClientHandler
         {
@@ -76,7 +76,7 @@ public sealed class LiveResearchService
 
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<ResearchSynthesisContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<ResearchSynthesisContract>(
                 model,
                 BuildSystemPrompt(perspective),
                 BuildUserPrompt(
@@ -91,7 +91,14 @@ public sealed class LiveResearchService
                 cancellationToken
             );
 
-            var converted = ConvertReport(trimmedQuery, perspective, model, sources, generated);
+            var converted = ConvertReport(
+                trimmedQuery,
+                perspective,
+                model,
+                _modelProvider.ProviderId,
+                sources,
+                generated
+            );
             if (converted is not null)
             {
                 return converted;
@@ -276,6 +283,7 @@ public sealed class LiveResearchService
         string query,
         string perspective,
         string model,
+        string providerId,
         IReadOnlyList<ResearchSource> sources,
         ResearchSynthesisContract? contract
     )
@@ -302,7 +310,7 @@ public sealed class LiveResearchService
             Perspective = perspective,
             Model = model,
             Summary = contract.Summary.Trim(),
-            GenerationSource = "live web + ollama synthesis",
+            GenerationSource = $"live web + {providerId} synthesis",
             KeyTakeaways = takeaways ?? [],
             ActionMoves = actions ?? [],
             Sources = sources,

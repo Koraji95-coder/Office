@@ -4,12 +4,12 @@ namespace DailyDesk.Services;
 
 public sealed class OralDefenseService
 {
-    private readonly OllamaService _ollamaService;
+    private readonly IModelProvider _modelProvider;
     private readonly string _model;
 
-    public OralDefenseService(OllamaService ollamaService, string model)
+    public OralDefenseService(IModelProvider modelProvider, string model)
     {
-        _ollamaService = ollamaService;
+        _modelProvider = modelProvider;
         _model = model;
     }
 
@@ -25,7 +25,7 @@ public sealed class OralDefenseService
     {
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<OralDefenseContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<OralDefenseContract>(
                 _model,
                 BuildSystemPrompt(),
                 BuildUserPrompt(
@@ -75,7 +75,7 @@ public sealed class OralDefenseService
     {
         try
         {
-            var generated = await _ollamaService.GenerateJsonAsync<DefenseEvaluationContract>(
+            var generated = await _modelProvider.GenerateJsonAsync<DefenseEvaluationContract>(
                 _model,
                 BuildScoringSystemPrompt(),
                 BuildScoringUserPrompt(scenario, answer, snapshot, learningProfile, learningLibrary),
@@ -257,7 +257,7 @@ public sealed class OralDefenseService
             SuiteConnection = string.IsNullOrWhiteSpace(contract.SuiteConnection)
                 ? "Tie the explanation back to operator trust, review gates, or production reliability in Suite."
                 : contract.SuiteConnection.Trim(),
-            GenerationSource = $"ollama via {_model}",
+            GenerationSource = $"{_modelProvider.ProviderId} via {_model}",
             FollowUpQuestions = followUps ?? [],
         };
     }

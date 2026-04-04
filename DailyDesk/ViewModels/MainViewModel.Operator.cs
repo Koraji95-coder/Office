@@ -177,7 +177,7 @@ public sealed partial class MainViewModel
 
     private void InitializeOperatorLayer()
     {
-        _operatorMemoryStore = new OperatorMemoryStore();
+        _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath);
         _dailyOperatorService = new DailyOperatorService(_ollamaService, _settings.ChiefModel);
         _suiteCoachService = new SuiteCoachService(_ollamaService, _settings.RepoModel);
 
@@ -938,6 +938,7 @@ public sealed partial class MainViewModel
                 report.Summary,
                 BuildSuggestionResultDetail(report),
                 report.Sources.Take(4).Select(source => source.DisplaySummary).ToList(),
+                null,
                 CancellationToken.None
             );
 

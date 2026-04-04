@@ -1,20 +1,23 @@
 {
-  "suiteRepoPath": "C:\\Users\\koraj\\OneDrive\\Documents\\GitHub\\Suite",
+  "suiteRepoPath": "C:\\Users\\DustinWard\\Documents\\GitHub\\Suite",
   "suiteRuntimeStatusEndpoint": "http://127.0.0.1:5000/api/runtime/status",
   "ollamaEndpoint": "http://127.0.0.1:11434",
-  "knowledgeLibraryPath": "C:\\Users\\koraj\\OneDrive\\Desktop\\Daily\\Knowledge",
-  "additionalKnowledgePaths": [
-    "C:\\Users\\koraj\\OneDrive\\Documents\\OneNote Notebooks"
-  ],
+  "primaryModelProvider": "ollama",
+  "enableHuggingFaceCatalog": false,
+  "huggingFaceTokenEnvVar": "HF_TOKEN",
+  "huggingFaceMcpUrl": "https://huggingface.co/mcp",
+  "knowledgeLibraryPath": "",
+  "stateRootPath": "",
+  "additionalKnowledgePaths": [],
   "officeName": "Office",
   "suiteFocus": "Read-only Suite awareness, unified doctor/runtime trust, and developer workshop signals.",
   "engineeringFocus": "Electrical engineering growth, standards, grounding, protection, review-first technical judgment, and operator-safe reasoning.",
   "cadFocus": "AutoCAD drafting QA, markup-first review, production drawing reliability, and CAD automation that stays human-reviewed.",
   "businessFocus": "Internal operating discipline, monetization hypotheses, pilot framing, pricing realism, and measurable operator value.",
   "careerFocus": "Turn Suite work, EE learning, and CAD workflow judgment into strong career proof and future business leverage.",
-  "chiefModel": "qwen3:14b",
-  "mentorModel": "ALIENTELLIGENCE/electricalengineerv2:latest",
-  "repoModel": "qwen2.5-coder:14b",
-  "trainingModel": "qwen3:14b",
-  "businessModel": "gemma3:12b"
+  "chiefModel": "qwen3:8b",
+  "mentorModel": "qwen3:8b",
+  "repoModel": "qwen3:8b",
+  "trainingModel": "qwen3:8b",
+  "businessModel": "qwen3:8b"
 }

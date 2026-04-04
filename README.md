@@ -13,10 +13,13 @@ Separate repo for the `Office` desktop app (`DailyDesk`) and its local knowledge
 Recommended workstation path:
 
 ```text
-C:\Dev\Daily
+C:\Users\<you>\Documents\GitHub\Office
 ```
 
-`Suite Runtime Control` resolves Office from workstation-local config first, then `C:\Dev\Daily`, and only falls back to the old OneDrive path for compatibility.
+`Suite Runtime Control` resolves Office from workstation-local config first, then `C:\Users\<you>\Documents\GitHub\Office`. Office live knowledge/state now belong under Dropbox:
+
+- `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge`
+- `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\State`
 
 ## GitHub Remote Setup
 
@@ -32,10 +35,10 @@ git push -u origin main
 On the other PC, clone this repo directly into the standard path:
 
 ```powershell
-git clone https://github.com/Koraji95-coder/Office.git C:\Dev\Daily
+git clone https://github.com/Koraji95-coder/Office.git C:\Users\<you>\Documents\GitHub\Office
 ```
 
-Then clone `Suite` into `C:\Dev\Suite` and run Suite's workstation bootstrap from the `Suite` repo. If both repos are already in their standard roots, Suite does not need a `-DailyRepoUrl` argument.
+Then clone `Suite` into `C:\Users\<you>\Documents\GitHub\Suite` and run Suite's workstation bootstrap from the `Suite` repo. If both repos are already in their standard roots, Suite does not need a `-DailyRepoUrl` argument.
 
 ## Build
 

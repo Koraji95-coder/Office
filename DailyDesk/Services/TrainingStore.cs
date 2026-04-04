@@ -10,12 +10,14 @@ public sealed class TrainingStore
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
-    public TrainingStore()
+    public TrainingStore(string? stateRootPath = null)
     {
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "DailyDesk"
-        );
+        var root = string.IsNullOrWhiteSpace(stateRootPath)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DailyDesk"
+            )
+            : Path.GetFullPath(stateRootPath);
         Directory.CreateDirectory(root);
         _storePath = Path.Combine(root, "training-history.json");
     }
@@ -87,6 +89,15 @@ public sealed class TrainingStore
             .Take(120)
             .ToList();
 
+        await SavePayloadAsync(payload, cancellationToken);
+        return BuildSummary(payload.PracticeAttempts, payload.DefenseAttempts, payload.Reflections);
+    }
+
+    public async Task<TrainingHistorySummary> ResetAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var payload = new TrainingStorePayload();
         await SavePayloadAsync(payload, cancellationToken);
         return BuildSummary(payload.PracticeAttempts, payload.DefenseAttempts, payload.Reflections);
     }

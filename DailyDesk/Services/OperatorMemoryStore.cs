@@ -10,12 +10,14 @@ public sealed class OperatorMemoryStore
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
-    public OperatorMemoryStore()
+    public OperatorMemoryStore(string? stateRootPath = null)
     {
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "DailyDesk"
-        );
+        var root = string.IsNullOrWhiteSpace(stateRootPath)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DailyDesk"
+            )
+            : Path.GetFullPath(stateRootPath);
         Directory.CreateDirectory(root);
         _storePath = Path.Combine(root, "operator-memory.json");
     }
@@ -130,6 +132,7 @@ public sealed class OperatorMemoryStore
         string latestResultSummary,
         string latestResultDetail,
         IReadOnlyList<string> latestResultSources,
+        string? latestResultPath,
         CancellationToken cancellationToken = default
     )
     {
@@ -142,6 +145,9 @@ public sealed class OperatorMemoryStore
             target.LatestResultSummary = latestResultSummary;
             target.LatestResultDetail = latestResultDetail;
             target.LatestResultSources = latestResultSources.ToList();
+            target.LatestResultPath = string.IsNullOrWhiteSpace(latestResultPath)
+                ? string.Empty
+                : latestResultPath.Trim();
             target.ExecutionUpdatedAt = DateTimeOffset.Now;
         }
 
@@ -178,6 +184,36 @@ public sealed class OperatorMemoryStore
     {
         var state = await LoadStateAsync(cancellationToken);
         state.DeskThreads = deskThreads.Select(CloneDeskThread).ToList();
+        NormalizeState(state);
+        await SaveStateAsync(state, cancellationToken);
+        return state;
+    }
+
+    public async Task<OperatorMemoryState> SaveWorkflowAsync(
+        OfficeWorkflowState workflow,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var state = await LoadStateAsync(cancellationToken);
+        state.Workflow = CloneWorkflow(workflow);
+        NormalizeState(state);
+        await SaveStateAsync(state, cancellationToken);
+        return state;
+    }
+
+    public async Task<OperatorMemoryState> SaveSnapshotAsync(
+        OperatorMemoryState state,
+        CancellationToken cancellationToken = default
+    )
+    {
+        NormalizeState(state);
+        await SaveStateAsync(state, cancellationToken);
+        return state;
+    }
+
+    public async Task<OperatorMemoryState> ResetAsync(CancellationToken cancellationToken = default)
+    {
+        var state = BuildDefaultState();
         NormalizeState(state);
         await SaveStateAsync(state, cancellationToken);
         return state;
@@ -269,6 +305,8 @@ public sealed class OperatorMemoryStore
         {
             state.DeskThreads = BuildDefaultDeskThreads();
         }
+
+        state.Workflow ??= new OfficeWorkflowState();
     }
 
     private static OperatorMemoryState BuildDefaultState() =>
@@ -277,6 +315,7 @@ public sealed class OperatorMemoryStore
             Policies = BuildDefaultPolicies(),
             Watchlists = BuildDefaultWatchlists(),
             DeskThreads = BuildDefaultDeskThreads(),
+            Workflow = new OfficeWorkflowState(),
         };
 
     private static List<AgentPolicy> BuildDefaultPolicies() =>
@@ -351,40 +390,7 @@ public sealed class OperatorMemoryStore
     ];
 
     private static List<ResearchWatchlist> BuildDefaultWatchlists() =>
-    [
-        new()
-        {
-            Topic = "EE standards and workflow QA",
-            Query = "electrical drawing QA workflow standards review checklist",
-            Frequency = "Weekly",
-            PreferredPerspective = "EE Mentor",
-            SaveToKnowledgeDefault = true,
-        },
-        new()
-        {
-            Topic = "Suite-adjacent automation patterns",
-            Query = "electrical design automation review-first workflow operator approval",
-            Frequency = "Weekly",
-            PreferredPerspective = "Repo Coach",
-            SaveToKnowledgeDefault = true,
-        },
-        new()
-        {
-            Topic = "Career and job market signals",
-            Query = "electrical automation engineer drafting workflow jobs career skill signals",
-            Frequency = "Twice Weekly",
-            PreferredPerspective = "Chief of Staff",
-            SaveToKnowledgeDefault = true,
-        },
-        new()
-        {
-            Topic = "Monetizable production-control workflows",
-            Query = "electrical drafting production control workflow software review approvals market",
-            Frequency = "Weekly",
-            PreferredPerspective = "Business Strategist",
-            SaveToKnowledgeDefault = true,
-        },
-    ];
+        [];
 
     private static List<DeskThreadState> BuildDefaultDeskThreads()
     {
@@ -480,6 +486,7 @@ public sealed class OperatorMemoryStore
             LatestResultSummary = suggestion.LatestResultSummary,
             LatestResultDetail = suggestion.LatestResultDetail,
             LatestResultSources = suggestion.LatestResultSources.ToList(),
+            LatestResultPath = suggestion.LatestResultPath,
         };
 
     private static string BuildSuggestionSemanticKey(SuggestedAction suggestion) =>
@@ -498,6 +505,30 @@ public sealed class OperatorMemoryStore
             DeskTitle = thread.DeskTitle,
             UpdatedAt = thread.UpdatedAt,
             Messages = thread.Messages.Select(CloneDeskMessage).ToList(),
+        };
+
+    private static OfficeWorkflowState CloneWorkflow(OfficeWorkflowState workflow) =>
+        new()
+        {
+            ActiveRoute = workflow.ActiveRoute,
+            LastAutoRoute = workflow.LastAutoRoute,
+            LastAutoRouteReason = workflow.LastAutoRouteReason,
+            StudyFocus = workflow.StudyFocus,
+            PracticeDifficulty = workflow.PracticeDifficulty,
+            PracticeQuestionCount = workflow.PracticeQuestionCount,
+            CurrentPracticeTest = workflow.CurrentPracticeTest,
+            CurrentDefenseScenario = workflow.CurrentDefenseScenario,
+            LatestDefenseEvaluation = workflow.LatestDefenseEvaluation,
+            LatestResearchReport = workflow.LatestResearchReport,
+            LastScoredSessionMode = workflow.LastScoredSessionMode,
+            LastScoredSessionFocus = workflow.LastScoredSessionFocus,
+            ReflectionContextSummary = workflow.ReflectionContextSummary,
+            PracticeGeneratedAt = workflow.PracticeGeneratedAt,
+            PracticeScoredAt = workflow.PracticeScoredAt,
+            DefenseGeneratedAt = workflow.DefenseGeneratedAt,
+            DefenseScoredAt = workflow.DefenseScoredAt,
+            ReflectionSavedAt = workflow.ReflectionSavedAt,
+            UpdatedAt = workflow.UpdatedAt,
         };
 
     private static DeskMessageRecord CloneDeskMessage(DeskMessageRecord message) =>

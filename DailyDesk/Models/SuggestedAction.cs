@@ -24,6 +24,7 @@ public sealed class SuggestedAction
     public string LatestResultSummary { get; set; } = string.Empty;
     public string LatestResultDetail { get; set; } = string.Empty;
     public List<string> LatestResultSources { get; set; } = [];
+    public string LatestResultPath { get; set; } = string.Empty;
 
     [JsonIgnore]
     public string OutcomeReasonInput { get; set; } = string.Empty;
@@ -67,7 +68,8 @@ public sealed class SuggestedAction
     public bool HasLatestResult =>
         !string.IsNullOrWhiteSpace(LatestResultSummary)
         || !string.IsNullOrWhiteSpace(LatestResultDetail)
-        || LatestResultSources.Count > 0;
+        || LatestResultSources.Count > 0
+        || !string.IsNullOrWhiteSpace(LatestResultPath);
 
     [JsonIgnore]
     public bool NeedsFollowThrough => IsAccepted && !HasExecution;

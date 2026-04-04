@@ -23,7 +23,7 @@ Separate Windows desktop companion for:
   - `Inbox`
   - `Library`
 - Local Ollama model discovery
-- Local knowledge library under `Daily\Knowledge` with starter coaching files and a `Class Notes` drop zone
+- Local knowledge library under `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge` with a `Class Notes` drop zone
 - Optional mapped read-only knowledge sources, including OneNote-export folders
 - Dedicated `Inbox` workflow with:
   - pending approvals first
@@ -77,11 +77,16 @@ dotnet run
 
 ## Settings
 
-Edit `dailydesk.settings.json` to change:
+Use `dailydesk.settings.local.json` for workstation-local overrides such as:
 
 - `suiteRepoPath`
 - `ollamaEndpoint`
+- `primaryModelProvider` (`ollama` is active today)
+- `enableHuggingFaceCatalog` (catalog/discovery toggle only)
+- `huggingFaceTokenEnvVar` (token env var name for future Hugging Face catalog access)
+- `huggingFaceMcpUrl` (future Hugging Face MCP/catalog endpoint)
 - `knowledgeLibraryPath`
+- `stateRootPath`
 - primary models for chief, mentor, training builder, repo coach, and business strategist
 
 ## Important behavior
@@ -91,21 +96,21 @@ Edit `dailydesk.settings.json` to change:
 - Daily Desk only reads `Suite` for now
 - Daily Desk may generate proposals about `Suite`, but it does not mutate the repo
 - Research, training, reflections, suggestion outcomes, and watchlist history are part of the local memory loop
-- The knowledge library is read from `Daily\Knowledge` by default
+- The knowledge library defaults to `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge`
 - Office can also scan configured external read-only knowledge roots such as:
   - `C:\Users\koraj\OneDrive\Documents\OneNote Notebooks`
 - Supported study file types are `.md`, `.txt`, `.pdf`, `.docx`, `.pptx`, and exported OneNote `.onepkg` packages
 - The quickest way to feed EE Mentor class context is:
   - click `Open Knowledge`
-  - drop your files into `Daily\Knowledge\Class Notes`
+  - drop your files into `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge\Class Notes`
   - click `Refresh Office`
   - check `Library` to confirm the files were loaded
 - Raw OneNote notebook containers are not parsed directly, but exported `.onepkg` packages are now supported. Office will extract readable note text from the packaged `.one` content where possible.
 - EE Mentor, desk chat, practice tests, and oral-defense scoring now pull relevant excerpts from imported knowledge instead of relying only on file summaries.
 - Direct exported `.pdf`, `.docx`, `.pptx`, `.md`, and `.txt` files are still the cleanest source material.
-- Training history is stored locally under `%LOCALAPPDATA%\DailyDesk\training-history.json`
+- Training history is stored under `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\State\training-history.json`
 - The training-history file is only created after you score a practice test, score a defense answer, and save a reflection
 - The `Training Session` view shows the history file path and last write state so it is obvious when memory has actually been written
-- Operator memory is stored locally under `%LOCALAPPDATA%\DailyDesk\operator-memory.json`
+- Operator memory is stored under `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\State\operator-memory.json`
 - PDF extraction uses the local Python environment through `Scripts\extract_document_text.py`
 - monetization guidance is intentionally conservative and follows `Suite`'s own product notes

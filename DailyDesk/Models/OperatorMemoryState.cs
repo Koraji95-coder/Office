@@ -8,6 +8,7 @@ public sealed class OperatorMemoryState
     public List<DailyRunTemplate> DailyRuns { get; set; } = [];
     public List<OperatorActivityRecord> Activities { get; set; } = [];
     public List<DeskThreadState> DeskThreads { get; set; } = [];
+    public OfficeWorkflowState Workflow { get; set; } = new();
 
     public IReadOnlyList<SuggestedAction> PendingApprovalSuggestions =>
         Suggestions

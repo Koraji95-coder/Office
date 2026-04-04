@@ -4,12 +4,18 @@ using System.Text.Json;
 
 namespace DailyDesk.Services;
 
-public sealed class OllamaService
+public sealed class OllamaService : IModelProvider
 {
+    public const string OllamaProviderId = "ollama";
+    public const string OllamaProviderLabel = "Ollama (local)";
+
     private readonly HttpClient _httpClient;
     private readonly ProcessRunner _processRunner;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true };
+
+    public string ProviderId => OllamaProviderId;
+    public string ProviderLabel => OllamaProviderLabel;
 
     public OllamaService(string endpoint, ProcessRunner processRunner)
     {

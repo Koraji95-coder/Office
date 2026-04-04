@@ -28,7 +28,7 @@ public sealed class KnowledgeImportService
     )
     {
         Directory.CreateDirectory(rootPath);
-        EnsureStarterFiles(rootPath);
+        EnsureKnowledgeRootFolders(rootPath);
 
         var documents = new List<LearningDocument>();
         var sourceRoots = new List<string> { rootPath };
@@ -590,23 +590,11 @@ public sealed class KnowledgeImportService
         return string.IsNullOrWhiteSpace(directoryName) ? "Knowledge" : directoryName;
     }
 
-    private static void EnsureStarterFiles(string rootPath)
+    private static void EnsureKnowledgeRootFolders(string rootPath)
     {
-        foreach (var starterFile in StarterFiles)
+        foreach (var relativeDirectory in new[] { "Class Notes", "Research", "Follow Through" })
         {
-            var targetPath = Path.Combine(rootPath, starterFile.Name);
-            var targetDirectory = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrWhiteSpace(targetDirectory))
-            {
-                Directory.CreateDirectory(targetDirectory);
-            }
-
-            if (File.Exists(targetPath))
-            {
-                continue;
-            }
-
-            File.WriteAllText(targetPath, starterFile.Content);
+            Directory.CreateDirectory(Path.Combine(rootPath, relativeDirectory));
         }
     }
 
@@ -616,76 +604,6 @@ public sealed class KnowledgeImportService
         public string? Text { get; set; }
         public string? Error { get; set; }
     }
-
-    private sealed record StarterFile(string Name, string Content);
-
-    private static readonly IReadOnlyList<StarterFile> StarterFiles =
-    [
-        new(
-            "coach-notes.md",
-            """
-            # Coach Notes
-
-            Write how you want Daily Desk to coach you.
-
-            - What tone should it use?
-            - What kinds of pressure or challenge help you learn?
-            - What should it avoid?
-            - What career direction are you pushing toward?
-            """
-        ),
-        new(
-            "study-focus.md",
-            """
-            # Study Focus
-
-            Write the subjects, exams, domains, or projects that matter right now.
-
-            - EE topics to strengthen
-            - Current projects
-            - Standards or tools to learn
-            - Weak areas you already know about
-            """
-        ),
-        new(
-            "career-and-business.md",
-            """
-            # Career And Business
-
-            Write the kind of work, clients, roles, or business outcomes you want the desk to optimize for.
-
-            - target role
-            - portfolio direction
-            - monetization ideas
-            - industries or customers to focus on
-            """
-        ),
-        new(
-            "Class Notes\\README.md",
-            """
-            # Class Notes
-
-            Drop study material here when you want EE Mentor to use it as local context.
-
-            Good file types:
-            - `.md`
-            - `.txt`
-            - `.docx`
-            - `.pdf`
-            - `.pptx`
-
-            Good material:
-            - lecture notes
-            - lab writeups
-            - formula sheets
-            - worked examples
-            - standards excerpts
-            - project-specific study notes
-
-            After adding files, click `Refresh Office` so the knowledge library rescans them.
-            """
-        ),
-    ];
 
     private static readonly HashSet<string> StopWords =
         new(StringComparer.OrdinalIgnoreCase)
