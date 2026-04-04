@@ -155,6 +155,65 @@ public static class PromptComposer
         Imported knowledge: {ToSentence(library.Documents.Take(4).Select(document => document.PromptSummary).ToList())}
         """;
 
+    public static string BuildMLEngineerSystemPrompt() =>
+        """
+        You are an ML engineering mentor embedded in a Windows desktop called Daily Desk.
+        Your role is to help the operator understand and improve their machine learning pipeline.
+        The pipeline uses Scikit-learn for learning analytics, PyTorch for document embeddings, and TensorFlow for progress forecasting.
+        These tools analyze training history, knowledge documents, and operator decisions to produce actionable insights.
+        The ML artifacts integrate with a companion app called Suite for electrical engineering production workflows.
+        Keep answers practical, tied to real ML concepts, and grounded in the operator's actual data.
+        Return plain text with sections: ML STATUS, INSIGHTS, RECOMMENDATIONS, and SUITE INTEGRATION.
+        """;
+
+    public static string BuildMLEngineerUserPrompt(
+        MLAnalyticsResult? analytics,
+        MLForecastResult? forecast,
+        MLEmbeddingsResult? embeddings,
+        LearningProfile profile,
+        TrainingHistorySummary history
+    )
+    {
+        var analyticsEngine = analytics?.Engine ?? "not run";
+        var forecastEngine = forecast?.Engine ?? "not run";
+        var embeddingsEngine = embeddings?.Engine ?? "not run";
+
+        var weakTopics = analytics?.WeakTopics?.Take(5)
+            .Select(t => $"{t.Topic} ({t.Accuracy:P0})")
+            .ToList() ?? [];
+
+        var plateaus = forecast?.Plateaus?.Take(3)
+            .Select(p => $"{p.Topic} at {p.PlateauAccuracy:P0}")
+            .ToList() ?? [];
+
+        var anomalies = forecast?.Anomalies?.Take(3)
+            .Select(a => $"{a.Topic}: dropped {a.Drop:P0} ({a.Severity})")
+            .ToList() ?? [];
+
+        var clusters = analytics?.TopicClusters?.Take(3)
+            .Select(c => $"{c.Label}: {string.Join(", ", c.Topics.Take(4))}")
+            .ToList() ?? [];
+
+        return $"""
+        ML pipeline status:
+        - analytics engine: {analyticsEngine}
+        - forecast engine: {forecastEngine}
+        - embeddings engine: {embeddingsEngine}
+        - overall readiness: {analytics?.OverallReadiness ?? 0:P0}
+
+        Weak topics needing attention: {ToSentence(weakTopics)}
+        Plateau detections: {ToSentence(plateaus)}
+        Anomaly alerts: {ToSentence(anomalies)}
+        Topic clusters: {ToSentence(clusters)}
+        Operator decision pattern: {analytics?.OperatorPattern?.Pattern ?? "unknown"}
+
+        Learning context:
+        - current need: {profile.CurrentNeed}
+        - training summary: {history.OverallSummary}
+        - defense summary: {history.DefenseSummary}
+        """;
+    }
+
     private static string ToSentence(IReadOnlyList<string> items) =>
         items.Count == 0 ? "none recorded" : string.Join("; ", items);
 }

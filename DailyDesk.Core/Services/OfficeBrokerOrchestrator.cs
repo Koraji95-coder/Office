@@ -31,6 +31,7 @@ public sealed class OfficeBrokerOrchestrator
     private readonly LiveResearchService _liveResearchService;
     private readonly OperatorMemoryStore _operatorMemoryStore;
     private readonly OfficeSessionStateStore _sessionStore;
+    private readonly MLAnalyticsService _mlAnalyticsService;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -41,6 +42,11 @@ public sealed class OfficeBrokerOrchestrator
     private LearningProfile _learningProfile = new();
     private OperatorMemoryState _operatorMemoryState = new();
     private OfficeLiveSessionState _session = new();
+    private MLAnalyticsResult? _latestMLAnalytics;
+    private MLForecastResult? _latestMLForecast;
+    private MLEmbeddingsResult? _latestMLEmbeddings;
+    private string? _lastMLArtifactExportPath;
+    private DateTimeOffset? _lastMLRunAt;
 
     public OfficeBrokerOrchestrator(OfficeBrokerRuntimeMetadata brokerMetadata)
     {
@@ -74,6 +80,10 @@ public sealed class OfficeBrokerOrchestrator
         _liveResearchService = new LiveResearchService(_modelProvider);
         _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath);
         _sessionStore = new OfficeSessionStateStore(_stateRootPath);
+        _mlAnalyticsService = new MLAnalyticsService(
+            processRunner,
+            Path.Combine(_officeRootPath, "DailyDesk", "Scripts")
+        );
     }
 
     public async Task<object> GetHealthAsync(CancellationToken cancellationToken = default)
@@ -1457,6 +1467,7 @@ public sealed class OfficeBrokerOrchestrator
                 Watchlists = _operatorMemoryState.Watchlists.OrderBy(item => item.NextDueAt).ToList(),
             },
             Inbox = inbox,
+            ML = BuildMLSectionLocked(),
         };
     }
 
@@ -1583,6 +1594,7 @@ public sealed class OfficeBrokerOrchestrator
             new() { Role = "Suite Context", ModelName = _settings.RepoModel, Installed = installed.Contains(_settings.RepoModel) },
             new() { Role = "Growth", ModelName = _settings.BusinessModel, Installed = installed.Contains(_settings.BusinessModel) },
             new() { Role = "Study Builder", ModelName = _settings.TrainingModel, Installed = installed.Contains(_settings.TrainingModel) },
+            new() { Role = "ML Engineer", ModelName = _settings.MLModel, Installed = installed.Contains(_settings.MLModel) },
         };
     }
 
@@ -1976,6 +1988,8 @@ public sealed class OfficeBrokerOrchestrator
                 "I keep the office aware of Suite trust, availability, and workflow context in a calm, read-only way.",
             OfficeRouteCatalog.BusinessRoute =>
                 "I translate current capability into growth discipline, offers, proof points, and monetization paths without hype.",
+            OfficeRouteCatalog.MLRoute =>
+                "I analyze your learning data with ML (Scikit-learn, PyTorch, TensorFlow) and produce insights, forecasts, and Suite-ready artifacts.",
             _ => "Ask for the next move.",
         };
 
@@ -2017,6 +2031,8 @@ public sealed class OfficeBrokerOrchestrator
                 Avoid generic startup language.
                 Respond with short sections named MOVE, WHY IT WINS, and WHAT TO PROVE.
                 """,
+            OfficeRouteCatalog.MLRoute =>
+                PromptComposer.BuildMLEngineerSystemPrompt(),
             _ =>
                 """
                 You are a practical assistant inside Office.
@@ -2182,6 +2198,7 @@ public sealed class OfficeBrokerOrchestrator
             OfficeRouteCatalog.EngineeringRoute => _settings.MentorModel,
             OfficeRouteCatalog.SuiteRoute => _settings.RepoModel,
             OfficeRouteCatalog.BusinessRoute => _settings.BusinessModel,
+            OfficeRouteCatalog.MLRoute => _settings.MLModel,
             _ => _settings.ChiefModel,
         };
     }
@@ -2908,5 +2925,199 @@ public sealed class OfficeBrokerOrchestrator
         }
 
         return $"{value[..maxLength].Trim()}...";
+    }
+
+    // --- ML Pipeline ---
+
+    public async Task<MLAnalyticsResult> RunMLAnalyticsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            var attempts = _trainingStore.LoadAllAttempts();
+            var decisions = _operatorMemoryState.Activities;
+            _latestMLAnalytics = await _mlAnalyticsService.RunLearningAnalyticsAsync(
+                attempts,
+                decisions,
+                cancellationToken
+            );
+            _lastMLRunAt = DateTimeOffset.Now;
+            return _latestMLAnalytics;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<MLForecastResult> RunMLForecastAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            var attempts = _trainingStore.LoadAllAttempts();
+            _latestMLForecast = await _mlAnalyticsService.RunProgressForecastAsync(
+                attempts,
+                cancellationToken
+            );
+            _lastMLRunAt = DateTimeOffset.Now;
+            return _latestMLForecast;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<MLEmbeddingsResult> RunMLEmbeddingsAsync(
+        string? query = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            _latestMLEmbeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+                _learningLibrary.Documents,
+                query,
+                cancellationToken
+            );
+            _lastMLRunAt = DateTimeOffset.Now;
+            return _latestMLEmbeddings;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<object> RunFullMLPipelineAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+
+            var attempts = _trainingStore.LoadAllAttempts();
+            var decisions = _operatorMemoryState.Activities;
+
+            _latestMLAnalytics = await _mlAnalyticsService.RunLearningAnalyticsAsync(
+                attempts,
+                decisions,
+                cancellationToken
+            );
+            _latestMLForecast = await _mlAnalyticsService.RunProgressForecastAsync(
+                attempts,
+                cancellationToken
+            );
+            _latestMLEmbeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+                _learningLibrary.Documents,
+                null,
+                cancellationToken
+            );
+
+            var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
+                _latestMLAnalytics,
+                _latestMLEmbeddings,
+                _latestMLForecast,
+                cancellationToken
+            );
+
+            var exportPath = await _mlAnalyticsService.ExportArtifactsAsync(
+                artifacts,
+                _stateRootPath,
+                cancellationToken
+            );
+
+            _lastMLArtifactExportPath = exportPath;
+            _lastMLRunAt = DateTimeOffset.Now;
+
+            return new
+            {
+                analytics = _latestMLAnalytics,
+                forecast = _latestMLForecast,
+                embeddings = _latestMLEmbeddings,
+                artifacts,
+                exportPath,
+            };
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<SuiteMLArtifactBundle> ExportSuiteArtifactsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+
+            var analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = true, Engine = "not-run" };
+            var embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = true, Engine = "not-run" };
+            var forecast = _latestMLForecast ?? new MLForecastResult { Ok = true, Engine = "not-run" };
+
+            var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
+                analytics,
+                embeddings,
+                forecast,
+                cancellationToken
+            );
+
+            var exportPath = await _mlAnalyticsService.ExportArtifactsAsync(
+                artifacts,
+                _stateRootPath,
+                cancellationToken
+            );
+
+            _lastMLArtifactExportPath = exportPath;
+            return artifacts;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private OfficeMLSection BuildMLSectionLocked()
+    {
+        if (!_settings.EnableMLPipeline)
+        {
+            return new OfficeMLSection
+            {
+                Enabled = false,
+                Summary = "ML pipeline is not enabled. Set enableMLPipeline to true in settings.",
+            };
+        }
+
+        var summary = _latestMLAnalytics is not null
+            ? $"ML pipeline active ({_latestMLAnalytics.Engine}). Readiness: {_latestMLAnalytics.OverallReadiness:P0}. " +
+              $"Weak topics: {_latestMLAnalytics.WeakTopics.Count}. " +
+              $"Forecast engine: {_latestMLForecast?.Engine ?? "not run"}. " +
+              $"Embeddings: {_latestMLEmbeddings?.Engine ?? "not run"}."
+            : "ML pipeline is enabled but has not been run yet. Use the ML endpoints to analyze your learning data.";
+
+        return new OfficeMLSection
+        {
+            Enabled = true,
+            Summary = summary,
+            Analytics = _latestMLAnalytics,
+            Forecast = _latestMLForecast,
+            Embeddings = _latestMLEmbeddings,
+            LastArtifactExportPath = _lastMLArtifactExportPath,
+            LastRunAt = _lastMLRunAt,
+        };
     }
 }

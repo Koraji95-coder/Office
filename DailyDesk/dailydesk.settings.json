@@ -19,5 +19,8 @@
   "mentorModel": "qwen3:8b",
   "repoModel": "qwen3:8b",
   "trainingModel": "qwen3:8b",
-  "businessModel": "qwen3:8b"
+  "businessModel": "qwen3:8b",
+  "mlModel": "qwen3:8b",
+  "enableMLPipeline": false,
+  "mlArtifactExportPath": ""
 }

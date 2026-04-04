@@ -13,6 +13,8 @@ public sealed class OfficeBrokerLogicTests
     [InlineData("engineering", OfficeRouteCatalog.EngineeringRoute)]
     [InlineData("BUSINESS", OfficeRouteCatalog.BusinessRoute)]
     [InlineData("unknown", OfficeRouteCatalog.ChiefRoute)]
+    [InlineData("ml", OfficeRouteCatalog.MLRoute)]
+    [InlineData("ML", OfficeRouteCatalog.MLRoute)]
     public void NormalizeRoute_ReturnsExpectedValue(string? route, string expected)
     {
         var actual = OfficeRouteCatalog.NormalizeRoute(route);
@@ -22,6 +24,7 @@ public sealed class OfficeBrokerLogicTests
     [Theory]
     [InlineData(OfficeRouteCatalog.BusinessRoute, "Growth Ops")]
     [InlineData(OfficeRouteCatalog.ChiefRoute, "Chief of Staff")]
+    [InlineData(OfficeRouteCatalog.MLRoute, "ML Engineer")]
     public void ResolveRouteDisplayTitle_ReturnsExpectedLabel(string route, string expectedTitle)
     {
         var actual = OfficeRouteCatalog.ResolveRouteDisplayTitle(route);
@@ -99,5 +102,102 @@ public sealed class OfficeBrokerLogicTests
 
         Assert.Contains("knowledge library", profile.CurrentNeed, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(@"C:\Users\DustinWard", profile.CurrentNeed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MLRouteIsRegisteredInKnownRoutes()
+    {
+        Assert.Contains(OfficeRouteCatalog.MLRoute, OfficeRouteCatalog.KnownRoutes);
+    }
+
+    [Theory]
+    [InlineData(OfficeRouteCatalog.MLRoute, "ML Engineer")]
+    public void ResolvePerspective_ReturnsMLEngineerForMLRoute(string route, string expectedPerspective)
+    {
+        var actual = OfficeRouteCatalog.ResolvePerspective(route);
+        Assert.Equal(expectedPerspective, actual);
+    }
+
+    [Fact]
+    public void MLRouteTitle_IsMLEngineer()
+    {
+        var title = OfficeRouteCatalog.ResolveRouteTitle(OfficeRouteCatalog.MLRoute);
+        Assert.Equal("ML Engineer", title);
+    }
+
+    [Fact]
+    public void MLEngineerSystemPrompt_ContainsMLFrameworks()
+    {
+        var prompt = PromptComposer.BuildMLEngineerSystemPrompt();
+        Assert.Contains("Scikit-learn", prompt, StringComparison.Ordinal);
+        Assert.Contains("PyTorch", prompt, StringComparison.Ordinal);
+        Assert.Contains("TensorFlow", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MLEngineerUserPrompt_IncludesAnalyticsContext()
+    {
+        var analytics = new MLAnalyticsResult
+        {
+            Ok = true,
+            Engine = "sklearn",
+            OverallReadiness = 0.72,
+            WeakTopics = new List<MLTopicEntry>
+            {
+                new() { Topic = "grounding", Accuracy = 0.45 },
+            },
+            OperatorPattern = new MLOperatorPattern { Pattern = "balanced" },
+        };
+
+        var prompt = PromptComposer.BuildMLEngineerUserPrompt(
+            analytics,
+            null,
+            null,
+            new LearningProfile(),
+            new TrainingHistorySummary()
+        );
+
+        Assert.Contains("sklearn", prompt, StringComparison.Ordinal);
+        Assert.Contains("grounding", prompt, StringComparison.Ordinal);
+        Assert.Contains("balanced", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DailySettings_MLDefaults()
+    {
+        var settings = new DailySettings();
+        Assert.Equal("qwen3:8b", settings.MLModel);
+        Assert.False(settings.EnableMLPipeline);
+        Assert.Equal(string.Empty, settings.MLArtifactExportPath);
+    }
+
+    [Fact]
+    public void OfficeMLSection_DisabledByDefault()
+    {
+        var section = new OfficeMLSection();
+        Assert.False(section.Enabled);
+        Assert.Null(section.Analytics);
+        Assert.Null(section.Forecast);
+        Assert.Null(section.Embeddings);
+    }
+
+    [Fact]
+    public void MLAnalyticsResult_FallbackDefaults()
+    {
+        var result = new MLAnalyticsResult { Ok = true, Engine = "fallback" };
+        Assert.True(result.Ok);
+        Assert.Equal("fallback", result.Engine);
+        Assert.Empty(result.WeakTopics);
+        Assert.Empty(result.StrongTopics);
+        Assert.Equal(0.0, result.OverallReadiness);
+    }
+
+    [Fact]
+    public void SuiteMLArtifact_HasCorrectDefaults()
+    {
+        var artifact = new SuiteMLArtifact();
+        Assert.Equal("1.0.0", artifact.Version);
+        Assert.Equal("office-ml-pipeline", artifact.Source);
+        Assert.True(artifact.ReviewRequired);
     }
 }

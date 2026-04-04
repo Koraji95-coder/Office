@@ -33,6 +33,19 @@ public sealed class DailySettings
     public string RepoModel { get; init; } = "qwen3:8b";
     public string TrainingModel { get; init; } = "qwen3:8b";
     public string BusinessModel { get; init; } = "qwen3:8b";
+    public string MLModel { get; init; } = "qwen3:8b";
+    public bool EnableMLPipeline { get; init; }
+    public string MLArtifactExportPath { get; init; } = string.Empty;
+
+    public string ResolveMLArtifactExportPath(string baseDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(MLArtifactExportPath))
+        {
+            return Path.GetFullPath(MLArtifactExportPath);
+        }
+
+        return Path.Combine(ResolveStateRootPath(baseDirectory), "ml-artifacts");
+    }
 
     public string ResolveKnowledgeLibraryPath(string baseDirectory)
     {

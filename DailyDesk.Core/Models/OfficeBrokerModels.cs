@@ -44,6 +44,7 @@ public sealed class OfficeBrokerState
     public OfficeLibrarySection Library { get; init; } = new();
     public OfficeGrowthSection Growth { get; init; } = new();
     public OfficeInboxSection Inbox { get; init; } = new();
+    public OfficeMLSection ML { get; init; } = new();
 }
 
 public sealed class OfficeBrokerStatusSection
@@ -233,4 +234,15 @@ public sealed class OfficeLibraryImportResult
     public int ImportedCount { get; init; }
     public IReadOnlyList<string> ImportedPaths { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> SkippedPaths { get; init; } = Array.Empty<string>();
+}
+
+public sealed class OfficeMLSection
+{
+    public bool Enabled { get; init; }
+    public string Summary { get; init; } = "ML pipeline is not enabled. Set enableMLPipeline to true in settings.";
+    public MLAnalyticsResult? Analytics { get; init; }
+    public MLForecastResult? Forecast { get; init; }
+    public MLEmbeddingsResult? Embeddings { get; init; }
+    public string? LastArtifactExportPath { get; init; }
+    public DateTimeOffset? LastRunAt { get; init; }
 }
