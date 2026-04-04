@@ -4,16 +4,38 @@
              StartupUri="MainWindow.xaml"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
-        <SolidColorBrush x:Key="BrushWindow" Color="#07090D" />
-        <SolidColorBrush x:Key="BrushPanel" Color="#11161D" />
-        <SolidColorBrush x:Key="BrushPanelRaised" Color="#181F29" />
-        <SolidColorBrush x:Key="BrushPanelStrong" Color="#202A36" />
-        <SolidColorBrush x:Key="BrushBorder" Color="#253040" />
+        <!-- Window & Surface hierarchy -->
+        <SolidColorBrush x:Key="BrushWindow" Color="#06080C" />
+        <SolidColorBrush x:Key="BrushSidebar" Color="#0A0E14" />
+        <SolidColorBrush x:Key="BrushPanel" Color="#0E1319" />
+        <SolidColorBrush x:Key="BrushPanelRaised" Color="#141B24" />
+        <SolidColorBrush x:Key="BrushPanelStrong" Color="#1C2530" />
+        <SolidColorBrush x:Key="BrushCardHover" Color="#18202C" />
+
+        <!-- Borders -->
+        <SolidColorBrush x:Key="BrushBorder" Color="#1E2A38" />
+        <SolidColorBrush x:Key="BrushBorderSubtle" Color="#151E2A" />
+        <SolidColorBrush x:Key="BrushBorderStrong" Color="#2E3E52" />
+
+        <!-- Accent: copper/gold -->
         <SolidColorBrush x:Key="BrushCopper" Color="#C6A46D" />
         <SolidColorBrush x:Key="BrushCopperSoft" Color="#D4B98B" />
+        <SolidColorBrush x:Key="BrushCopperMuted" Color="#8B7A58" />
+        <SolidColorBrush x:Key="BrushCopperGlow" Color="#1E1610" />
+
+        <!-- Secondary accents -->
         <SolidColorBrush x:Key="BrushVerdigris" Color="#5B8B7D" />
         <SolidColorBrush x:Key="BrushSignalBlue" Color="#7390FF" />
-        <SolidColorBrush x:Key="BrushText" Color="#EFE8DC" />
-        <SolidColorBrush x:Key="BrushMuted" Color="#A79E91" />
+
+        <!-- Semantic colors -->
+        <SolidColorBrush x:Key="BrushSuccess" Color="#3BA55D" />
+        <SolidColorBrush x:Key="BrushSuccessSoft" Color="#14211A" />
+        <SolidColorBrush x:Key="BrushWarning" Color="#E6A817" />
+        <SolidColorBrush x:Key="BrushDanger" Color="#E04D5A" />
+
+        <!-- Typography -->
+        <SolidColorBrush x:Key="BrushText" Color="#EDE6DA" />
+        <SolidColorBrush x:Key="BrushTextSecondary" Color="#B8AFA2" />
+        <SolidColorBrush x:Key="BrushMuted" Color="#7A7368" />
     </Application.Resources>
 </Application>
