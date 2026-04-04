@@ -784,9 +784,14 @@ public sealed class OperatorMemoryStore
             OccurredAt = activity.OccurredAt,
         };
 
+    /// <summary>
+    /// Migrates existing JSON operator memory data into LiteDB on first run.
+    /// Only called from constructor when _db is guaranteed non-null.
+    /// </summary>
     private void MigrateFromJsonIfNeeded()
     {
-        if (_db!.HasMigrated("operator-memory")) return;
+        if (_db is null) return;
+        if (_db.HasMigrated("operator-memory")) return;
         if (!File.Exists(_storePath)) { _db.MarkMigrated("operator-memory"); return; }
 
         try

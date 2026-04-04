@@ -195,9 +195,14 @@ public sealed class TrainingStore
         }
     }
 
+    /// <summary>
+    /// Migrates existing JSON training data into LiteDB on first run.
+    /// Only called from constructor when _db is guaranteed non-null.
+    /// </summary>
     private void MigrateFromJsonIfNeeded()
     {
-        if (_db!.HasMigrated("training")) return;
+        if (_db is null) return;
+        if (_db.HasMigrated("training")) return;
         if (!File.Exists(_storePath)) { _db.MarkMigrated("training"); return; }
 
         try

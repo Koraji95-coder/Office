@@ -94,9 +94,14 @@ public sealed class OfficeSessionStateStore
         return state;
     }
 
+    /// <summary>
+    /// Migrates existing JSON session state into LiteDB on first run.
+    /// Only called from constructor when _db is guaranteed non-null.
+    /// </summary>
     private void MigrateFromJsonIfNeeded()
     {
-        if (_db!.HasMigrated("session-state")) return;
+        if (_db is null) return;
+        if (_db.HasMigrated("session-state")) return;
         if (!File.Exists(_storePath)) { _db.MarkMigrated("session-state"); return; }
 
         try
