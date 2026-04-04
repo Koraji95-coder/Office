@@ -12,10 +12,6 @@ internal sealed class ChatRouteRequestValidator : AbstractValidator<ChatRouteReq
             .WithMessage("Route is required.")
             .Must(route =>
             {
-                var normalized = OfficeRouteCatalog.NormalizeRoute(route);
-                // NormalizeRoute falls back to "chief" for unknown routes.
-                // If the raw input is not empty but normalizes to a different value,
-                // the input was not a known route.
                 var trimmed = route?.Trim().ToLowerInvariant();
                 return !string.IsNullOrWhiteSpace(trimmed)
                     && OfficeRouteCatalog.KnownRoutes.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
