@@ -64,6 +64,15 @@ public sealed class OfficeDatabase : IDisposable
     public ILiteCollection<OfficeJob> Jobs =>
         _db.GetCollection<OfficeJob>("jobs");
 
+    public ILiteCollection<PersistedMLResult> MLAnalyticsResults =>
+        _db.GetCollection<PersistedMLResult>("ml_analytics");
+
+    public ILiteCollection<PersistedMLResult> MLForecastResults =>
+        _db.GetCollection<PersistedMLResult>("ml_forecast");
+
+    public ILiteCollection<PersistedMLResult> MLEmbeddingsResults =>
+        _db.GetCollection<PersistedMLResult>("ml_embeddings");
+
     private void EnsureIndexes()
     {
         PracticeAttempts.EnsureIndex(x => x.CompletedAt);

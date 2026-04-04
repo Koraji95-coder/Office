@@ -37,6 +37,7 @@ public sealed class OfficeBrokerOrchestrator
     private readonly MLAnalyticsService _mlAnalyticsService;
     private readonly OfficeDatabase _officeDatabase;
     private readonly OfficeJobStore _jobStore;
+    private readonly MLResultStore _mlResultStore;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -74,6 +75,7 @@ public sealed class OfficeBrokerOrchestrator
         // LiteDB persistence
         _officeDatabase = new OfficeDatabase(_stateRootPath);
         _jobStore = new OfficeJobStore(_officeDatabase);
+        _mlResultStore = new MLResultStore(_officeDatabase, lf.CreateLogger<MLResultStore>());
 
         var processRunner = new ProcessRunner(lf.CreateLogger<ProcessRunner>());
         _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner, ollamaPipeline, lf.CreateLogger<OllamaService>());
@@ -1231,6 +1233,12 @@ public sealed class OfficeBrokerOrchestrator
             );
         }
         _lastRefreshAt = DateTimeOffset.Now;
+
+        // Restore persisted ML results so export-artifacts works after restart
+        _latestMLAnalytics ??= _mlResultStore.LoadAnalytics();
+        _latestMLForecast ??= _mlResultStore.LoadForecast();
+        _latestMLEmbeddings ??= _mlResultStore.LoadEmbeddings();
+        _lastMLRunAt ??= _mlResultStore.LoadLastRunTimestamp();
     }
 
     private async Task<IReadOnlyList<string>> LoadInstalledModelsSafeAsync(
@@ -2991,6 +2999,7 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
+            _mlResultStore.SaveAnalytics(result);
             return result;
         }
         finally
@@ -3035,6 +3044,7 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
+            _mlResultStore.SaveForecast(result);
             return result;
         }
         finally
@@ -3081,6 +3091,7 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
+            _mlResultStore.SaveEmbeddings(result);
             return result;
         }
         finally
@@ -3161,6 +3172,10 @@ public sealed class OfficeBrokerOrchestrator
             {
                 _gate.Release();
             }
+
+            _mlResultStore.SaveAnalytics(analytics);
+            _mlResultStore.SaveForecast(forecast);
+            _mlResultStore.SaveEmbeddings(embeddings);
 
             return new
             {
