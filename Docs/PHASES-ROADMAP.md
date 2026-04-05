@@ -1,6 +1,6 @@
-# Phases 4–9 Roadmap
+# Phases 3–9 Roadmap
 
-> **Purpose:** A single document showing every remaining phase of work for the Office repo, broken into PRs that can be executed one at a time. Phases 1–2 are complete. Phase 3 is complete. This picks up from Phase 4.
+> **Purpose:** A single document showing every phase of work for the Office repo from Phase 3 onward, broken into PRs that can be executed one at a time. Phases 1–2 are complete. This document covers Phase 3 (already implemented) through Phase 9 (future).
 
 ---
 
@@ -17,6 +17,115 @@
 | 7 | Document Extraction (Docling) | 🔲 Not Started |
 | 8 | Scheduled Automation & Operator Workflows | 🔲 Not Started |
 | 9 | WPF Client Async Integration | 🔲 Not Started |
+
+---
+
+## Phase 3 — Async Job Model for ML Work ✅ COMPLETE
+
+**Goal:** Move ML pipeline execution from synchronous broker endpoints to a background job system with persistent state.
+
+### PR 3.1: Job Record Model + OfficeJobStore
+
+**What was done:**
+- Created `OfficeJob` model with fields: `Id` (GUID), `Type` (ml-analytics/ml-forecast/ml-embeddings/ml-pipeline/ml-export-artifacts), `Status` (queued/running/succeeded/failed), `CreatedAt`, `StartedAt`, `CompletedAt`, `Error`, `ResultKey`, `RequestedBy`, `RequestPayload`.
+- Created `OfficeJobStore` backed by LiteDB `jobs` collection with methods:
+  - `Enqueue(type, requestedBy, requestPayload)` — create a queued job.
+  - `GetById(jobId)` — retrieve a job by ID.
+  - `ListRecent(count)` — list most recent jobs.
+  - `DequeueNext()` — atomically claim the oldest queued job.
+  - `MarkSucceeded(jobId, resultKey)` — mark job as succeeded with result pointer.
+  - `MarkFailed(jobId, error)` — mark job as failed with error message.
+
+**Files touched:**
+- `DailyDesk/Models/OfficeJob.cs` — new model.
+- `DailyDesk/Services/OfficeJobStore.cs` — new LiteDB-backed store.
+
+---
+
+### PR 3.2: Background Job Worker
+
+**What was done:**
+- Created `OfficeJobWorker : BackgroundService` in `DailyDesk.Broker`.
+- Worker polls LiteDB every 2 seconds for queued jobs via `DequeueNext()`.
+- Executes one job at a time, dispatching to the orchestrator based on job type.
+- Updates job lifecycle: `queued` → `running` → `succeeded`/`failed`.
+- Stores ML results in LiteDB via `MLResultStore` (keyed by `ResultKey`).
+- On failure: captures exception message in `Error` field.
+- Registered as `IHostedService` in `Program.cs`.
+
+**Files touched:**
+- `DailyDesk.Broker/OfficeJobWorker.cs` — new background service.
+- `DailyDesk.Broker/Program.cs` — register hosted service.
+
+---
+
+### PR 3.3: ML Endpoints → Async + Job Status Endpoints
+
+**What was done:**
+- Modified ML endpoints (`POST /api/ml/analytics`, `/forecast`, `/embeddings`, `/pipeline`, `/export-artifacts`) to return `{ jobId, status: "queued" }` by default.
+- Added `?sync=true` query parameter for backward-compatible blocking behavior.
+- Added new endpoints:
+  - `GET /api/jobs` — list recent jobs (last 50).
+  - `GET /api/jobs/{jobId}` — get job status and metadata.
+  - `GET /api/jobs/{jobId}/result` — get job result JSON (succeeded only).
+
+**Files touched:**
+- `DailyDesk.Broker/Program.cs` — modified ML endpoints, added job endpoints.
+
+---
+
+### PR 3.4: ML Result Persistence (Restart-Safe)
+
+**What was done:**
+- Created `MLResultStore` that persists latest ML analytics/forecast/embeddings results to LiteDB collections (`ml_analytics`, `ml_forecast`, `ml_embeddings`).
+- Uses `PersistedMLResult` wrapper with serialized JSON payload.
+- `OfficeBrokerOrchestrator` restores from LiteDB on init, persists after each ML run.
+- Export-artifacts endpoint is now restart-safe (survives broker restart).
+
+**Files touched:**
+- `DailyDesk/Services/MLResultStore.cs` — new persistence service.
+- `DailyDesk/Models/PersistedMLResult.cs` — new wrapper model.
+- `DailyDesk.Core/Services/OfficeBrokerOrchestrator.cs` — restore/persist on init and after ML runs.
+
+---
+
+### PR 3.5: Job Worker Hardening (Timeout + Stale Recovery)
+
+**What was done:**
+- Added per-job timeout to `OfficeJobWorker` (prevents a hanging job from blocking the worker indefinitely).
+- Added `RecoverStaleJobs()` to `OfficeJobStore` — on startup, marks any jobs stuck in `running` status (from a previous crash) as `failed` with a recovery message.
+- Worker calls `RecoverStaleJobs()` on initialization before processing new jobs.
+
+**Files touched:**
+- `DailyDesk.Broker/OfficeJobWorker.cs` — timeout + recovery on startup.
+- `DailyDesk/Services/OfficeJobStore.cs` — `RecoverStaleJobs()` method.
+
+---
+
+### PR 3.6: Job Management & Retention
+
+**What was done:**
+- Added `OfficeJobStore.DeleteById(jobId)` — delete a completed (succeeded/failed) job. Queued/running jobs protected.
+- Added `OfficeJobStore.DeleteOlderThan(cutoff)` — bulk-delete completed jobs older than threshold.
+- Added `OfficeJobStore.ListByStatus(status, limit)` — filter jobs for monitoring.
+- Added `OfficeJobStore.GetTotalCount()` — total job count for observability.
+- Added `DELETE /api/jobs/{jobId}` endpoint (204/404/400 with status guard).
+- Added `GET /api/jobs?status=...&type=...` — filtered listing with query params.
+
+**Files touched:**
+- `DailyDesk/Services/OfficeJobStore.cs` — 4 new methods.
+- `DailyDesk.Broker/Program.cs` — new DELETE endpoint, updated GET with filters.
+
+---
+
+### Phase 3 Test Coverage (22 tests)
+
+| Area | Tests | What's Covered |
+|------|-------|----------------|
+| Job model unit tests | 8 | Enqueue, retrieve, dequeue, mark succeeded/failed, list recent |
+| Stale job recovery | 4 | Old running → failed, recent running preserved, queued/completed ignored, count |
+| Job integration (PR 5) | 13 | FIFO ordering, full lifecycle, edge cases, payload round-trip, ListRecent limits, idempotent recovery, multi-iteration, dequeue skips |
+| Job management (PR 6) | 9 | DeleteById across statuses, DeleteOlderThan with mixed active/expired, ListByStatus filter/limit, GetTotalCount |
 
 ---
 
@@ -487,6 +596,12 @@
 
 | PR | Phase | Title | Dependencies |
 |----|-------|-------|-------------|
+| 3.1 | 3 | Job Record Model + OfficeJobStore | Phase 2 (LiteDB) |
+| 3.2 | 3 | Background Job Worker | 3.1 |
+| 3.3 | 3 | ML Endpoints → Async + Job Status Endpoints | 3.1, 3.2 |
+| 3.4 | 3 | ML Result Persistence (Restart-Safe) | 3.1 |
+| 3.5 | 3 | Job Worker Hardening (Timeout + Stale Recovery) | 3.2 |
+| 3.6 | 3 | Job Management & Retention | 3.1 |
 | 4.1 | 4 | Health Check Endpoints | None |
 | 4.2 | 4 | Job Metrics & Dashboard Endpoint | None |
 | 4.3 | 4 | Automated Job Retention Cleanup | None |
@@ -506,8 +621,9 @@
 | 9.2 | 9 | Semantic Search in Knowledge View | 5.4 |
 | 9.3 | 9 | Agent Chat with Tool Feedback | 6.2 |
 
-**Total: 18 PRs across 6 phases.**
+**Total: 24 PRs across 7 phases (Phase 3: 6 PRs ✅ complete, Phases 4–9: 18 PRs remaining).**
 
+Phase 3 PRs are sequential (each builds on the previous).
 Phase 4 PRs are independent of each other and can be done in any order.
 Phases 5 and 6 are independent of each other (can be parallelized).
 Phase 7 is independent of all others.
