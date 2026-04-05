@@ -14,7 +14,7 @@
 | 4 | Observability & Health Monitoring | 🔲 Not Started |
 | 5 | Semantic Search (Ollama Embeddings + Qdrant) | 🔲 Not Started |
 | 6 | Agent Orchestration (Semantic Kernel) | ✅ Complete |
-| 7 | Document Extraction (Docling) | 🔲 Not Started |
+| 7 | Document Extraction (Docling) | ✅ Complete |
 | 8 | Scheduled Automation & Operator Workflows | 🔲 Not Started |
 | 9 | WPF Client Async Integration | 🔲 Not Started |
 

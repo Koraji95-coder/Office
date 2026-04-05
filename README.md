@@ -54,6 +54,16 @@ The ML pipeline works without any Python ML libraries installed (uses heuristic 
 pip install scikit-learn torch tensorflow
 ```
 
+### Document Extraction Setup (Optional)
+
+Document extraction works with basic `pypdf` and `python-docx` out of the box. For richer extraction (tables, figures, OCR, PPTX, HTML, images), install Docling:
+
+```powershell
+pip install docling
+```
+
+When Docling is installed, the extraction script automatically uses it for supported formats (PDF, DOCX, PPTX, HTML, images). When Docling is not installed, the script falls back to the basic `pypdf`/`python-docx` extractors.
+
 Enable the pipeline in `dailydesk.settings.json`:
 
 ```json

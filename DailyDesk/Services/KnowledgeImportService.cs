@@ -92,9 +92,49 @@ public sealed class KnowledgeImportService
     {
         try
         {
-            var text = await ExtractTextAsync(path, cancellationToken);
+            var tables = Array.Empty<ExtractedTable>();
+            var figures = Array.Empty<ExtractedFigure>();
+            string text;
+
+            var extension = Path.GetExtension(path);
+            if (extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                var response = await ExtractViaPythonRichAsync(path, cancellationToken);
+                text = response.Text ?? string.Empty;
+                if (response.Tables is { Count: > 0 })
+                    tables = response.Tables.ToArray();
+                if (response.Figures is { Count: > 0 })
+                    figures = response.Figures.ToArray();
+            }
+            else
+            {
+                text = await ExtractTextAsync(path, cancellationToken);
+            }
+
             var normalized = NormalizeText(text);
-            var topics = ExtractTopics(normalized, path);
+
+            // Append table markdown and figure descriptions to extracted text
+            var textBuilder = new StringBuilder(normalized);
+            foreach (var table in tables)
+            {
+                var md = table.ToMarkdown();
+                if (!string.IsNullOrWhiteSpace(md))
+                {
+                    textBuilder.AppendLine();
+                    textBuilder.AppendLine(md);
+                }
+            }
+            foreach (var figure in figures)
+            {
+                if (!string.IsNullOrWhiteSpace(figure.Description))
+                {
+                    textBuilder.AppendLine();
+                    textBuilder.AppendLine($"[Figure: {figure.Description}]");
+                }
+            }
+
+            var fullText = textBuilder.ToString();
+            var topics = ExtractTopics(fullText, path);
 
             return new LearningDocument
             {
@@ -105,10 +145,12 @@ public sealed class KnowledgeImportService
                 RelativePath = Path.GetRelativePath(rootPath, path),
                 Kind = Path.GetExtension(path).TrimStart('.').ToUpperInvariant(),
                 LastUpdated = File.GetLastWriteTimeUtc(path),
-                CharacterCount = normalized.Length,
+                CharacterCount = fullText.Length,
                 Topics = topics,
-                Summary = BuildSummary(normalized),
-                ExtractedText = BuildPromptContextText(normalized),
+                Summary = BuildSummary(fullText),
+                ExtractedText = BuildPromptContextText(fullText),
+                Tables = tables,
+                Figures = figures,
             };
         }
         catch (Exception exception)
@@ -395,6 +437,15 @@ public sealed class KnowledgeImportService
         CancellationToken cancellationToken
     )
     {
+        var response = await ExtractViaPythonRichAsync(path, cancellationToken);
+        return response.Text ?? string.Empty;
+    }
+
+    private async Task<PythonExtractionResponse> ExtractViaPythonRichAsync(
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
         if (!File.Exists(_pythonScriptPath))
         {
             throw new FileNotFoundException("Python extractor script was not found.", _pythonScriptPath);
@@ -418,7 +469,7 @@ public sealed class KnowledgeImportService
             throw new InvalidOperationException(response.Error ?? "Python extraction failed.");
         }
 
-        return response.Text ?? string.Empty;
+        return response;
     }
 
     private static string ExtractDocxText(string path)
@@ -603,6 +654,19 @@ public sealed class KnowledgeImportService
         public bool Ok { get; set; }
         public string? Text { get; set; }
         public string? Error { get; set; }
+        public PythonExtractionMetadata? Metadata { get; set; }
+        public List<ExtractedTable>? Tables { get; set; }
+        public List<ExtractedFigure>? Figures { get; set; }
+    }
+
+    private sealed class PythonExtractionMetadata
+    {
+        public string? Extractor { get; set; }
+        public string? Format { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("table_count")]
+        public int TableCount { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("figure_count")]
+        public int FigureCount { get; set; }
     }
 
     private static readonly HashSet<string> StopWords =

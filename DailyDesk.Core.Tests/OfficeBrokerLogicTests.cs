@@ -2446,6 +2446,220 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal("No active suggestions.", result);
     }
 
+    // ── Phase 7: Document Extraction ────────────────────────────────────────
+
+    [Fact]
+    public void ExtractedTable_ToMarkdown_ProducesValidMarkdown()
+    {
+        var table = new ExtractedTable
+        {
+            Headers = new[] { "Name", "Value" },
+            Rows = new List<IReadOnlyList<object?>>
+            {
+                new object?[] { "Voltage", "120V" },
+                new object?[] { "Current", "15A" },
+            },
+        };
+
+        var md = table.ToMarkdown();
+
+        Assert.Contains("| Name | Value |", md);
+        Assert.Contains("| --- | --- |", md);
+        Assert.Contains("| Voltage | 120V |", md);
+        Assert.Contains("| Current | 15A |", md);
+    }
+
+    [Fact]
+    public void ExtractedTable_ToMarkdown_EmptyHeaders_ReturnsEmpty()
+    {
+        var table = new ExtractedTable
+        {
+            Headers = Array.Empty<string>(),
+            Rows = new List<IReadOnlyList<object?>>(),
+        };
+
+        Assert.Equal(string.Empty, table.ToMarkdown());
+    }
+
+    [Fact]
+    public void ExtractedTable_ToMarkdown_PadsShortRows()
+    {
+        var table = new ExtractedTable
+        {
+            Headers = new[] { "A", "B", "C" },
+            Rows = new List<IReadOnlyList<object?>>
+            {
+                new object?[] { "x" }, // Only 1 cell, should be padded to 3
+            },
+        };
+
+        var md = table.ToMarkdown();
+        Assert.Contains("| x |  |  |", md);
+    }
+
+    [Fact]
+    public void ExtractedTable_ToMarkdown_HandlesNullCells()
+    {
+        var table = new ExtractedTable
+        {
+            Headers = new[] { "Col1", "Col2" },
+            Rows = new List<IReadOnlyList<object?>>
+            {
+                new object?[] { null, "value" },
+            },
+        };
+
+        var md = table.ToMarkdown();
+        Assert.Contains("|  | value |", md);
+    }
+
+    [Fact]
+    public void LearningDocument_TablesAndFigures_DefaultToEmpty()
+    {
+        var doc = new LearningDocument();
+
+        Assert.Empty(doc.Tables);
+        Assert.Empty(doc.Figures);
+    }
+
+    [Fact]
+    public void LearningDocument_TablesAndFigures_CanBePopulated()
+    {
+        var doc = new LearningDocument
+        {
+            Tables = new[]
+            {
+                new ExtractedTable
+                {
+                    Headers = new[] { "A" },
+                    Rows = new List<IReadOnlyList<object?>> { new object?[] { "1" } },
+                },
+            },
+            Figures = new[]
+            {
+                new ExtractedFigure { Description = "Circuit diagram" },
+            },
+        };
+
+        Assert.Single(doc.Tables);
+        Assert.Single(doc.Figures);
+        Assert.Equal("Circuit diagram", doc.Figures[0].Description);
+    }
+
+    [Fact]
+    public void PythonExtractionResponse_DeserializesRichFormat()
+    {
+        var json = """
+        {
+            "ok": true,
+            "text": "Hello world",
+            "metadata": {
+                "extractor": "docling",
+                "format": "pdf",
+                "table_count": 1,
+                "figure_count": 2
+            },
+            "tables": [
+                {
+                    "headers": ["H1", "H2"],
+                    "rows": [["a", "b"]]
+                }
+            ],
+            "figures": [
+                {"description": "A photo"}
+            ]
+        }
+        """;
+
+        var response = System.Text.Json.JsonSerializer.Deserialize<DoclingTestResponse>(
+            json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+        );
+
+        Assert.NotNull(response);
+        Assert.True(response!.Ok);
+        Assert.Equal("Hello world", response.Text);
+        Assert.Equal("docling", response.Metadata?.Extractor);
+        Assert.Equal(1, response.Metadata?.TableCount);
+        Assert.Single(response.Tables!);
+        Assert.Single(response.Figures!);
+        Assert.Equal("A photo", response.Figures![0].Description);
+    }
+
+    [Fact]
+    public void PythonExtractionResponse_DeserializesLegacyFormat()
+    {
+        // Legacy format without metadata/tables/figures should still work
+        var json = """{"ok": true, "text": "Simple text"}""";
+
+        var response = System.Text.Json.JsonSerializer.Deserialize<DoclingTestResponse>(
+            json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+        );
+
+        Assert.NotNull(response);
+        Assert.True(response!.Ok);
+        Assert.Equal("Simple text", response.Text);
+        Assert.Null(response.Metadata);
+        Assert.Null(response.Tables);
+        Assert.Null(response.Figures);
+    }
+
+    [Fact]
+    public void ExtractedFigure_DefaultDescription_IsEmpty()
+    {
+        var figure = new ExtractedFigure();
+        Assert.Equal(string.Empty, figure.Description);
+    }
+
+    [Fact]
+    public void ExtractedTable_ToMarkdown_MultipleRows()
+    {
+        var table = new ExtractedTable
+        {
+            Headers = new[] { "Part", "Qty", "Price" },
+            Rows = new List<IReadOnlyList<object?>>
+            {
+                new object?[] { "Resistor", 10, 0.5 },
+                new object?[] { "Capacitor", 5, 1.2 },
+                new object?[] { "LED", 20, 0.3 },
+            },
+        };
+
+        var md = table.ToMarkdown();
+        var lines = md.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        // Header + separator + 3 data rows = 5 lines
+        Assert.Equal(5, lines.Length);
+        Assert.Contains("Resistor", md);
+        Assert.Contains("Capacitor", md);
+        Assert.Contains("LED", md);
+    }
+
+    /// <summary>
+    /// Test DTO matching the shape of the internal PythonExtractionResponse
+    /// used by KnowledgeImportService, for verifying JSON deserialization.
+    /// </summary>
+    private sealed class DoclingTestResponse
+    {
+        public bool Ok { get; set; }
+        public string? Text { get; set; }
+        public string? Error { get; set; }
+        public DoclingTestMetadata? Metadata { get; set; }
+        public List<ExtractedTable>? Tables { get; set; }
+        public List<ExtractedFigure>? Figures { get; set; }
+    }
+
+    private sealed class DoclingTestMetadata
+    {
+        public string? Extractor { get; set; }
+        public string? Format { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("table_count")]
+        public int TableCount { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("figure_count")]
+        public int FigureCount { get; set; }
+    }
+
     /// <summary>Helper for creating disposable temp directories in tests.</summary>
     private sealed class TempDirectory : IDisposable
     {
