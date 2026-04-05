@@ -518,11 +518,7 @@ ML pipeline endpoints (`/api/ml/analytics`, `/api/ml/pipeline`, etc.) run synchr
 | **Prerequisite** | Phase 3 (async jobs) + stable tool/plugin boundary |
 | **Purpose** | LLM orchestration framework with agent, memory, and plugin support |
 
-**Do not add until:**
-1. The broker has a stable async job model.
-2. Agent desks need tool-calling capabilities.
-3. Prompt composition needs template variables and chaining.
-4. The current `PromptComposer` + `OfficeRouteCatalog` pattern is demonstrably limiting.
+**Status:** ✅ Added in Phase 6. See [Phase 6 Libraries](#phase-6-libraries) for full documentation.
 
 ### Docling
 
@@ -595,3 +591,71 @@ docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
 
 **Fallback behavior:**
 All `VectorStoreService` methods catch exceptions and return graceful defaults (empty results, false) when Qdrant is unreachable. The existing keyword/TF-IDF search in `KnowledgePromptContextBuilder` continues to work as the fallback path.
+
+---
+
+## Phase 6 Libraries
+
+### Microsoft.SemanticKernel
+
+| | |
+|---|---|
+| **GitHub** | [microsoft/semantic-kernel](https://github.com/microsoft/semantic-kernel) |
+| **NuGet** | `Microsoft.SemanticKernel` |
+| **Version** | 1.71.0 |
+| **License** | MIT |
+| **Added to** | `DailyDesk.Core.csproj` |
+
+**Problem it solves:**
+`PromptComposer` manually concatenates system prompts, context, and user input into a single text block sent to Ollama. There is no support for tool calling, function chaining, or structured multi-turn memory beyond raw thread state. Each desk route shares the same code path (prompt composition → Ollama → response) with no desk-specific tooling or behavior.
+
+**What it replaces:**
+- Direct `IModelProvider.GenerateAsync()` calls in chat → SK `IChatCompletionService` with structured `ChatHistory`.
+- Monolithic `BuildDeskConversationPromptLocked()` context blob → Per-agent tool functions that the LLM can invoke selectively.
+- Flat thread message replay → `ChatHistory` with system/user/assistant roles and condensed conversation summaries.
+
+**Canonical usage patterns:**
+
+```csharp
+// OfficeKernelFactory creates kernels wired to the local Ollama endpoint
+var factory = new OfficeKernelFactory("http://localhost:11434");
+var kernel = factory.CreateKernel("llama3.2");
+
+// Each desk route has a dedicated DeskAgent subclass
+var agent = new ChiefOfStaffAgent(kernel);
+var response = await agent.ChatAsync(
+    userMessage: "What should I work on?",
+    threadMessages: thread.Messages,
+    threadSummary: thread.Summary,
+    contextBlock: contextInfo,
+    cancellationToken: ct);
+
+// Agent tools are SK kernel functions with [KernelFunction] attribute
+[KernelFunction("get_office_state")]
+[Description("Get a summary of the current office state.")]
+public static string GetOfficeState(
+    [Description("Current provider label")] string providerLabel,
+    [Description("Current session focus")] string sessionFocus,
+    [Description("Daily objective")] string dailyObjective)
+{
+    return $"Provider: {providerLabel} | Focus: {sessionFocus} | Objective: {dailyObjective}";
+}
+```
+
+**Agent architecture:**
+- `OfficeKernelFactory` — builds SK `Kernel` with Ollama's OpenAI-compatible `/v1/chat/completions` endpoint.
+- `DeskAgent` (abstract base) — wraps `IChatCompletionService`, manages `ChatHistory`, and provides multi-turn memory with automatic summarisation of older messages.
+- Five desk-specific agents: `ChiefOfStaffAgent`, `EngineeringDeskAgent`, `SuiteContextAgent`, `GrowthOpsAgent`, `MLEngineerAgent`.
+
+**Fallback behavior:**
+If an SK agent returns an empty response or throws, `SendChatAsync` falls back to the original direct `IModelProvider.GenerateAsync()` call with `PromptComposer` templates. The existing prompt-composition path is preserved as a reliable fallback.
+
+**Multi-turn memory:**
+When a desk thread exceeds the summary threshold (16 messages), the agent uses the LLM to generate a condensed summary of older messages. The summary is stored in `DeskThreadState.Summary` and injected as context on subsequent turns, keeping the effective context window manageable.
+
+**Rules for AI agents:**
+1. Always create agents through `OfficeKernelFactory.CreateKernel()` — never construct `Kernel` directly.
+2. Agent tool functions must be `static` methods with `[KernelFunction]` and `[Description]` attributes.
+3. When adding a new desk route, create a new `DeskAgent` subclass and register it in `OfficeBrokerOrchestrator.InitializeAgents()`.
+4. The SK agent path is opt-in per chat call; the `PromptComposer` path remains as fallback.
+5. Use version ≥ 1.71.0 to avoid CVE-2026-25592 (arbitrary file write via function calling).
