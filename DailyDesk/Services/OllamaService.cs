@@ -151,4 +151,20 @@ public sealed class OllamaService : IModelProvider
             return JsonSerializer.Deserialize<T>(json, _jsonOptions);
         }, cancellationToken);
     }
+
+    /// <summary>
+    /// Pings the Ollama API by listing models. Returns true if reachable.
+    /// </summary>
+    public async Task<bool> PingAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _client.ListLocalModelsAsync(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

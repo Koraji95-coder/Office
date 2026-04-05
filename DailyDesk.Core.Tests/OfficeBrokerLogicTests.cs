@@ -1636,6 +1636,238 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    // --- Phase 4: Health & Metrics Tests ---
+
+    [Fact]
+    public async Task ProcessRunner_CheckPythonAsync_ReturnsVersionOrNull()
+    {
+        var runner = new ProcessRunner();
+        var result = await runner.CheckPythonAsync();
+        // In test environments Python may or may not be installed.
+        // Just verify we get either a version string or null (no exceptions).
+        if (result is not null)
+        {
+            Assert.Contains("Python", result, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetMetrics_EmptyStore()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var metrics = store.GetMetrics();
+            Assert.Equal(0, metrics.TotalJobs);
+            Assert.Equal(0, metrics.QueuedCount);
+            Assert.Equal(0, metrics.RunningCount);
+            Assert.Equal(0, metrics.SucceededCount);
+            Assert.Equal(0, metrics.FailedCount);
+            Assert.Null(metrics.AverageDurationSeconds);
+            Assert.Equal(0, metrics.CompletedLastHour);
+            Assert.Equal(0, metrics.CompletedLastDay);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetMetrics_WithMixedStatuses()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Create jobs in various states
+            var j1 = store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            var j2 = store.Enqueue(OfficeJobType.MLForecast, "b");
+            var j3 = store.Enqueue(OfficeJobType.MLPipeline, "c");
+            var j4 = store.Enqueue(OfficeJobType.MLEmbeddings, "d");
+
+            // Dequeue and complete some
+            store.DequeueNext(); // j1 → running
+            store.MarkSucceeded(j1.Id, "{}");
+
+            store.DequeueNext(); // j2 → running
+            store.MarkFailed(j2.Id, "error");
+
+            store.DequeueNext(); // j3 → running (stays running)
+
+            // j4 stays queued
+
+            var metrics = store.GetMetrics();
+            Assert.Equal(4, metrics.TotalJobs);
+            Assert.Equal(1, metrics.QueuedCount);
+            Assert.Equal(1, metrics.RunningCount);
+            Assert.Equal(1, metrics.SucceededCount);
+            Assert.Equal(1, metrics.FailedCount);
+            Assert.Equal(2, metrics.CompletedLastHour);
+            Assert.Equal(2, metrics.CompletedLastDay);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetAverageDuration_CalculatesCorrectly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            Assert.Null(store.GetAverageDuration());
+
+            // Create and complete two jobs
+            var j1 = store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            store.DequeueNext(); // j1 → running
+            store.MarkSucceeded(j1.Id, "{}");
+
+            var j2 = store.Enqueue(OfficeJobType.MLForecast, "b");
+            store.DequeueNext(); // j2 → running
+            store.MarkSucceeded(j2.Id, "{}");
+
+            var avg = store.GetAverageDuration();
+            Assert.NotNull(avg);
+            Assert.True(avg >= 0, "Average duration should be non-negative.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetCountByStatus_ReturnsCorrectCounts()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            Assert.Equal(0, store.GetCountByStatus(OfficeJobStatus.Queued));
+
+            store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            store.Enqueue(OfficeJobType.MLForecast, "b");
+
+            Assert.Equal(2, store.GetCountByStatus(OfficeJobStatus.Queued));
+            Assert.Equal(0, store.GetCountByStatus(OfficeJobStatus.Succeeded));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetCompletedSince_FiltersCorrectly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var j1 = store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            store.DequeueNext();
+            store.MarkSucceeded(j1.Id, "{}");
+
+            // Jobs completed just now should be within last hour
+            Assert.Equal(1, store.GetCompletedSince(DateTimeOffset.Now.AddHours(-1)));
+
+            // Jobs completed just now should not be in the future
+            Assert.Equal(0, store.GetCompletedSince(DateTimeOffset.Now.AddMinutes(1)));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteOlderThan_PreservesRecentAndActiveJobs()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Create and complete a job (recently)
+            var j1 = store.Enqueue(OfficeJobType.MLAnalytics, "recent");
+            store.DequeueNext();
+            store.MarkSucceeded(j1.Id, "{}");
+
+            // Create a queued job (should never be deleted)
+            var j2 = store.Enqueue(OfficeJobType.MLForecast, "queued");
+
+            // Delete jobs older than 1 minute ago — should delete nothing
+            var deleted = store.DeleteOlderThan(DateTimeOffset.Now.AddMinutes(-1));
+            Assert.Equal(0, deleted);
+            Assert.Equal(2, store.GetTotalCount());
+
+            // Delete jobs older than 1 hour from now — should delete completed but not queued
+            deleted = store.DeleteOlderThan(DateTimeOffset.Now.AddHours(1));
+            Assert.Equal(1, deleted); // j1 deleted
+            Assert.Equal(1, store.GetTotalCount()); // j2 remains (queued)
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void DailySettings_JobRetentionDays_DefaultsTo30()
+    {
+        var settings = new DailySettings();
+        Assert.Equal(30, settings.JobRetentionDays);
+    }
+
+    [Fact]
+    public void OfficeHealthReport_DefaultsToOk()
+    {
+        var report = new OfficeHealthReport();
+        Assert.Equal(HealthStatus.Ok, report.Overall);
+        Assert.Equal(HealthStatus.Ok, report.Ollama.Status);
+        Assert.Equal(HealthStatus.Ok, report.Python.Status);
+        Assert.Equal(HealthStatus.Ok, report.LiteDB.Status);
+        Assert.Equal(HealthStatus.Ok, report.JobWorker.Status);
+    }
+
+    [Fact]
+    public void SubsystemHealth_CanSetDegradedStatus()
+    {
+        var health = new SubsystemHealth
+        {
+            Status = HealthStatus.Degraded,
+            Detail = "something is slow"
+        };
+        Assert.Equal(HealthStatus.Degraded, health.Status);
+        Assert.Equal("something is slow", health.Detail);
+    }
+
+    [Fact]
+    public async Task OllamaService_PingAsync_ReturnsFalseWhenUnreachable()
+    {
+        // Use an unreachable endpoint to verify graceful failure
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        var reachable = await service.PingAsync();
+        Assert.False(reachable);
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

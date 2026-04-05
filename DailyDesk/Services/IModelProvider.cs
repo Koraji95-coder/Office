@@ -22,4 +22,10 @@ public interface IModelProvider
         string userPrompt,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Checks whether the model provider backend is reachable.
+    /// Returns true if the provider responds to a lightweight ping.
+    /// </summary>
+    Task<bool> PingAsync(CancellationToken cancellationToken = default);
 }

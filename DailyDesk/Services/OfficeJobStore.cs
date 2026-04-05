@@ -177,4 +177,61 @@ public sealed class OfficeJobStore
     {
         return _db.Jobs.Count();
     }
+
+    /// <summary>
+    /// Returns the count of jobs in a specific status.
+    /// </summary>
+    public int GetCountByStatus(string status)
+    {
+        return _db.Jobs.Count(j => j.Status == status);
+    }
+
+    /// <summary>
+    /// Returns the average duration (in seconds) for succeeded jobs,
+    /// or null if there are no succeeded jobs with timing data.
+    /// </summary>
+    public double? GetAverageDuration()
+    {
+        var succeeded = _db.Jobs.Query()
+            .Where(j => j.Status == OfficeJobStatus.Succeeded
+                        && j.StartedAt != null
+                        && j.CompletedAt != null)
+            .ToList();
+
+        if (succeeded.Count == 0) return null;
+
+        var total = succeeded.Sum(j => (j.CompletedAt!.Value - j.StartedAt!.Value).TotalSeconds);
+        return total / succeeded.Count;
+    }
+
+    /// <summary>
+    /// Returns the number of completed (succeeded or failed) jobs
+    /// since the specified cutoff time.
+    /// </summary>
+    public int GetCompletedSince(DateTimeOffset cutoff)
+    {
+        return _db.Jobs.Count(j =>
+            (j.Status == OfficeJobStatus.Succeeded || j.Status == OfficeJobStatus.Failed)
+            && j.CompletedAt != null
+            && j.CompletedAt >= cutoff);
+    }
+
+    /// <summary>
+    /// Returns a structured metrics snapshot for the job system.
+    /// </summary>
+    public OfficeJobMetrics GetMetrics()
+    {
+        var now = DateTimeOffset.Now;
+        return new OfficeJobMetrics
+        {
+            TotalJobs = GetTotalCount(),
+            QueuedCount = GetCountByStatus(OfficeJobStatus.Queued),
+            RunningCount = GetCountByStatus(OfficeJobStatus.Running),
+            SucceededCount = GetCountByStatus(OfficeJobStatus.Succeeded),
+            FailedCount = GetCountByStatus(OfficeJobStatus.Failed),
+            AverageDurationSeconds = GetAverageDuration(),
+            CompletedLastHour = GetCompletedSince(now.AddHours(-1)),
+            CompletedLastDay = GetCompletedSince(now.AddDays(-1)),
+        };
+    }
 }
