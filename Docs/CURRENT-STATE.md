@@ -150,7 +150,7 @@ ML endpoints now return a job ID immediately instead of blocking:
 # Build Core + Tests (works on Linux)
 dotnet build DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
 
-# Run tests (45 tests)
+# Run tests (78 tests)
 dotnet test DailyDesk.Core.Tests
 
 # Build WPF (Windows-only, but can cross-compile on Linux)
@@ -200,6 +200,23 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | POST | `/api/ml/embeddings` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/pipeline` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/export-artifacts` | Blocks (no async mode) | N/A |
+
+---
+
+## Test Coverage (78 tests)
+
+| Area | Tests | Coverage |
+|------|-------|----------|
+| Route normalization & display | 10 | `NormalizeRoute`, `ResolveRouteDisplayTitle`, `KnownRoutes` |
+| Study session stages | 2 | `ResolveStage` transitions |
+| ML system (prompts, settings, caching) | 12 | `MLAnalyticsService`, `OnnxMLEngine`, `DailySettings` |
+| LiteDB persistence | 3 | `OfficeDatabase`, migration tracking |
+| Polly resilience pipelines | 3 | Ollama, web-research, python-subprocess pipelines |
+| TrainingStore LiteDB | 2 | Save/load/reset practice attempts |
+| MLResultStore LiteDB | 3 | Analytics, forecast, embeddings persistence |
+| Job model unit tests | 8 | Enqueue, retrieve, dequeue, mark succeeded/failed, list recent |
+| Stale job recovery | 4 | Old running → failed, recent running preserved, queued/completed ignored, count |
+| **Job model integration tests (PR 5)** | **13** | **FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips** |
 
 ---
 
