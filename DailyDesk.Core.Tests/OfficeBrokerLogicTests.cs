@@ -860,6 +860,131 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    // --- PR 3: Stale Job Recovery Tests ---
+
+    [Fact]
+    public void OfficeJobStore_RecoverStaleJobs_MarksOldRunningAsFailed()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Enqueue and dequeue (marks as Running)
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "test");
+            var running = store.DequeueNext();
+            Assert.NotNull(running);
+
+            // Backdate StartedAt to > 10 minutes ago
+            running!.StartedAt = DateTimeOffset.Now.AddMinutes(-11);
+            db.Jobs.Update(running);
+
+            var recovered = store.RecoverStaleJobs(TimeSpan.FromMinutes(10));
+            Assert.Equal(1, recovered);
+
+            var result = store.GetById(job.Id);
+            Assert.NotNull(result);
+            Assert.Equal(OfficeJobStatus.Failed, result!.Status);
+            Assert.Contains("Recovered after broker restart", result.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_RecoverStaleJobs_IgnoresRecentRunningJobs()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Enqueue and dequeue (marks as Running with recent StartedAt)
+            var job = store.Enqueue(OfficeJobType.MLForecast, "test");
+            var running = store.DequeueNext();
+            Assert.NotNull(running);
+            Assert.Equal(OfficeJobStatus.Running, running!.Status);
+
+            // StartedAt is recent, so it should NOT be recovered
+            var recovered = store.RecoverStaleJobs(TimeSpan.FromMinutes(10));
+            Assert.Equal(0, recovered);
+
+            var result = store.GetById(job.Id);
+            Assert.NotNull(result);
+            Assert.Equal(OfficeJobStatus.Running, result!.Status);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_RecoverStaleJobs_IgnoresQueuedAndCompletedJobs()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // One Queued job (not dequeued)
+            var queued = store.Enqueue(OfficeJobType.MLAnalytics, "queued");
+
+            // One Succeeded job
+            var succeeded = store.Enqueue(OfficeJobType.MLForecast, "succeeded");
+            store.MarkSucceeded(succeeded.Id, "{\"ok\":true}");
+
+            var recovered = store.RecoverStaleJobs(TimeSpan.FromMinutes(10));
+            Assert.Equal(0, recovered);
+
+            Assert.Equal(OfficeJobStatus.Queued, store.GetById(queued.Id)!.Status);
+            Assert.Equal(OfficeJobStatus.Succeeded, store.GetById(succeeded.Id)!.Status);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_RecoverStaleJobs_ReturnsCount()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Enqueue 3 jobs and dequeue all
+            var job1 = store.Enqueue(OfficeJobType.MLAnalytics, "j1");
+            var job2 = store.Enqueue(OfficeJobType.MLForecast, "j2");
+            var job3 = store.Enqueue(OfficeJobType.MLEmbeddings, "j3");
+
+            var r1 = store.DequeueNext()!;
+            var r2 = store.DequeueNext()!;
+            var r3 = store.DequeueNext()!;
+
+            // Backdate 2 of them to > 10 minutes ago
+            r1.StartedAt = DateTimeOffset.Now.AddMinutes(-15);
+            r2.StartedAt = DateTimeOffset.Now.AddMinutes(-20);
+            db.Jobs.Update(r1);
+            db.Jobs.Update(r2);
+            // r3 keeps its recent StartedAt
+
+            var recovered = store.RecoverStaleJobs(TimeSpan.FromMinutes(10));
+            Assert.Equal(2, recovered);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

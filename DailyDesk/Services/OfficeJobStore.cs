@@ -100,4 +100,26 @@ public sealed class OfficeJobStore
         job.Error = error;
         _db.Jobs.Update(job);
     }
+
+    /// <summary>
+    /// Recovers jobs that were left in Running status (e.g., after a broker crash/restart).
+    /// Any Running job with StartedAt older than the staleThreshold is marked as Failed.
+    /// </summary>
+    public int RecoverStaleJobs(TimeSpan staleThreshold)
+    {
+        var cutoff = DateTimeOffset.Now - staleThreshold;
+        var staleJobs = _db.Jobs.Query()
+            .Where(j => j.Status == OfficeJobStatus.Running && j.StartedAt != null && j.StartedAt < cutoff)
+            .ToList();
+
+        foreach (var job in staleJobs)
+        {
+            job.Status = OfficeJobStatus.Failed;
+            job.CompletedAt = DateTimeOffset.Now;
+            job.Error = $"Recovered after broker restart. Job was running since {job.StartedAt:O} and exceeded stale threshold of {staleThreshold.TotalMinutes} minutes.";
+            _db.Jobs.Update(job);
+        }
+
+        return staleJobs.Count;
+    }
 }
