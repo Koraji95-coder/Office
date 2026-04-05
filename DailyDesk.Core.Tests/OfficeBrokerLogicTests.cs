@@ -556,6 +556,37 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    // --- Phase 3 (PR 4): MLExportArtifacts job type tests ---
+
+    [Fact]
+    public void OfficeJobType_MLExportArtifacts_HasExpectedStringValue()
+    {
+        Assert.Equal("ml-export-artifacts", OfficeJobType.MLExportArtifacts);
+    }
+
+    [Fact]
+    public void OfficeJobStore_Enqueue_MLExportArtifacts_StoresCorrectType()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLExportArtifacts, "test");
+            Assert.Equal(OfficeJobStatus.Queued, job.Status);
+            Assert.Equal(OfficeJobType.MLExportArtifacts, job.Type);
+
+            var retrieved = store.GetById(job.Id);
+            Assert.NotNull(retrieved);
+            Assert.Equal(OfficeJobType.MLExportArtifacts, retrieved!.Type);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     // --- Phase 2: Polly Resilience Pipeline Tests ---
 
     [Fact]

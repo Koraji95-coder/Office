@@ -38,4 +38,5 @@ public static class OfficeJobType
     public const string MLForecast = "ml-forecast";
     public const string MLEmbeddings = "ml-embeddings";
     public const string MLPipeline = "ml-pipeline";
+    public const string MLExportArtifacts = "ml-export-artifacts";
 }

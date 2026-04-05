@@ -703,8 +703,16 @@ app.MapPost("/api/ml/pipeline", async (HttpContext httpContext, OfficeBrokerOrch
     }
 });
 
-app.MapPost("/api/ml/export-artifacts", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/ml/export-artifacts", async (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.MLExportArtifacts, "broker");
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
     try
     {
         var artifacts = await orchestrator.ExportSuiteArtifactsAsync(ct);
