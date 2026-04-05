@@ -732,10 +732,28 @@ app.MapPost("/api/ml/export-artifacts", async (HttpContext httpContext, OfficeBr
 
 // --- Job Status Endpoints (Phase 3) ---
 
-app.MapGet("/api/jobs", (OfficeBrokerOrchestrator orchestrator) =>
+app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var jobs = orchestrator.JobStore.ListRecent(50);
-    return Results.Ok(new { jobs });
+    var statusFilter = httpContext.Request.Query["status"].FirstOrDefault();
+    var typeFilter = httpContext.Request.Query["type"].FirstOrDefault();
+
+    IReadOnlyList<DailyDesk.Models.OfficeJob> jobs;
+    if (!string.IsNullOrWhiteSpace(statusFilter))
+    {
+        jobs = orchestrator.JobStore.ListByStatus(statusFilter.ToLowerInvariant(), 50);
+    }
+    else
+    {
+        jobs = orchestrator.JobStore.ListRecent(50);
+    }
+
+    if (!string.IsNullOrWhiteSpace(typeFilter))
+    {
+        var filtered = jobs.Where(j => j.Type.Equals(typeFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+        return Results.Ok(new { jobs = filtered, total = orchestrator.JobStore.GetTotalCount() });
+    }
+
+    return Results.Ok(new { jobs, total = orchestrator.JobStore.GetTotalCount() });
 });
 
 app.MapGet("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
@@ -783,6 +801,22 @@ app.MapGet("/api/jobs/{jobId}/result", (string jobId, OfficeBrokerOrchestrator o
     {
         return Results.Ok(new { result = job.ResultJson });
     }
+});
+
+app.MapDelete("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var job = orchestrator.JobStore.GetById(jobId);
+    if (job is null)
+    {
+        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+    }
+    if (job.Status is not (DailyDesk.Models.OfficeJobStatus.Succeeded or DailyDesk.Models.OfficeJobStatus.Failed))
+    {
+        return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Only completed (succeeded/failed) jobs can be deleted." });
+    }
+
+    orchestrator.JobStore.DeleteById(jobId);
+    return Results.NoContent();
 });
 
 app.Run();

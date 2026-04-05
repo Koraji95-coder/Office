@@ -1393,6 +1393,249 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    // --- PR 6: Job Management & Retention Tests ---
+
+    [Fact]
+    public void OfficeJobStore_DeleteById_RemovesCompletedJob()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "test");
+            store.MarkSucceeded(job.Id, "{\"ok\":true}");
+
+            var deleted = store.DeleteById(job.Id);
+            Assert.True(deleted);
+            Assert.Null(store.GetById(job.Id));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteById_ReturnsFalseForNonexistent()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            Assert.False(store.DeleteById("nonexistent-id"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteById_RefusesQueuedAndRunning()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Queued job cannot be deleted
+            var queued = store.Enqueue(OfficeJobType.MLAnalytics, "test");
+            Assert.False(store.DeleteById(queued.Id));
+            Assert.NotNull(store.GetById(queued.Id));
+
+            // Running job cannot be deleted
+            var running = store.DequeueNext();
+            Assert.False(store.DeleteById(running!.Id));
+            Assert.NotNull(store.GetById(running.Id));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteById_AllowsFailedJobs()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var job = store.Enqueue(OfficeJobType.MLForecast, "test");
+            store.MarkFailed(job.Id, "some error");
+
+            var deleted = store.DeleteById(job.Id);
+            Assert.True(deleted);
+            Assert.Null(store.GetById(job.Id));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteOlderThan_PurgesExpiredOnly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Create old succeeded job
+            var old = store.Enqueue(OfficeJobType.MLAnalytics, "old");
+            store.MarkSucceeded(old.Id, "{}");
+            var oldJob = store.GetById(old.Id)!;
+            oldJob.CreatedAt = DateTimeOffset.Now.AddDays(-31);
+            db.Jobs.Update(oldJob);
+
+            // Create recent succeeded job
+            var recent = store.Enqueue(OfficeJobType.MLForecast, "recent");
+            store.MarkSucceeded(recent.Id, "{}");
+
+            // Purge jobs older than 30 days
+            var cutoff = DateTimeOffset.Now.AddDays(-30);
+            var deleted = store.DeleteOlderThan(cutoff);
+
+            Assert.Equal(1, deleted);
+            Assert.Null(store.GetById(old.Id));
+            Assert.NotNull(store.GetById(recent.Id));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_DeleteOlderThan_IgnoresQueuedAndRunning()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            // Create old queued job
+            var queued = store.Enqueue(OfficeJobType.MLAnalytics, "old-queued");
+            var queuedJob = store.GetById(queued.Id)!;
+            queuedJob.CreatedAt = DateTimeOffset.Now.AddDays(-31);
+            db.Jobs.Update(queuedJob);
+
+            // Create old running job
+            var toRun = store.Enqueue(OfficeJobType.MLForecast, "old-running");
+            var running = store.DequeueNext()!;
+            running.CreatedAt = DateTimeOffset.Now.AddDays(-31);
+            db.Jobs.Update(running);
+
+            var cutoff = DateTimeOffset.Now.AddDays(-30);
+            var deleted = store.DeleteOlderThan(cutoff);
+
+            Assert.Equal(0, deleted);
+            Assert.NotNull(store.GetById(queued.Id));
+            Assert.NotNull(store.GetById(toRun.Id));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_ListByStatus_FiltersCorrectly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var j1 = store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            var j2 = store.Enqueue(OfficeJobType.MLForecast, "b");
+            var j3 = store.Enqueue(OfficeJobType.MLPipeline, "c");
+
+            store.MarkSucceeded(j1.Id, "{}");
+            store.MarkFailed(j2.Id, "err");
+            // j3 stays queued
+
+            var succeeded = store.ListByStatus(OfficeJobStatus.Succeeded);
+            Assert.Single(succeeded);
+            Assert.Equal(j1.Id, succeeded[0].Id);
+
+            var failed = store.ListByStatus(OfficeJobStatus.Failed);
+            Assert.Single(failed);
+            Assert.Equal(j2.Id, failed[0].Id);
+
+            var queued = store.ListByStatus(OfficeJobStatus.Queued);
+            Assert.Single(queued);
+            Assert.Equal(j3.Id, queued[0].Id);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_ListByStatus_RespectsLimit()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            for (int i = 0; i < 5; i++)
+            {
+                var j = store.Enqueue(OfficeJobType.MLAnalytics, $"job-{i}");
+                store.MarkSucceeded(j.Id, "{}");
+            }
+
+            var limited = store.ListByStatus(OfficeJobStatus.Succeeded, 3);
+            Assert.Equal(3, limited.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void OfficeJobStore_GetTotalCount_ReturnsAccurateCount()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            Assert.Equal(0, store.GetTotalCount());
+
+            store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            store.Enqueue(OfficeJobType.MLForecast, "b");
+            Assert.Equal(2, store.GetTotalCount());
+
+            var j3 = store.Enqueue(OfficeJobType.MLPipeline, "c");
+            store.MarkSucceeded(j3.Id, "{}");
+            Assert.Equal(3, store.GetTotalCount());
+
+            store.DeleteById(j3.Id);
+            Assert.Equal(2, store.GetTotalCount());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

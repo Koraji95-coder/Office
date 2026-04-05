@@ -185,12 +185,13 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 ### Core Endpoints (25 existing)
 - Health, state, chat, study, research, watchlist, inbox, library, history, workspace, ML.
 
-### Job Endpoints (Phase 3 — 3 new)
+### Job Endpoints (Phase 3 — 4 endpoints)
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/jobs` | List recent jobs (last 50) |
+| GET | `/api/jobs` | List recent jobs (last 50), supports `?status=...&type=...` filters |
 | GET | `/api/jobs/{jobId}` | Get job status and metadata |
 | GET | `/api/jobs/{jobId}/result` | Get job result JSON (succeeded only) |
+| DELETE | `/api/jobs/{jobId}` | Delete a completed job (succeeded/failed only) |
 
 ### ML Endpoints (Updated)
 | Method | Endpoint | Default | `?sync=true` |
@@ -199,11 +200,11 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | POST | `/api/ml/forecast` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/embeddings` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/pipeline` | Returns `{ jobId, status }` | Blocks and returns result |
-| POST | `/api/ml/export-artifacts` | Blocks (no async mode) | N/A |
+| POST | `/api/ml/export-artifacts` | Returns `{ jobId, status }` | Blocks and returns result |
 
 ---
 
-## Test Coverage (78 tests)
+## Test Coverage (89 tests)
 
 | Area | Tests | Coverage |
 |------|-------|----------|
@@ -216,7 +217,8 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | MLResultStore LiteDB | 3 | Analytics, forecast, embeddings persistence |
 | Job model unit tests | 8 | Enqueue, retrieve, dequeue, mark succeeded/failed, list recent |
 | Stale job recovery | 4 | Old running → failed, recent running preserved, queued/completed ignored, count |
-| **Job model integration tests (PR 5)** | **13** | **FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips** |
+| Job model integration tests (PR 5) | 13 | FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips |
+| **Job management & retention (PR 6)** | **9** | **DeleteById (completed/nonexistent/queued/failed), DeleteOlderThan (expired/active), ListByStatus (filter/limit), GetTotalCount** |
 
 ---
 
