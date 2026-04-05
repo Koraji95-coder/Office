@@ -64,6 +64,12 @@ public sealed class OfficeDatabase : IDisposable
     public ILiteCollection<OfficeJob> Jobs =>
         _db.GetCollection<OfficeJob>("jobs");
 
+    public ILiteCollection<JobSchedule> JobSchedules =>
+        _db.GetCollection<JobSchedule>("job_schedules");
+
+    public ILiteCollection<WorkflowTemplate> WorkflowTemplates =>
+        _db.GetCollection<WorkflowTemplate>("workflow_templates");
+
     public ILiteCollection<PersistedMLResult> MLAnalyticsResults =>
         _db.GetCollection<PersistedMLResult>("ml_analytics");
 
@@ -88,6 +94,9 @@ public sealed class OfficeDatabase : IDisposable
         Jobs.EnsureIndex(x => x.Id);
         Jobs.EnsureIndex(x => x.Status);
         Jobs.EnsureIndex(x => x.CreatedAt);
+        JobSchedules.EnsureIndex(x => x.Id);
+        JobSchedules.EnsureIndex(x => x.Enabled);
+        WorkflowTemplates.EnsureIndex(x => x.Id);
         KnowledgeIndex.EnsureIndex(x => x.DocumentPath);
     }
 

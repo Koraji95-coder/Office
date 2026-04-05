@@ -40,4 +40,5 @@ public static class OfficeJobType
     public const string MLPipeline = "ml-pipeline";
     public const string MLExportArtifacts = "ml-export-artifacts";
     public const string KnowledgeIndex = "knowledge-index";
+    public const string DailyRun = "daily-run";
 }

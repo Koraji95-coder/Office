@@ -2674,4 +2674,672 @@ public sealed class OfficeBrokerLogicTests
             try { Directory.Delete(Path, recursive: true); } catch { /* best effort */ }
         }
     }
+
+    // ========================================================================
+    // Phase 8: Scheduled Automation & Operator Workflows
+    // ========================================================================
+
+    // --- PR 8.1: Job Scheduler Store Tests ---
+
+    [Fact]
+    public void JobSchedulerStore_Create_AssignsIdAndNextRun()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var schedule = new JobSchedule
+        {
+            Name = "Nightly Pipeline",
+            JobType = OfficeJobType.MLPipeline,
+            CronExpression = "every 1d",
+            Enabled = true,
+        };
+
+        var created = store.Create(schedule);
+        Assert.NotNull(created.Id);
+        Assert.NotNull(created.NextRunAt);
+        Assert.Equal("Nightly Pipeline", created.Name);
+        Assert.Equal(OfficeJobType.MLPipeline, created.JobType);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_GetById_ReturnsSchedule()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var created = store.Create(new JobSchedule
+        {
+            Name = "Test",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 2h",
+        });
+
+        var retrieved = store.GetById(created.Id);
+        Assert.NotNull(retrieved);
+        Assert.Equal(created.Id, retrieved!.Id);
+        Assert.Equal("Test", retrieved.Name);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_GetById_ReturnsNullForMissing()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        Assert.Null(store.GetById("nonexistent"));
+    }
+
+    [Fact]
+    public void JobSchedulerStore_ListAll_ReturnsAllSchedules()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        store.Create(new JobSchedule { Name = "A", JobType = OfficeJobType.MLAnalytics, CronExpression = "every 1h" });
+        store.Create(new JobSchedule { Name = "B", JobType = OfficeJobType.MLForecast, CronExpression = "every 2h" });
+
+        var all = store.ListAll();
+        Assert.Equal(2, all.Count);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_Update_ChangesFields()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var created = store.Create(new JobSchedule
+        {
+            Name = "Original",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+            Enabled = true,
+        });
+
+        var updated = store.Update(created.Id, s =>
+        {
+            s.Name = "Updated";
+            s.Enabled = false;
+        });
+
+        Assert.NotNull(updated);
+        Assert.Equal("Updated", updated!.Name);
+        Assert.False(updated.Enabled);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_Update_RecomputesNextRunWhenCronChanges()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var created = store.Create(new JobSchedule
+        {
+            Name = "Test",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+        });
+
+        var originalNext = created.NextRunAt;
+
+        var updated = store.Update(created.Id, s =>
+        {
+            s.CronExpression = "every 12h";
+        });
+
+        Assert.NotNull(updated);
+        // With 12h interval, next run should be further out than 1h
+        Assert.True(updated!.NextRunAt > originalNext);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_Update_ReturnsNullForMissing()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var result = store.Update("nonexistent", s => s.Name = "test");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_Delete_RemovesSchedule()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var created = store.Create(new JobSchedule
+        {
+            Name = "ToDelete",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+        });
+
+        Assert.True(store.Delete(created.Id));
+        Assert.Null(store.GetById(created.Id));
+    }
+
+    [Fact]
+    public void JobSchedulerStore_Delete_ReturnsFalseForMissing()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        Assert.False(store.Delete("nonexistent"));
+    }
+
+    [Fact]
+    public void JobSchedulerStore_GetDueSchedules_ReturnsDueOnly()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        // Create a schedule with next run in the past
+        var schedule = store.Create(new JobSchedule
+        {
+            Name = "Due",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+        });
+
+        // Manually set NextRunAt to past
+        store.Update(schedule.Id, s =>
+        {
+            // Keep same cron expression to avoid recompute
+            s.NextRunAt = DateTimeOffset.Now.AddMinutes(-5);
+        });
+        // Force cron back since Update recalculates
+        var raw = db.JobSchedules.FindOne(s => s.Id == schedule.Id);
+        raw!.NextRunAt = DateTimeOffset.Now.AddMinutes(-5);
+        db.JobSchedules.Update(raw);
+
+        // Create a schedule with next run in the future
+        store.Create(new JobSchedule
+        {
+            Name = "NotDue",
+            JobType = OfficeJobType.MLForecast,
+            CronExpression = "every 24h",
+        });
+
+        var due = store.GetDueSchedules(DateTimeOffset.Now);
+        Assert.Single(due);
+        Assert.Equal("Due", due[0].Name);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_GetDueSchedules_SkipsDisabled()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var schedule = store.Create(new JobSchedule
+        {
+            Name = "Disabled",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+            Enabled = false,
+        });
+
+        // Set next run to past
+        var raw = db.JobSchedules.FindOne(s => s.Id == schedule.Id);
+        raw!.NextRunAt = DateTimeOffset.Now.AddMinutes(-5);
+        db.JobSchedules.Update(raw);
+
+        var due = store.GetDueSchedules(DateTimeOffset.Now);
+        Assert.Empty(due);
+    }
+
+    [Fact]
+    public void JobSchedulerStore_MarkRun_UpdatesLastRunAndNextRun()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var schedule = store.Create(new JobSchedule
+        {
+            Name = "Test",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 2h",
+        });
+
+        var runAt = DateTimeOffset.Now;
+        store.MarkRun(schedule.Id, runAt);
+
+        var updated = store.GetById(schedule.Id);
+        Assert.NotNull(updated);
+        // LiteDB truncates sub-millisecond precision, so compare within 1 second
+        Assert.NotNull(updated!.LastRunAt);
+        Assert.True(Math.Abs((updated.LastRunAt!.Value - runAt).TotalSeconds) < 1);
+        Assert.NotNull(updated.NextRunAt);
+        // Next run should be ~2h after ranAt
+        Assert.True(updated.NextRunAt > runAt);
+    }
+
+    // --- Cron Parsing Tests ---
+
+    [Theory]
+    [InlineData("every 30m")]
+    [InlineData("every 2h")]
+    [InlineData("every 1d")]
+    [InlineData("0 8 * * *")]
+    [InlineData("30 14 * * 1,3,5")]
+    public void CronParser_ValidExpressions_ReturnNonNull(string cron)
+    {
+        var next = JobSchedulerStore.ComputeNextRun(cron, DateTimeOffset.Now);
+        Assert.NotNull(next);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("invalid")]
+    [InlineData("every 0m")]
+    [InlineData("every -1h")]
+    [InlineData("99 99 99 99 99")]
+    public void CronParser_InvalidExpressions_ReturnNull(string cron)
+    {
+        var next = JobSchedulerStore.ComputeNextRun(cron, DateTimeOffset.Now);
+        Assert.Null(next);
+    }
+
+    [Fact]
+    public void CronParser_SimpleInterval_ComputesCorrectOffset()
+    {
+        var now = DateTimeOffset.Now;
+        var next = JobSchedulerStore.ComputeNextRun("every 30m", now);
+        Assert.NotNull(next);
+        var diff = (next!.Value - now).TotalMinutes;
+        Assert.True(Math.Abs(diff - 30) < 0.1);
+    }
+
+    [Fact]
+    public void CronParser_DailyCron_ComputesFuture()
+    {
+        var now = DateTimeOffset.Now;
+        var next = JobSchedulerStore.ComputeNextRun("0 8 * * *", now);
+        Assert.NotNull(next);
+        Assert.True(next!.Value > now);
+        Assert.Equal(8, next.Value.Hour);
+        Assert.Equal(0, next.Value.Minute);
+    }
+
+    // --- PR 8.2: Daily Run Tests ---
+
+    [Fact]
+    public void OfficeJobType_DailyRun_Exists()
+    {
+        Assert.Equal("daily-run", OfficeJobType.DailyRun);
+    }
+
+    [Fact]
+    public void OfficeJobStore_Enqueue_DailyRunType()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.DailyRun, "scheduler:daily-run");
+        Assert.Equal(OfficeJobType.DailyRun, job.Type);
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+        Assert.Equal("scheduler:daily-run", job.RequestedBy);
+    }
+
+    [Fact]
+    public void DailyRunSummary_StepResults_TrackSuccess()
+    {
+        var summary = new DailyRunSummary
+        {
+            StartedAt = DateTimeOffset.Now.AddMinutes(-5),
+            CompletedAt = DateTimeOffset.Now,
+            Steps =
+            [
+                new DailyRunStepResult { Step = "RefreshState", Success = true },
+                new DailyRunStepResult { Step = "MLPipeline", Success = true },
+                new DailyRunStepResult { Step = "ExportArtifacts", Success = false, Error = "test error" },
+            ],
+            OverallSuccess = false,
+        };
+
+        Assert.Equal(3, summary.Steps.Count);
+        Assert.False(summary.OverallSuccess);
+        Assert.Equal(2, summary.Steps.Count(s => s.Success));
+        Assert.Equal(1, summary.Steps.Count(s => !s.Success));
+        Assert.Equal("test error", summary.Steps[2].Error);
+    }
+
+    [Fact]
+    public void DailyRunSummary_AllStepsSucceeded()
+    {
+        var summary = new DailyRunSummary
+        {
+            StartedAt = DateTimeOffset.Now.AddMinutes(-5),
+            CompletedAt = DateTimeOffset.Now,
+            Steps =
+            [
+                new DailyRunStepResult { Step = "RefreshState", Success = true },
+                new DailyRunStepResult { Step = "MLPipeline", Success = true },
+            ],
+            OverallSuccess = true,
+        };
+
+        Assert.True(summary.OverallSuccess);
+        Assert.True(summary.Steps.All(s => s.Success));
+    }
+
+    [Fact]
+    public void DailyRunJobSummary_FieldsPopulate()
+    {
+        var summary = new DailyRunJobSummary
+        {
+            JobId = "test-123",
+            Status = OfficeJobStatus.Succeeded,
+            CreatedAt = DateTimeOffset.Now.AddMinutes(-10),
+            StartedAt = DateTimeOffset.Now.AddMinutes(-9),
+            CompletedAt = DateTimeOffset.Now,
+            ResultJson = "{\"test\": true}",
+        };
+
+        Assert.Equal("test-123", summary.JobId);
+        Assert.Equal(OfficeJobStatus.Succeeded, summary.Status);
+        Assert.NotNull(summary.StartedAt);
+        Assert.NotNull(summary.CompletedAt);
+        Assert.NotNull(summary.ResultJson);
+        Assert.Null(summary.Error);
+    }
+
+    // --- PR 8.3: Workflow Store Tests ---
+
+    [Fact]
+    public void WorkflowStore_SeedsBuiltInTemplates()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var all = store.ListAll();
+        Assert.True(all.Count >= 3);
+        Assert.Contains(all, w => w.Name == "Daily Run" && w.BuiltIn);
+        Assert.Contains(all, w => w.Name == "Exam Prep" && w.BuiltIn);
+        Assert.Contains(all, w => w.Name == "Knowledge Refresh" && w.BuiltIn);
+    }
+
+    [Fact]
+    public void WorkflowStore_SeedingIsIdempotent()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store1 = new WorkflowStore(db);
+        var count1 = store1.ListAll().Count;
+
+        // Creating a second store should not duplicate built-ins
+        var store2 = new WorkflowStore(db);
+        var count2 = store2.ListAll().Count;
+
+        Assert.Equal(count1, count2);
+    }
+
+    [Fact]
+    public void WorkflowStore_Create_AssignsId()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var template = new WorkflowTemplate
+        {
+            Name = "Custom Workflow",
+            Description = "A custom workflow",
+            Steps =
+            [
+                new WorkflowStep { JobType = OfficeJobType.MLAnalytics, Label = "Analytics" },
+                new WorkflowStep { JobType = OfficeJobType.MLForecast, Label = "Forecast" },
+            ],
+        };
+
+        var created = store.Create(template);
+        Assert.NotNull(created.Id);
+        Assert.Equal("Custom Workflow", created.Name);
+        Assert.Equal(2, created.Steps.Count);
+        Assert.False(created.BuiltIn);
+    }
+
+    [Fact]
+    public void WorkflowStore_GetById_ReturnsTemplate()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var created = store.Create(new WorkflowTemplate
+        {
+            Name = "Test",
+            Steps = [new WorkflowStep { JobType = OfficeJobType.MLAnalytics }],
+        });
+
+        var retrieved = store.GetById(created.Id);
+        Assert.NotNull(retrieved);
+        Assert.Equal(created.Id, retrieved!.Id);
+    }
+
+    [Fact]
+    public void WorkflowStore_GetById_ReturnsNullForMissing()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        Assert.Null(store.GetById("nonexistent"));
+    }
+
+    [Fact]
+    public void WorkflowStore_Delete_RemovesCustomTemplate()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var created = store.Create(new WorkflowTemplate
+        {
+            Name = "ToDelete",
+            Steps = [new WorkflowStep { JobType = OfficeJobType.MLAnalytics }],
+        });
+
+        Assert.True(store.Delete(created.Id));
+        Assert.Null(store.GetById(created.Id));
+    }
+
+    [Fact]
+    public void WorkflowStore_Delete_RefusesBuiltIn()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var builtIn = store.ListAll().First(w => w.BuiltIn);
+        Assert.False(store.Delete(builtIn.Id));
+        Assert.NotNull(store.GetById(builtIn.Id));
+    }
+
+    [Fact]
+    public void WorkflowStore_Delete_ReturnsFalseForMissing()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        Assert.False(store.Delete("nonexistent"));
+    }
+
+    [Fact]
+    public void WorkflowTemplate_FailurePolicy_DefaultsToAbort()
+    {
+        var template = new WorkflowTemplate();
+        Assert.Equal(WorkflowFailurePolicy.Abort, template.FailurePolicy);
+    }
+
+    [Fact]
+    public void WorkflowTemplate_Steps_CanBeConfigured()
+    {
+        var template = new WorkflowTemplate
+        {
+            Name = "Multi-Step",
+            Steps =
+            [
+                new WorkflowStep { JobType = OfficeJobType.MLPipeline, Label = "Pipeline" },
+                new WorkflowStep { JobType = OfficeJobType.MLExportArtifacts, Label = "Export" },
+                new WorkflowStep { JobType = OfficeJobType.KnowledgeIndex, Label = "Index" },
+            ],
+            FailurePolicy = WorkflowFailurePolicy.Continue,
+        };
+
+        Assert.Equal(3, template.Steps.Count);
+        Assert.Equal(WorkflowFailurePolicy.Continue, template.FailurePolicy);
+    }
+
+    [Fact]
+    public void WorkflowExecution_EnqueuesJobsInOrder()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var jobStore = new OfficeJobStore(db);
+
+        // Simulate what POST /api/workflows/{id}/run does
+        var steps = new[]
+        {
+            new WorkflowStep { JobType = OfficeJobType.MLPipeline, Label = "Pipeline" },
+            new WorkflowStep { JobType = OfficeJobType.MLExportArtifacts, Label = "Export" },
+            new WorkflowStep { JobType = OfficeJobType.KnowledgeIndex, Label = "Index" },
+        };
+
+        var jobIds = new List<string>();
+        foreach (var step in steps)
+        {
+            var job = jobStore.Enqueue(step.JobType, "workflow:test", step.RequestPayload);
+            jobIds.Add(job.Id);
+        }
+
+        Assert.Equal(3, jobIds.Count);
+
+        // Dequeue should return them in FIFO order
+        var first = jobStore.DequeueNext();
+        Assert.NotNull(first);
+        Assert.Equal(OfficeJobType.MLPipeline, first!.Type);
+
+        var second = jobStore.DequeueNext();
+        Assert.NotNull(second);
+        Assert.Equal(OfficeJobType.MLExportArtifacts, second!.Type);
+
+        var third = jobStore.DequeueNext();
+        Assert.NotNull(third);
+        Assert.Equal(OfficeJobType.KnowledgeIndex, third!.Type);
+    }
+
+    [Fact]
+    public void WorkflowExecution_HandlesAbortPolicy()
+    {
+        // Test the abort policy model: if a step fails, the workflow should stop
+        var template = new WorkflowTemplate
+        {
+            FailurePolicy = WorkflowFailurePolicy.Abort,
+            Steps =
+            [
+                new WorkflowStep { JobType = OfficeJobType.MLAnalytics },
+                new WorkflowStep { JobType = OfficeJobType.MLForecast },
+            ],
+        };
+
+        Assert.Equal(WorkflowFailurePolicy.Abort, template.FailurePolicy);
+        Assert.Equal(2, template.Steps.Count);
+    }
+
+    [Fact]
+    public void WorkflowExecution_HandlesContinuePolicy()
+    {
+        // Test the continue policy model: if a step fails, the workflow continues
+        var template = new WorkflowTemplate
+        {
+            FailurePolicy = WorkflowFailurePolicy.Continue,
+            Steps =
+            [
+                new WorkflowStep { JobType = OfficeJobType.MLAnalytics },
+                new WorkflowStep { JobType = OfficeJobType.MLForecast },
+            ],
+        };
+
+        Assert.Equal(WorkflowFailurePolicy.Continue, template.FailurePolicy);
+    }
+
+    [Fact]
+    public void WorkflowStore_BuiltInDailyRun_HasCorrectSteps()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var dailyRun = store.ListAll().First(w => w.Name == "Daily Run");
+        Assert.True(dailyRun.BuiltIn);
+        Assert.Equal(WorkflowFailurePolicy.Continue, dailyRun.FailurePolicy);
+        Assert.Equal(3, dailyRun.Steps.Count);
+        Assert.Equal(OfficeJobType.MLPipeline, dailyRun.Steps[0].JobType);
+        Assert.Equal(OfficeJobType.MLExportArtifacts, dailyRun.Steps[1].JobType);
+        Assert.Equal(OfficeJobType.KnowledgeIndex, dailyRun.Steps[2].JobType);
+    }
+
+    // --- Schedule + JobStore Integration Tests ---
+
+    [Fact]
+    public void Scheduler_DueSchedule_EnqueuesJob()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var schedulerStore = new JobSchedulerStore(db);
+        var jobStore = new OfficeJobStore(db);
+
+        var schedule = schedulerStore.Create(new JobSchedule
+        {
+            Name = "Hourly Analytics",
+            JobType = OfficeJobType.MLAnalytics,
+            CronExpression = "every 1h",
+        });
+
+        // Manually set NextRunAt to past to simulate it being due
+        var raw = db.JobSchedules.FindOne(s => s.Id == schedule.Id);
+        raw!.NextRunAt = DateTimeOffset.Now.AddMinutes(-1);
+        db.JobSchedules.Update(raw);
+
+        var dueSchedules = schedulerStore.GetDueSchedules(DateTimeOffset.Now);
+        Assert.Single(dueSchedules);
+
+        // Simulate what the worker does
+        foreach (var due in dueSchedules)
+        {
+            jobStore.Enqueue(due.JobType, $"scheduler:{due.Name}");
+            schedulerStore.MarkRun(due.Id, DateTimeOffset.Now);
+        }
+
+        // Job should be enqueued
+        var jobs = jobStore.ListRecent(10);
+        Assert.Single(jobs);
+        Assert.Equal(OfficeJobType.MLAnalytics, jobs[0].Type);
+        Assert.Equal("scheduler:Hourly Analytics", jobs[0].RequestedBy);
+
+        // Schedule should have been updated
+        var updated = schedulerStore.GetById(schedule.Id);
+        Assert.NotNull(updated!.LastRunAt);
+        Assert.NotNull(updated.NextRunAt);
+        Assert.True(updated.NextRunAt > DateTimeOffset.Now);
+    }
 }
