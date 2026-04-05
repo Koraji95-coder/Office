@@ -170,7 +170,7 @@ Before proposing changes, it is important to recognize what the codebase already
 ```
 OfficeJob
 ├── Id: string (GUID)
-├── Type: string ("ml-analytics" | "ml-forecast" | "ml-embeddings" | "ml-pipeline")
+├── Type: string ("ml-analytics" | "ml-forecast" | "ml-embeddings" | "ml-pipeline" | "ml-export-artifacts")
 ├── Status: string ("queued" | "running" | "succeeded" | "failed")
 ├── CreatedAt: DateTimeOffset
 ├── StartedAt: DateTimeOffset?
@@ -215,7 +215,21 @@ OfficeJob
 
 **Backward compatibility:** Add `?sync=true` query parameter to ML endpoints for callers that need the old blocking behavior during migration.
 
-### 3.4 No UI Changes Required
+### 3.4 Job Management & Retention (PR 6)
+
+**Problem:** Jobs accumulate indefinitely in LiteDB without cleanup, unlike other stores that enforce item limits.
+
+**Solution:**
+- `OfficeJobStore.DeleteById(jobId)` — Delete a completed (succeeded/failed) job by ID. Queued/running jobs cannot be deleted.
+- `OfficeJobStore.DeleteOlderThan(cutoff)` — Bulk-delete completed jobs older than a date threshold.
+- `OfficeJobStore.ListByStatus(status, limit)` — Filter jobs by status for monitoring.
+- `OfficeJobStore.GetTotalCount()` — Total job count for observability.
+- `DELETE /api/jobs/{jobId}` — HTTP endpoint for single-job deletion (204 No Content / 404 / 400).
+- `GET /api/jobs?status=...&type=...` — Filtered listing with optional status and type query params.
+
+**Retention policy:** Completed jobs are eligible for deletion after 30 days (caller-triggered via `DeleteOlderThan`). Automated scheduled cleanup can be added in Phase 4 if needed.
+
+### 3.5 No UI Changes Required
 
 The WPF client currently calls ML endpoints and waits for the response. With the async model:
 - Client gets back a job ID immediately.

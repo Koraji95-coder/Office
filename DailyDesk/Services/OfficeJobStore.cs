@@ -122,4 +122,59 @@ public sealed class OfficeJobStore
 
         return staleJobs.Count;
     }
+
+    /// <summary>
+    /// Deletes a completed job by ID. Only Succeeded or Failed jobs can be deleted.
+    /// Returns true if the job was found and deleted, false otherwise.
+    /// </summary>
+    public bool DeleteById(string jobId)
+    {
+        var job = _db.Jobs.FindOne(j => j.Id == jobId);
+        if (job is null) return false;
+        if (job.Status is not (OfficeJobStatus.Succeeded or OfficeJobStatus.Failed))
+            return false;
+
+        return _db.Jobs.Delete(job.Id);
+    }
+
+    /// <summary>
+    /// Deletes completed jobs older than the specified cutoff.
+    /// Only removes jobs in Succeeded or Failed status.
+    /// Returns the number of jobs deleted.
+    /// </summary>
+    public int DeleteOlderThan(DateTimeOffset cutoff)
+    {
+        var oldJobs = _db.Jobs.Query()
+            .Where(j =>
+                (j.Status == OfficeJobStatus.Succeeded || j.Status == OfficeJobStatus.Failed)
+                && j.CreatedAt < cutoff)
+            .ToList();
+
+        foreach (var job in oldJobs)
+        {
+            _db.Jobs.Delete(job.Id);
+        }
+
+        return oldJobs.Count;
+    }
+
+    /// <summary>
+    /// Lists jobs filtered by status, most recent first.
+    /// </summary>
+    public IReadOnlyList<OfficeJob> ListByStatus(string status, int count = 50)
+    {
+        return _db.Jobs.Query()
+            .Where(j => j.Status == status)
+            .OrderByDescending(j => j.CreatedAt)
+            .Limit(count)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Returns the total number of jobs in the store.
+    /// </summary>
+    public int GetTotalCount()
+    {
+        return _db.Jobs.Count();
+    }
 }
