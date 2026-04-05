@@ -15,7 +15,7 @@
 | 5 | Semantic Search (Ollama Embeddings + Qdrant) | 🔲 Not Started |
 | 6 | Agent Orchestration (Semantic Kernel) | ✅ Complete |
 | 7 | Document Extraction (Docling) | ✅ Complete |
-| 8 | Scheduled Automation & Operator Workflows | 🔲 Not Started |
+| 8 | Scheduled Automation & Operator Workflows | ✅ Complete |
 | 9 | WPF Client Async Integration | 🔲 Not Started |
 
 ---

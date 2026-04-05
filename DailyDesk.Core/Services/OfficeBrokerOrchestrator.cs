@@ -3756,7 +3756,9 @@ public sealed class OfficeBrokerOrchestrator
     /// </summary>
     public DailyRunJobSummary? GetLatestDailyRunSummary()
     {
-        var jobs = _jobStore.ListByStatus(OfficeJobStatus.Succeeded, 50);
+        const int recentJobLimit = 50;
+
+        var jobs = _jobStore.ListByStatus(OfficeJobStatus.Succeeded, recentJobLimit);
         var dailyRunJob = jobs
             .Where(j => j.Type == OfficeJobType.DailyRun)
             .OrderByDescending(j => j.CompletedAt)
@@ -3765,7 +3767,7 @@ public sealed class OfficeBrokerOrchestrator
         if (dailyRunJob is null)
         {
             // Also check failed runs
-            var failedJobs = _jobStore.ListByStatus(OfficeJobStatus.Failed, 50);
+            var failedJobs = _jobStore.ListByStatus(OfficeJobStatus.Failed, recentJobLimit);
             dailyRunJob = failedJobs
                 .Where(j => j.Type == OfficeJobType.DailyRun)
                 .OrderByDescending(j => j.CompletedAt)
