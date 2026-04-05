@@ -749,8 +749,7 @@ app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orche
 
     if (!string.IsNullOrWhiteSpace(typeFilter))
     {
-        var filtered = jobs.Where(j => j.Type.Equals(typeFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-        return Results.Ok(new { jobs = filtered, total = orchestrator.JobStore.GetTotalCount() });
+        jobs = jobs.Where(j => j.Type.Equals(typeFilter, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     return Results.Ok(new { jobs, total = orchestrator.JobStore.GetTotalCount() });
