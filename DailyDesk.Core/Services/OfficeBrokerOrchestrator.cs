@@ -44,6 +44,10 @@ public sealed class OfficeBrokerOrchestrator
     private readonly VectorStoreService _vectorStoreService;
     private readonly KnowledgeIndexStore _knowledgeIndexStore;
 
+    // Phase 8: Scheduled automation & workflow orchestration
+    private readonly JobSchedulerStore _schedulerStore;
+    private readonly WorkflowStore _workflowStore;
+
     // Phase 6: Semantic Kernel agent orchestration
     private readonly OfficeKernelFactory _kernelFactory;
     private readonly Dictionary<string, DeskAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
@@ -122,6 +126,10 @@ public sealed class OfficeBrokerOrchestrator
         _vectorStoreService = new VectorStoreService(logger: lf.CreateLogger<VectorStoreService>());
         _knowledgeIndexStore = new KnowledgeIndexStore(_officeDatabase, lf.CreateLogger<KnowledgeIndexStore>());
 
+        // Phase 8: Scheduled automation & workflow orchestration
+        _schedulerStore = new JobSchedulerStore(_officeDatabase);
+        _workflowStore = new WorkflowStore(_officeDatabase);
+
         // Phase 6: Semantic Kernel agent orchestration
         _kernelFactory = new OfficeKernelFactory(_settings.OllamaEndpoint, lf);
         InitializeAgents(lf);
@@ -181,6 +189,16 @@ public sealed class OfficeBrokerOrchestrator
     /// Provides access to the knowledge index tracking store.
     /// </summary>
     public KnowledgeIndexStore KnowledgeIndexStore => _knowledgeIndexStore;
+
+    /// <summary>
+    /// Provides access to the job scheduler store for schedule CRUD and worker operations.
+    /// </summary>
+    public JobSchedulerStore SchedulerStore => _schedulerStore;
+
+    /// <summary>
+    /// Provides access to the workflow template store for workflow CRUD operations.
+    /// </summary>
+    public WorkflowStore WorkflowStore => _workflowStore;
 
     /// <summary>
     /// Returns a detailed health status for each subsystem.
@@ -3624,6 +3642,149 @@ public sealed class OfficeBrokerOrchestrator
             VectorStoreStatus = collectionInfo?.Status ?? "unreachable",
         };
     }
+
+    // --- Phase 8: Daily Run Workflow ---
+
+    /// <summary>
+    /// Executes a full daily workflow:
+    /// 1. Refresh state (models, snapshot, training history, knowledge library).
+    /// 2. Run ML pipeline (analytics, forecast, embeddings in parallel).
+    /// 3. Export Suite artifacts.
+    /// 4. Generate operator suggestions based on ML results.
+    /// 5. Log the daily run summary.
+    /// </summary>
+    public async Task<DailyRunSummary> RunDailyWorkflowAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var summary = new DailyRunSummary { StartedAt = DateTimeOffset.Now };
+        var stepResults = new List<DailyRunStepResult>();
+
+        // Step 1: Refresh state
+        try
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                await RefreshContextLockedAsync(cancellationToken);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+            stepResults.Add(new DailyRunStepResult { Step = "RefreshState", Success = true });
+        }
+        catch (Exception ex)
+        {
+            stepResults.Add(new DailyRunStepResult { Step = "RefreshState", Success = false, Error = ex.Message });
+        }
+
+        // Step 2: Run ML pipeline
+        try
+        {
+            await RunFullMLPipelineAsync(cancellationToken);
+            stepResults.Add(new DailyRunStepResult { Step = "MLPipeline", Success = true });
+        }
+        catch (Exception ex)
+        {
+            stepResults.Add(new DailyRunStepResult { Step = "MLPipeline", Success = false, Error = ex.Message });
+        }
+
+        // Step 3: Export Suite artifacts
+        try
+        {
+            await ExportSuiteArtifactsAsync(cancellationToken);
+            stepResults.Add(new DailyRunStepResult { Step = "ExportArtifacts", Success = true });
+        }
+        catch (Exception ex)
+        {
+            stepResults.Add(new DailyRunStepResult { Step = "ExportArtifacts", Success = false, Error = ex.Message });
+        }
+
+        // Step 4: Knowledge indexing
+        try
+        {
+            await RunKnowledgeIndexAsync(cancellationToken);
+            stepResults.Add(new DailyRunStepResult { Step = "KnowledgeIndex", Success = true });
+        }
+        catch (Exception ex)
+        {
+            stepResults.Add(new DailyRunStepResult { Step = "KnowledgeIndex", Success = false, Error = ex.Message });
+        }
+
+        // Step 5: Generate operator suggestions based on ML results
+        try
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_latestMLAnalytics is not null)
+                {
+                    var succeededCount = stepResults.Count(r => r.Success);
+                    var suggestion = new SuggestedAction
+                    {
+                        Title = "Daily Run Complete",
+                        SourceAgent = "daily-run",
+                        Rationale = $"Daily automated workflow completed at {DateTimeOffset.Now:g}. " +
+                                    $"{succeededCount} of {stepResults.Count} steps succeeded.",
+                        Priority = "low",
+                    };
+                    await _operatorMemoryStore.UpsertSuggestionsAsync(
+                        [suggestion], cancellationToken);
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+            stepResults.Add(new DailyRunStepResult { Step = "OperatorSuggestions", Success = true });
+        }
+        catch (Exception ex)
+        {
+            stepResults.Add(new DailyRunStepResult { Step = "OperatorSuggestions", Success = false, Error = ex.Message });
+        }
+
+        summary.CompletedAt = DateTimeOffset.Now;
+        summary.Steps = stepResults;
+        summary.OverallSuccess = stepResults.All(r => r.Success);
+
+        return summary;
+    }
+
+    /// <summary>
+    /// Returns the most recent daily run summary from job history,
+    /// or null if no daily run has been executed.
+    /// </summary>
+    public DailyRunJobSummary? GetLatestDailyRunSummary()
+    {
+        var jobs = _jobStore.ListByStatus(OfficeJobStatus.Succeeded, 50);
+        var dailyRunJob = jobs
+            .Where(j => j.Type == OfficeJobType.DailyRun)
+            .OrderByDescending(j => j.CompletedAt)
+            .FirstOrDefault();
+
+        if (dailyRunJob is null)
+        {
+            // Also check failed runs
+            var failedJobs = _jobStore.ListByStatus(OfficeJobStatus.Failed, 50);
+            dailyRunJob = failedJobs
+                .Where(j => j.Type == OfficeJobType.DailyRun)
+                .OrderByDescending(j => j.CompletedAt)
+                .FirstOrDefault();
+        }
+
+        if (dailyRunJob is null) return null;
+
+        return new DailyRunJobSummary
+        {
+            JobId = dailyRunJob.Id,
+            Status = dailyRunJob.Status,
+            CreatedAt = dailyRunJob.CreatedAt,
+            StartedAt = dailyRunJob.StartedAt,
+            CompletedAt = dailyRunJob.CompletedAt,
+            ResultJson = dailyRunJob.ResultJson,
+            Error = dailyRunJob.Error,
+        };
+    }
 }
 
 /// <summary>
@@ -3647,4 +3808,39 @@ public sealed class KnowledgeIndexStatus
     public int IndexedDocuments { get; set; }
     public ulong VectorStorePoints { get; set; }
     public string VectorStoreStatus { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Result of a daily run workflow execution.
+/// </summary>
+public sealed class DailyRunSummary
+{
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset CompletedAt { get; set; }
+    public bool OverallSuccess { get; set; }
+    public List<DailyRunStepResult> Steps { get; set; } = [];
+}
+
+/// <summary>
+/// Result of a single step in the daily run workflow.
+/// </summary>
+public sealed class DailyRunStepResult
+{
+    public string Step { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+}
+
+/// <summary>
+/// Summary view of the latest daily run job.
+/// </summary>
+public sealed class DailyRunJobSummary
+{
+    public string JobId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public string? ResultJson { get; set; }
+    public string? Error { get; set; }
 }

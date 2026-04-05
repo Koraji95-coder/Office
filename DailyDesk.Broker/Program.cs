@@ -51,6 +51,7 @@ builder.Services.AddSingleton(
 builder.Services.AddSingleton<OfficeBrokerOrchestrator>();
 builder.Services.AddHostedService<OfficeJobWorker>();
 builder.Services.AddHostedService<JobRetentionWorker>();
+builder.Services.AddHostedService<JobSchedulerWorker>();
 
 var app = builder.Build();
 var logger = app.Logger;
@@ -891,6 +892,154 @@ app.MapDelete("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orche
     return Results.NoContent();
 });
 
+// --- Schedule Endpoints (Phase 8) ---
+
+app.MapGet("/api/schedules", (OfficeBrokerOrchestrator orchestrator) =>
+{
+    var schedules = orchestrator.SchedulerStore.ListAll();
+    return Results.Ok(new { schedules });
+});
+
+app.MapPost("/api/schedules", (CreateScheduleRequest request, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var validator = new CreateScheduleRequestValidator();
+    var validation = validator.Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
+    var schedule = new DailyDesk.Models.JobSchedule
+    {
+        Name = request.Name,
+        JobType = request.JobType,
+        CronExpression = request.CronExpression,
+        Enabled = request.Enabled ?? true,
+        RequestPayload = request.RequestPayload,
+    };
+
+    var created = orchestrator.SchedulerStore.Create(schedule);
+    return Results.Created($"/api/schedules/{created.Id}", created);
+});
+
+app.MapPut("/api/schedules/{id}", (string id, UpdateScheduleRequest request, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var validator = new UpdateScheduleRequestValidator();
+    var validation = validator.Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
+    var updated = orchestrator.SchedulerStore.Update(id, schedule =>
+    {
+        if (request.Name is not null) schedule.Name = request.Name;
+        if (request.CronExpression is not null) schedule.CronExpression = request.CronExpression;
+        if (request.Enabled.HasValue) schedule.Enabled = request.Enabled.Value;
+        if (request.RequestPayload is not null) schedule.RequestPayload = request.RequestPayload;
+    });
+
+    if (updated is null)
+    {
+        return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+    }
+
+    return Results.Ok(updated);
+});
+
+app.MapDelete("/api/schedules/{id}", (string id, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var deleted = orchestrator.SchedulerStore.Delete(id);
+    if (!deleted)
+    {
+        return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+    }
+    return Results.NoContent();
+});
+
+// --- Daily Run Endpoint (Phase 8) ---
+
+app.MapGet("/api/daily-run/latest", (OfficeBrokerOrchestrator orchestrator) =>
+{
+    var summary = orchestrator.GetLatestDailyRunSummary();
+    if (summary is null)
+    {
+        return Results.Ok(new { message = "No daily run has been executed yet." });
+    }
+    return Results.Ok(summary);
+});
+
+// --- Workflow Endpoints (Phase 8) ---
+
+app.MapGet("/api/workflows", (OfficeBrokerOrchestrator orchestrator) =>
+{
+    var workflows = orchestrator.WorkflowStore.ListAll();
+    return Results.Ok(new { workflows });
+});
+
+app.MapPost("/api/workflows", (CreateWorkflowRequest request, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var validator = new CreateWorkflowRequestValidator();
+    var validation = validator.Validate(request);
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+    }
+
+    var template = new DailyDesk.Models.WorkflowTemplate
+    {
+        Name = request.Name,
+        Description = request.Description ?? string.Empty,
+        FailurePolicy = request.FailurePolicy ?? DailyDesk.Models.WorkflowFailurePolicy.Abort,
+        Steps = request.Steps.Select(s => new DailyDesk.Models.WorkflowStep
+        {
+            JobType = s.JobType,
+            Label = s.Label ?? string.Empty,
+            RequestPayload = s.RequestPayload,
+        }).ToList(),
+    };
+
+    var created = orchestrator.WorkflowStore.Create(template);
+    return Results.Created($"/api/workflows/{created.Id}", created);
+});
+
+app.MapPost("/api/workflows/{id}/run", (string id, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var template = orchestrator.WorkflowStore.GetById(id);
+    if (template is null)
+    {
+        return Results.NotFound(new { error = $"Workflow '{id}' not found." });
+    }
+
+    var jobIds = new List<string>();
+    foreach (var step in template.Steps)
+    {
+        var job = orchestrator.JobStore.Enqueue(
+            step.JobType,
+            requestedBy: $"workflow:{template.Name}",
+            requestPayload: step.RequestPayload);
+        jobIds.Add(job.Id);
+    }
+
+    return Results.Accepted(value: new
+    {
+        workflowId = id,
+        workflowName = template.Name,
+        jobIds,
+        totalSteps = template.Steps.Count,
+    });
+});
+
+app.MapDelete("/api/workflows/{id}", (string id, OfficeBrokerOrchestrator orchestrator) =>
+{
+    var deleted = orchestrator.WorkflowStore.Delete(id);
+    if (!deleted)
+    {
+        return Results.NotFound(new { error = $"Workflow '{id}' not found or is a built-in template." });
+    }
+    return Results.NoContent();
+});
+
 app.Run();
 
 internal sealed record ChatRouteRequest(string Route);
@@ -913,3 +1062,31 @@ internal sealed record InboxQueueRequest(string SuggestionId, bool? ApproveFirst
 internal sealed record LibraryImportRequest(IReadOnlyList<string>? Paths);
 internal sealed record OfficeHistoryResetRequest(bool? ClearTrainingHistory);
 internal sealed record MLEmbeddingsRequest(string? Query);
+
+// Phase 8: Schedule request records
+internal sealed record CreateScheduleRequest(
+    string Name,
+    string JobType,
+    string CronExpression,
+    bool? Enabled,
+    string? RequestPayload
+);
+internal sealed record UpdateScheduleRequest(
+    string? Name,
+    string? CronExpression,
+    bool? Enabled,
+    string? RequestPayload
+);
+
+// Phase 8: Workflow request records
+internal sealed record CreateWorkflowRequest(
+    string Name,
+    string? Description,
+    string? FailurePolicy,
+    IReadOnlyList<CreateWorkflowStepRequest> Steps
+);
+internal sealed record CreateWorkflowStepRequest(
+    string JobType,
+    string? Label,
+    string? RequestPayload
+);
