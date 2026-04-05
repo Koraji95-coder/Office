@@ -11,6 +11,8 @@ namespace DailyDesk.Broker;
 public sealed class OfficeJobWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DefaultJobTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan StaleJobThreshold = TimeSpan.FromMinutes(10);
 
     private readonly OfficeBrokerOrchestrator _orchestrator;
     private readonly ILogger<OfficeJobWorker> _logger;
@@ -27,6 +29,13 @@ public sealed class OfficeJobWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Recover any jobs left in Running state from a prior crash/restart
+        var recoveredCount = _orchestrator.JobStore.RecoverStaleJobs(StaleJobThreshold);
+        if (recoveredCount > 0)
+        {
+            _logger.LogWarning("Recovered {Count} stale job(s) from prior broker session.", recoveredCount);
+        }
+
         _logger.LogInformation("OfficeJobWorker started. Polling for queued jobs every {Interval}s.", PollInterval.TotalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -60,20 +69,34 @@ public sealed class OfficeJobWorker : BackgroundService
     private async Task ExecuteJobAsync(OfficeJob job, CancellationToken stoppingToken)
     {
         _logger.LogInformation("Executing job {JobId} of type {JobType}.", job.Id, job.Type);
+        using var timeoutCts = new CancellationTokenSource(DefaultJobTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, timeoutCts.Token);
+        var ct = linkedCts.Token;
 
         try
         {
             var resultJson = job.Type switch
             {
-                OfficeJobType.MLAnalytics => await ExecuteMLAnalyticsAsync(stoppingToken),
-                OfficeJobType.MLForecast => await ExecuteMLForecastAsync(stoppingToken),
-                OfficeJobType.MLEmbeddings => await ExecuteMLEmbeddingsAsync(job.RequestPayload, stoppingToken),
-                OfficeJobType.MLPipeline => await ExecuteMLPipelineAsync(stoppingToken),
+                OfficeJobType.MLAnalytics => await ExecuteMLAnalyticsAsync(ct),
+                OfficeJobType.MLForecast => await ExecuteMLForecastAsync(ct),
+                OfficeJobType.MLEmbeddings => await ExecuteMLEmbeddingsAsync(job.RequestPayload, ct),
+                OfficeJobType.MLPipeline => await ExecuteMLPipelineAsync(ct),
                 _ => throw new InvalidOperationException($"Unknown job type: {job.Type}"),
             };
 
             _orchestrator.JobStore.MarkSucceeded(job.Id, resultJson);
             _logger.LogInformation("Job {JobId} succeeded.", job.Id);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            var message = $"Job timed out after {DefaultJobTimeout.TotalMinutes} minutes.";
+            _orchestrator.JobStore.MarkFailed(job.Id, message);
+            _logger.LogWarning("Job {JobId} timed out after {Timeout}.", job.Id, DefaultJobTimeout);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _orchestrator.JobStore.MarkFailed(job.Id, "Job cancelled due to broker shutdown.");
+            _logger.LogWarning("Job {JobId} cancelled due to shutdown.", job.Id);
         }
         catch (Exception ex)
         {
