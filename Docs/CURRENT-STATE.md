@@ -150,7 +150,7 @@ ML endpoints now return a job ID immediately instead of blocking:
 # Build Core + Tests (works on Linux)
 dotnet build DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
 
-# Run tests (78 tests)
+# Run tests
 dotnet test DailyDesk.Core.Tests
 
 # Build WPF (Windows-only, but can cross-compile on Linux)

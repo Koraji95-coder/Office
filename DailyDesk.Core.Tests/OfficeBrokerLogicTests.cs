@@ -1358,8 +1358,9 @@ public sealed class OfficeBrokerLogicTests
             var j3 = store.Enqueue(OfficeJobType.MLPipeline, "third");
 
             // Dequeue j1 (now Running), mark j2 as Succeeded directly
+            // (edge case: bypasses Running state to verify DequeueNext only looks at Queued status)
             store.DequeueNext(); // j1 → Running
-            store.MarkSucceeded(j2.Id, "{}"); // j2 → Succeeded (skipped Running)
+            store.MarkSucceeded(j2.Id, "{}"); // j2 → Succeeded (bypasses Running — edge case)
 
             // DequeueNext should skip j1 (Running) and j2 (Succeeded), return j3
             var next = store.DequeueNext();
