@@ -641,6 +641,225 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    [Theory]
+    [InlineData("chief", true)]
+    [InlineData("engineering", true)]
+    [InlineData("suite", true)]
+    [InlineData("business", true)]
+    [InlineData("ml", true)]
+    [InlineData("CHIEF", true)]
+    [InlineData("unknown", false)]
+    [InlineData("admin", false)]
+    [InlineData("", false)]
+    public void KnownRoutes_ContainsExpectedRoutes(string route, bool expected)
+    {
+        var isKnown = !string.IsNullOrWhiteSpace(route)
+            && OfficeRouteCatalog.KnownRoutes.Contains(route, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(expected, isKnown);
+    }
+
+    [Fact]
+    public void ProcessRunner_CanBeCreatedWithoutLogger()
+    {
+        var runner = new ProcessRunner();
+        Assert.NotNull(runner);
+    }
+
+    // --- PR 2: MLResultStore Persistence Tests ---
+
+    [Fact]
+    public void MLResultStore_SaveAndLoadAnalytics()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new MLResultStore(db);
+
+            Assert.Null(store.LoadAnalytics());
+
+            var result = new MLAnalyticsResult
+            {
+                Ok = true,
+                Engine = "onnx",
+                OverallReadiness = 0.75,
+                WeakTopics = [new MLTopicEntry { Topic = "grounding", Accuracy = 0.4 }],
+            };
+
+            store.SaveAnalytics(result);
+
+            var loaded = store.LoadAnalytics();
+            Assert.NotNull(loaded);
+            Assert.True(loaded.Ok);
+            Assert.Equal("onnx", loaded.Engine);
+            Assert.Equal(0.75, loaded.OverallReadiness);
+            Assert.Single(loaded.WeakTopics);
+            Assert.Equal("grounding", loaded.WeakTopics[0].Topic);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void MLResultStore_SaveAndLoadForecast()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new MLResultStore(db);
+
+            Assert.Null(store.LoadForecast());
+
+            var result = new MLForecastResult
+            {
+                Ok = true,
+                Engine = "python",
+                Forecasts = [new MLTopicForecast { Topic = "circuits", CurrentAccuracy = 0.8, Trend = "improving" }],
+            };
+
+            store.SaveForecast(result);
+
+            var loaded = store.LoadForecast();
+            Assert.NotNull(loaded);
+            Assert.True(loaded.Ok);
+            Assert.Equal("python", loaded.Engine);
+            Assert.Single(loaded.Forecasts);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void MLResultStore_SaveAndLoadEmbeddings()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new MLResultStore(db);
+
+            Assert.Null(store.LoadEmbeddings());
+
+            var result = new MLEmbeddingsResult
+            {
+                Ok = true,
+                Engine = "tfidf",
+                Embeddings = [new MLDocumentEmbedding { DocumentId = "doc1", Title = "Test Doc", Dimensions = 128 }],
+            };
+
+            store.SaveEmbeddings(result);
+
+            var loaded = store.LoadEmbeddings();
+            Assert.NotNull(loaded);
+            Assert.True(loaded.Ok);
+            Assert.Equal("tfidf", loaded.Engine);
+            Assert.Single(loaded.Embeddings);
+            Assert.Equal("doc1", loaded.Embeddings[0].DocumentId);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void MLResultStore_OverwritesLatestResult()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new MLResultStore(db);
+
+            store.SaveAnalytics(new MLAnalyticsResult { Ok = false, Engine = "fallback", OverallReadiness = 0.1 });
+            store.SaveAnalytics(new MLAnalyticsResult { Ok = true, Engine = "onnx", OverallReadiness = 0.9 });
+
+            var loaded = store.LoadAnalytics();
+            Assert.NotNull(loaded);
+            Assert.True(loaded.Ok);
+            Assert.Equal("onnx", loaded.Engine);
+            Assert.Equal(0.9, loaded.OverallReadiness);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void MLResultStore_LoadLastRunTimestamp_ReturnsLatestAcrossTypes()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new MLResultStore(db);
+
+            Assert.Null(store.LoadLastRunTimestamp());
+
+            store.SaveAnalytics(new MLAnalyticsResult { Ok = true, Engine = "onnx" });
+            var afterAnalytics = store.LoadLastRunTimestamp();
+            Assert.NotNull(afterAnalytics);
+
+            store.SaveForecast(new MLForecastResult { Ok = true, Engine = "python" });
+            var afterForecast = store.LoadLastRunTimestamp();
+            Assert.NotNull(afterForecast);
+            Assert.True(afterForecast >= afterAnalytics);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void MLResultStore_SurvivesDbReopen()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            // Save with first DB instance
+            using (var db1 = new OfficeDatabase(tempDir))
+            {
+                var store1 = new MLResultStore(db1);
+                store1.SaveAnalytics(new MLAnalyticsResult { Ok = true, Engine = "onnx", OverallReadiness = 0.85 });
+                store1.SaveForecast(new MLForecastResult { Ok = true, Engine = "python" });
+                store1.SaveEmbeddings(new MLEmbeddingsResult { Ok = true, Engine = "tfidf" });
+            }
+
+            // Load with new DB instance (simulates restart)
+            using (var db2 = new OfficeDatabase(tempDir))
+            {
+                var store2 = new MLResultStore(db2);
+
+                var analytics = store2.LoadAnalytics();
+                Assert.NotNull(analytics);
+                Assert.True(analytics.Ok);
+                Assert.Equal("onnx", analytics.Engine);
+                Assert.Equal(0.85, analytics.OverallReadiness);
+
+                var forecast = store2.LoadForecast();
+                Assert.NotNull(forecast);
+                Assert.True(forecast.Ok);
+
+                var embeddings = store2.LoadEmbeddings();
+                Assert.NotNull(embeddings);
+                Assert.True(embeddings.Ok);
+
+                Assert.NotNull(store2.LoadLastRunTimestamp());
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root

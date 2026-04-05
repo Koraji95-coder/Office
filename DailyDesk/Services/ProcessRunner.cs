@@ -1,9 +1,18 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DailyDesk.Services;
 
 public sealed class ProcessRunner
 {
+    private readonly ILogger<ProcessRunner> _logger;
+
+    public ProcessRunner(ILogger<ProcessRunner>? logger = null)
+    {
+        _logger = logger ?? NullLogger<ProcessRunner>.Instance;
+    }
+
     public async Task<string> RunAsync(
         string fileName,
         string arguments,
@@ -34,11 +43,16 @@ public sealed class ProcessRunner
         var error = await errorTask;
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(error)
-                    ? $"Command '{fileName} {arguments}' failed."
-                    : error.Trim()
-            );
+            var stderrSnippet = string.IsNullOrWhiteSpace(error)
+                ? "(no stderr)"
+                : error.Trim().Length > 500
+                    ? error.Trim()[..500] + "..."
+                    : error.Trim();
+
+            var message = $"Command '{fileName} {arguments}' failed with exit code {process.ExitCode}. stderr: {stderrSnippet}";
+            _logger.LogWarning("Process failed: {Command} exit code {ExitCode}. stderr: {Stderr}",
+                $"{fileName} {arguments}", process.ExitCode, stderrSnippet);
+            throw new InvalidOperationException(message);
         }
 
         return output;

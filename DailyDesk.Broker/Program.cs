@@ -54,6 +54,8 @@ builder.Services.AddHostedService<OfficeJobWorker>();
 var app = builder.Build();
 var logger = app.Logger;
 
+app.UseSerilogRequestLogging();
+
 app.MapGet("/health", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
 {
     try

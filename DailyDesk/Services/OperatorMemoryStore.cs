@@ -2,6 +2,8 @@ using System.IO;
 using System.Text.Json;
 using DailyDesk.Models;
 using LiteDB;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace DailyDesk.Services;
@@ -10,11 +12,13 @@ public sealed class OperatorMemoryStore
 {
     private readonly string _storePath;
     private readonly OfficeDatabase? _db;
+    private readonly ILogger<OperatorMemoryStore> _logger;
     private readonly JsonSerializerOptions _jsonOptions =
         new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
-    public OperatorMemoryStore(string? stateRootPath = null, OfficeDatabase? db = null)
+    public OperatorMemoryStore(string? stateRootPath = null, OfficeDatabase? db = null, ILogger<OperatorMemoryStore>? logger = null)
     {
+        _logger = logger ?? NullLogger<OperatorMemoryStore>.Instance;
         var root = string.IsNullOrWhiteSpace(stateRootPath)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -468,8 +472,9 @@ public sealed class OperatorMemoryStore
             return JsonSerializer.Deserialize<OperatorMemoryState>(payload, _jsonOptions)
                 ?? BuildDefaultState();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to load operator memory from JSON, returning defaults.");
             return BuildDefaultState();
         }
     }
@@ -822,9 +827,9 @@ public sealed class OperatorMemoryStore
                 File.Move(_storePath, migratedPath);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Migration failure is non-fatal.
+            _logger.LogWarning(ex, "Operator memory JSON-to-LiteDB migration failed (non-fatal).");
         }
     }
 }
