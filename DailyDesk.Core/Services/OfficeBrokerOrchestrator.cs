@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using DailyDesk.Models;
+using DailyDesk.Services.Agents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -42,6 +43,10 @@ public sealed class OfficeBrokerOrchestrator
     private readonly EmbeddingService _embeddingService;
     private readonly VectorStoreService _vectorStoreService;
     private readonly KnowledgeIndexStore _knowledgeIndexStore;
+
+    // Phase 6: Semantic Kernel agent orchestration
+    private readonly OfficeKernelFactory _kernelFactory;
+    private readonly Dictionary<string, DeskAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -116,6 +121,40 @@ public sealed class OfficeBrokerOrchestrator
         _embeddingService = new EmbeddingService(ollamaEmbedClient, resiliencePipeline: ollamaPipeline, logger: lf.CreateLogger<EmbeddingService>());
         _vectorStoreService = new VectorStoreService(logger: lf.CreateLogger<VectorStoreService>());
         _knowledgeIndexStore = new KnowledgeIndexStore(_officeDatabase, lf.CreateLogger<KnowledgeIndexStore>());
+
+        // Phase 6: Semantic Kernel agent orchestration
+        _kernelFactory = new OfficeKernelFactory(_settings.OllamaEndpoint, lf);
+        InitializeAgents(lf);
+    }
+
+    /// <summary>
+    /// Creates desk-specific SK agents and registers them by route.
+    /// </summary>
+    private void InitializeAgents(ILoggerFactory lf)
+    {
+        var agentList = new DeskAgent[]
+        {
+            new ChiefOfStaffAgent(
+                _kernelFactory.CreateKernel(_settings.ChiefModel),
+                lf.CreateLogger<ChiefOfStaffAgent>()),
+            new EngineeringDeskAgent(
+                _kernelFactory.CreateKernel(_settings.MentorModel),
+                lf.CreateLogger<EngineeringDeskAgent>()),
+            new SuiteContextAgent(
+                _kernelFactory.CreateKernel(_settings.RepoModel),
+                lf.CreateLogger<SuiteContextAgent>()),
+            new GrowthOpsAgent(
+                _kernelFactory.CreateKernel(_settings.BusinessModel),
+                lf.CreateLogger<GrowthOpsAgent>()),
+            new MLEngineerAgent(
+                _kernelFactory.CreateKernel(_settings.MLModel),
+                lf.CreateLogger<MLEngineerAgent>()),
+        };
+
+        foreach (var agent in agentList)
+        {
+            _agents[agent.RouteId] = agent;
+        }
     }
 
     /// <summary>
@@ -342,12 +381,14 @@ public sealed class OfficeBrokerOrchestrator
             {
                 try
                 {
-                    response = await _modelProvider.GenerateAsync(
-                        routeModel,
-                        BuildDeskSystemPrompt(route),
-                        BuildDeskConversationPromptLocked(route, userPrompt),
-                        cancellationToken
-                    );
+                    // Phase 6: Try SK agent dispatch first, fall back to direct model call
+                    response = await TryAgentChatLockedAsync(route, userPrompt, cancellationToken)
+                        ?? await _modelProvider.GenerateAsync(
+                            routeModel,
+                            BuildDeskSystemPrompt(route),
+                            BuildDeskConversationPromptLocked(route, userPrompt),
+                            cancellationToken
+                        );
                     if (string.IsNullOrWhiteSpace(response))
                     {
                         response = BuildDeskFallbackResponse(route, userPrompt);
@@ -2265,6 +2306,77 @@ public sealed class OfficeBrokerOrchestrator
             "Keep the answer action-oriented, grounded in the selected desk role, and focused on the current request instead of rehashing older wording."
         );
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Attempts to dispatch the chat to the SK agent for the given route.
+    /// Returns null if no agent is registered or the agent call fails,
+    /// allowing the caller to fall back to the original direct model call.
+    /// Also handles multi-turn memory: generates a summary of older messages
+    /// when the thread exceeds the summary threshold.
+    /// </summary>
+    private async Task<string?> TryAgentChatLockedAsync(
+        string route,
+        string userInput,
+        CancellationToken cancellationToken)
+    {
+        if (!_agents.TryGetValue(route, out var agent))
+        {
+            return null;
+        }
+
+        try
+        {
+            var thread = ResolveDeskThreadLocked(route);
+            var contextBlock = BuildDeskConversationPromptLocked(route, userInput);
+
+            var result = await agent.ChatAsync(
+                userInput,
+                thread.Messages,
+                thread.Summary,
+                contextBlock,
+                cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(result))
+            {
+                return null; // Agent returned empty — fall back to direct call
+            }
+
+            // Phase 6.3: Update thread summary if the conversation is getting long
+            await UpdateThreadSummaryLockedAsync(agent, thread, cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            return null; // Agent failed — fall back to direct call
+        }
+    }
+
+    /// <summary>
+    /// Generates and persists a summary of older messages when the thread
+    /// exceeds the configured summary threshold.
+    /// </summary>
+    private async Task UpdateThreadSummaryLockedAsync(
+        DeskAgent agent,
+        DeskThreadState thread,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var summary = await agent.SummarizeOlderMessagesAsync(thread.Messages, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                thread.Summary = summary;
+                _operatorMemoryState = await _operatorMemoryStore.SaveDeskThreadsAsync(
+                    _operatorMemoryState.DeskThreads,
+                    cancellationToken);
+            }
+        }
+        catch
+        {
+            // Summary generation is best-effort; don't break the chat flow
+        }
     }
 
     private string BuildDeskFallbackResponse(string route, string userInput)

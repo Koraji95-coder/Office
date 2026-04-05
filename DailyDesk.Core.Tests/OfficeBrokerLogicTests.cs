@@ -2220,6 +2220,232 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(0, collection.Count());
     }
 
+    // ───────────────────────────────────────────────────────────────────
+    //  Phase 6 — Semantic Kernel Agent Orchestration
+    // ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void OfficeKernelFactory_CreateKernel_ReturnsConfiguredKernel()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        Assert.NotNull(kernel);
+    }
+
+    [Fact]
+    public void OfficeKernelFactory_CreateKernel_ThrowsOnEmptyModel()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        Assert.Throws<ArgumentException>(() => factory.CreateKernel(""));
+    }
+
+    [Fact]
+    public void OfficeKernelFactory_CreateKernel_ThrowsOnNullModel()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        Assert.Throws<ArgumentException>(() => factory.CreateKernel(null!));
+    }
+
+    [Fact]
+    public void OfficeKernelFactory_DefaultsEndpointWhenEmpty()
+    {
+        var factory = new OfficeKernelFactory("");
+        var kernel = factory.CreateKernel("test-model");
+        Assert.NotNull(kernel);
+    }
+
+    [Fact]
+    public void ChiefOfStaffAgent_HasCorrectRouteAndTitle()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        var agent = new DailyDesk.Services.Agents.ChiefOfStaffAgent(kernel);
+        Assert.Equal(OfficeRouteCatalog.ChiefRoute, agent.RouteId);
+        Assert.Equal("Chief of Staff", agent.Title);
+        Assert.Contains("Chief of Staff", agent.SystemPrompt);
+    }
+
+    [Fact]
+    public void EngineeringDeskAgent_HasCorrectRouteAndTitle()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        var agent = new DailyDesk.Services.Agents.EngineeringDeskAgent(kernel);
+        Assert.Equal(OfficeRouteCatalog.EngineeringRoute, agent.RouteId);
+        Assert.Equal("Engineering Desk", agent.Title);
+        Assert.Contains("Engineering Desk", agent.SystemPrompt);
+    }
+
+    [Fact]
+    public void SuiteContextAgent_HasCorrectRouteAndTitle()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        var agent = new DailyDesk.Services.Agents.SuiteContextAgent(kernel);
+        Assert.Equal(OfficeRouteCatalog.SuiteRoute, agent.RouteId);
+        Assert.Equal("Suite Context", agent.Title);
+        Assert.Contains("Suite Context", agent.SystemPrompt);
+    }
+
+    [Fact]
+    public void GrowthOpsAgent_HasCorrectRouteAndTitle()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        var agent = new DailyDesk.Services.Agents.GrowthOpsAgent(kernel);
+        Assert.Equal(OfficeRouteCatalog.BusinessRoute, agent.RouteId);
+        Assert.Equal("Business Ops", agent.Title);
+        Assert.Contains("Business Ops", agent.SystemPrompt);
+    }
+
+    [Fact]
+    public void MLEngineerAgent_HasCorrectRouteAndTitle()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("llama3.2");
+        var agent = new DailyDesk.Services.Agents.MLEngineerAgent(kernel);
+        Assert.Equal(OfficeRouteCatalog.MLRoute, agent.RouteId);
+        Assert.Equal("ML Engineer", agent.Title);
+        Assert.Contains("ML engineering mentor", agent.SystemPrompt);
+    }
+
+    [Fact]
+    public void AgentDispatch_AllKnownRoutes_HaveMatchingAgents()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var agents = new DeskAgent[]
+        {
+            new DailyDesk.Services.Agents.ChiefOfStaffAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.EngineeringDeskAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.SuiteContextAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.GrowthOpsAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.MLEngineerAgent(factory.CreateKernel("m")),
+        };
+
+        var routeIds = agents.Select(a => a.RouteId).ToHashSet();
+        foreach (var route in OfficeRouteCatalog.KnownRoutes)
+        {
+            Assert.Contains(route, routeIds);
+        }
+    }
+
+    [Fact]
+    public void AgentTools_ChiefOfStaff_GetOfficeState_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.ChiefOfStaffAgent.GetOfficeState(
+            "Ollama", "EE fundamentals", "Review AC circuits");
+        Assert.Contains("Provider: Ollama", result);
+        Assert.Contains("Focus: EE fundamentals", result);
+        Assert.Contains("Objective: Review AC circuits", result);
+    }
+
+    [Fact]
+    public void AgentTools_ChiefOfStaff_ListRecentJobs_HandlesEmpty()
+    {
+        var result = DailyDesk.Services.Agents.ChiefOfStaffAgent.ListRecentJobs("");
+        Assert.Equal("No recent jobs.", result);
+    }
+
+    [Fact]
+    public void AgentTools_Engineering_GetTrainingHistory_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.EngineeringDeskAgent.GetTrainingHistory(
+            "3 of 5 passed", "2 items queued", "1 defense completed", "AC circuits, transformer losses");
+        Assert.Contains("Practice: 3 of 5 passed", result);
+        Assert.Contains("Weak topics: AC circuits, transformer losses", result);
+    }
+
+    [Fact]
+    public void AgentTools_Suite_GetSuiteSnapshot_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.SuiteContextAgent.GetSuiteSnapshot(
+            "Running", "panel layout", "fix: breaker calc", "wire sizing");
+        Assert.Contains("Status: Running", result);
+        Assert.Contains("Hot areas: panel layout", result);
+    }
+
+    [Fact]
+    public void AgentTools_GrowthOps_GetOperatorMemory_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.GrowthOpsAgent.GetOperatorMemory(
+            "Finish AC review", "1 pending", "panel calc tool");
+        Assert.Contains("Daily objective: Finish AC review", result);
+        Assert.Contains("Monetization leads: panel calc tool", result);
+    }
+
+    [Fact]
+    public void AgentTools_ML_GetMLAnalytics_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.MLEngineerAgent.GetMLAnalytics(
+            "scikit-learn", "72%", "AC circuits (65%)", "power systems");
+        Assert.Contains("Engine: scikit-learn", result);
+        Assert.Contains("Readiness: 72%", result);
+    }
+
+    [Fact]
+    public void AgentTools_ML_GetMLPipelineStatus_ReturnsFormatted()
+    {
+        var result = DailyDesk.Services.Agents.MLEngineerAgent.GetMLPipelineStatus(
+            "yes", "2026-04-01 10:00 AM");
+        Assert.Contains("Pipeline has run: yes", result);
+        Assert.Contains("Last run: 2026-04-01 10:00 AM", result);
+    }
+
+    [Fact]
+    public void DeskThreadState_Summary_DefaultsToNull()
+    {
+        var thread = new DeskThreadState();
+        Assert.Null(thread.Summary);
+    }
+
+    [Fact]
+    public void DeskThreadState_Summary_CanBeSetAndRetrieved()
+    {
+        var thread = new DeskThreadState { Summary = "Earlier discussion covered AC circuits and breaker sizing." };
+        Assert.Equal("Earlier discussion covered AC circuits and breaker sizing.", thread.Summary);
+    }
+
+    [Fact]
+    public void DeskAgent_RouteId_MatchesKnownRoute_ForAllAgents()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var agents = new DeskAgent[]
+        {
+            new DailyDesk.Services.Agents.ChiefOfStaffAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.EngineeringDeskAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.SuiteContextAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.GrowthOpsAgent(factory.CreateKernel("m")),
+            new DailyDesk.Services.Agents.MLEngineerAgent(factory.CreateKernel("m")),
+        };
+
+        foreach (var agent in agents)
+        {
+            Assert.Contains(agent.RouteId, OfficeRouteCatalog.KnownRoutes);
+            Assert.Equal(OfficeRouteCatalog.ResolveRouteTitle(agent.RouteId), agent.Title);
+        }
+    }
+
+    [Fact]
+    public void AgentTools_Engineering_GetKnowledgeContext_HandlesEmpty()
+    {
+        var result = DailyDesk.Services.Agents.EngineeringDeskAgent.GetKnowledgeContext("");
+        Assert.Equal("No relevant notebook evidence available.", result);
+    }
+
+    [Fact]
+    public void AgentTools_Suite_GetLibraryDocs_HandlesEmpty()
+    {
+        var result = DailyDesk.Services.Agents.SuiteContextAgent.GetLibraryDocs("");
+        Assert.Equal("No library documents imported yet.", result);
+    }
+
+    [Fact]
+    public void AgentTools_GrowthOps_GetSuggestions_HandlesEmpty()
+    {
+        var result = DailyDesk.Services.Agents.GrowthOpsAgent.GetSuggestions("");
+        Assert.Equal("No active suggestions.", result);
+    }
+
     /// <summary>Helper for creating disposable temp directories in tests.</summary>
     private sealed class TempDirectory : IDisposable
     {
