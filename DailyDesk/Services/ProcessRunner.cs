@@ -82,7 +82,7 @@ public sealed class ProcessRunner
         {
             var output = await RunAsync("python", "--version", null, cancellationToken);
             var version = output.Trim();
-            if (!string.IsNullOrWhiteSpace(version) && version.Contains('3'))
+            if (!string.IsNullOrWhiteSpace(version) && version.StartsWith("Python 3", StringComparison.OrdinalIgnoreCase))
             {
                 return version;
             }

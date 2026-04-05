@@ -194,7 +194,7 @@ public sealed class OfficeBrokerOrchestrator
         // Compute overall status
         var statuses = new[] { report.Ollama.Status, report.Python.Status, report.LiteDB.Status, report.JobWorker.Status };
         if (statuses.Any(s => s == HealthStatus.Unavailable))
-            report.Overall = HealthStatus.Degraded;
+            report.Overall = HealthStatus.Unavailable;
         else if (statuses.Any(s => s == HealthStatus.Degraded))
             report.Overall = HealthStatus.Degraded;
         else
