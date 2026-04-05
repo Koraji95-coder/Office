@@ -131,7 +131,7 @@ public sealed class JobPollingService
         {
             JobId = jobId,
             FinalStatus = OfficeJobStatus.Failed,
-            Error = $"Polling timed out after {maxAttempts} attempts.",
+            Error = $"Polling timed out after {maxAttempts} attempts ({maxAttempts * interval.TotalSeconds:F0}s elapsed).",
         };
     }
 

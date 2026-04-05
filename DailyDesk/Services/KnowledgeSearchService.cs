@@ -27,6 +27,8 @@ public sealed class KnowledgeSearchService
     /// <summary>
     /// Performs semantic search over the knowledge index.
     /// Falls back to text-based search over the provided library when Qdrant is unreachable.
+    /// Provide <paramref name="fallbackLibrary"/> if text-based fallback is desired when
+    /// embedding generation or Qdrant is unavailable.
     /// </summary>
     public async Task<KnowledgeSearchResponse> SearchAsync(
         string query,
