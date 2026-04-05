@@ -131,6 +131,18 @@ ML endpoints now return a job ID immediately instead of blocking:
 - Status endpoints: `GET /api/jobs`, `GET /api/jobs/{jobId}`, `GET /api/jobs/{jobId}/result`.
 - Backward compatibility: `?sync=true` query parameter on ML endpoints for blocking behavior.
 
+### 14. Semantic Search via Ollama Embeddings + Qdrant (Phase 5)
+
+**Where:** `EmbeddingService.cs`, `VectorStoreService.cs`, `KnowledgeIndexStore.cs`, `KnowledgePromptContextBuilder.cs`.
+
+Knowledge documents are indexed into a Qdrant vector database via Ollama-generated embeddings:
+- `EmbeddingService` calls Ollama `/api/embed` endpoint via OllamaSharp (graceful null fallback).
+- `VectorStoreService` wraps Qdrant client with `UpsertAsync`, `SearchAsync`, `DeleteAsync`, `GetCollectionInfoAsync` (graceful empty fallback).
+- `KnowledgeIndexStore` tracks indexed document hashes in LiteDB to avoid re-indexing unchanged documents.
+- `KnowledgePromptContextBuilder.BuildRelevantContextWithSemanticSearchAsync()` queries Qdrant first, then fills remaining slots with keyword search.
+- New job type `knowledge-index` for background document indexing.
+- Endpoints: `POST /api/ml/index-knowledge`, `GET /api/knowledge/index-status`.
+
 ---
 
 ## Current Dependencies
@@ -138,7 +150,7 @@ ML endpoints now return a job ID immediately instead of blocking:
 | Project | NuGet Packages |
 |---------|---------------|
 | `DailyDesk` | None (project ref to Core only) |
-| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4, `AngleSharp` 1.4.0, `OllamaSharp` 5.4.25, `LiteDB` 5.0.21, `Polly.Core` 8.6.6 |
+| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4, `AngleSharp` 1.4.0, `OllamaSharp` 5.4.25, `LiteDB` 5.0.21, `Polly.Core` 8.6.6, `Qdrant.Client` 1.17.0 |
 | `DailyDesk.Broker` | `FluentValidation` 12.1.1, `Serilog.AspNetCore` 10.0.0 |
 | `DailyDesk.Core.Tests` | `xunit` 2.9.3, `xunit.runner.visualstudio` 2.8.2, `Microsoft.NET.Test.Sdk` 17.14.1, `coverlet.collector` 6.0.4 |
 
@@ -202,9 +214,15 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | POST | `/api/ml/pipeline` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/export-artifacts` | Returns `{ jobId, status }` | Blocks and returns result |
 
+### Knowledge Indexing Endpoints (Phase 5 — 2 endpoints)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/ml/index-knowledge` | Trigger knowledge document indexing (async by default, `?sync=true` for blocking) |
+| GET | `/api/knowledge/index-status` | Get indexed vs. total document count and vector store status |
+
 ---
 
-## Test Coverage (89 tests)
+## Test Coverage (128 tests)
 
 | Area | Tests | Coverage |
 |------|-------|----------|
@@ -219,18 +237,14 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | Stale job recovery | 4 | Old running → failed, recent running preserved, queued/completed ignored, count |
 | Job model integration tests (PR 5) | 13 | FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips |
 | **Job management & retention (PR 6)** | **9** | **DeleteById (completed/nonexistent/queued/failed), DeleteOlderThan (expired/active), ListByStatus (filter/limit), GetTotalCount** |
+| **Phase 5: Semantic search** | **28** | **EmbeddingService (model defaults, empty/null/unreachable), VectorSearchResult/CollectionInfo defaults, KnowledgeIndexStore (CRUD, hash, indexing lifecycle), OllamaService embedding fallback, KnowledgePromptContextBuilder semantic fallback, IndexedDocumentRecord defaults, OfficeDatabase KnowledgeIndex collection** |
 
 ---
 
 ## Phase 4 — Future Evaluation (Not Started)
 
-### Qdrant for Persistent Semantic Retrieval
-- **Prerequisite:** Phase 3 complete (async jobs running, LiteDB storing results).
-- **Integration point:** Replace `ml_document_embeddings.py` with Ollama embeddings API (via OllamaSharp) + Qdrant (local Docker) for vector storage. `KnowledgePromptContextBuilder` queries Qdrant instead of in-memory search.
-- **Evaluate when:** Document embeddings are being generated regularly via the job model.
-
 ### Semantic Kernel for Agent Orchestration
-- **Prerequisite:** Phase 3 complete + stable tool/plugin boundary in the broker.
+- **Prerequisite:** Phase 5 complete + stable tool/plugin boundary in the broker.
 - **Integration point:** Replace `PromptComposer` + `OfficeRouteCatalog` with SK agents. Each desk becomes an SK agent with its own tools and system prompt.
 - **Evaluate when:** The 5 agent desks need tool-calling capabilities.
 

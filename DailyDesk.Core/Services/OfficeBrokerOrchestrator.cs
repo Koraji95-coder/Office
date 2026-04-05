@@ -39,6 +39,9 @@ public sealed class OfficeBrokerOrchestrator
     private readonly OfficeJobStore _jobStore;
     private readonly MLResultStore _mlResultStore;
     private readonly ProcessRunner _processRunner;
+    private readonly EmbeddingService _embeddingService;
+    private readonly VectorStoreService _vectorStoreService;
+    private readonly KnowledgeIndexStore _knowledgeIndexStore;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -105,6 +108,14 @@ public sealed class OfficeBrokerOrchestrator
             resiliencePipeline: pythonPipeline,
             logger: lf.CreateLogger<MLAnalyticsService>()
         );
+
+        // Phase 5: Semantic search services
+        var ollamaUri = new Uri(_settings.OllamaEndpoint.EndsWith("/") ? _settings.OllamaEndpoint : $"{_settings.OllamaEndpoint}/");
+        var embeddingHttpClient = new System.Net.Http.HttpClient { BaseAddress = ollamaUri, Timeout = TimeSpan.FromSeconds(90) };
+        var ollamaEmbedClient = new OllamaSharp.OllamaApiClient(embeddingHttpClient);
+        _embeddingService = new EmbeddingService(ollamaEmbedClient, resiliencePipeline: ollamaPipeline, logger: lf.CreateLogger<EmbeddingService>());
+        _vectorStoreService = new VectorStoreService(logger: lf.CreateLogger<VectorStoreService>());
+        _knowledgeIndexStore = new KnowledgeIndexStore(_officeDatabase, lf.CreateLogger<KnowledgeIndexStore>());
     }
 
     /// <summary>
@@ -116,6 +127,21 @@ public sealed class OfficeBrokerOrchestrator
     /// Configured retention period (in days) for completed jobs.
     /// </summary>
     public int JobRetentionDays => _settings.JobRetentionDays;
+
+    /// <summary>
+    /// Provides access to the embedding service for the job worker.
+    /// </summary>
+    public EmbeddingService EmbeddingService => _embeddingService;
+
+    /// <summary>
+    /// Provides access to the vector store for the job worker and search.
+    /// </summary>
+    public VectorStoreService VectorStoreService => _vectorStoreService;
+
+    /// <summary>
+    /// Provides access to the knowledge index tracking store.
+    /// </summary>
+    public KnowledgeIndexStore KnowledgeIndexStore => _knowledgeIndexStore;
 
     /// <summary>
     /// Returns a detailed health status for each subsystem.
@@ -3368,4 +3394,145 @@ public sealed class OfficeBrokerOrchestrator
             LastRunAt = _lastMLRunAt,
         };
     }
+
+    /// <summary>
+    /// Indexes all knowledge documents by generating embeddings and storing them in the vector store.
+    /// Skips documents that have not changed since last indexing.
+    /// </summary>
+    public async Task<KnowledgeIndexResult> RunKnowledgeIndexAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<DailyDesk.Models.LearningDocument> documents;
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            documents = _learningLibrary.Documents;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        var indexed = 0;
+        var skipped = 0;
+        var failed = 0;
+        var total = documents.Count;
+
+        foreach (var document in documents)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var textContent = document.ExtractedText ?? document.Summary ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(textContent))
+            {
+                skipped++;
+                continue;
+            }
+
+            var contentHash = KnowledgeIndexStore.ComputeContentHash(textContent);
+            if (!_knowledgeIndexStore.NeedsIndexing(document.RelativePath, contentHash))
+            {
+                skipped++;
+                continue;
+            }
+
+            var embedding = await _embeddingService.GenerateEmbeddingAsync(textContent, cancellationToken);
+            if (embedding is null)
+            {
+                failed++;
+                continue;
+            }
+
+            var vectorId = Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(document.RelativePath)))[..32];
+
+            var metadata = new Dictionary<string, string>
+            {
+                ["path"] = document.RelativePath,
+                ["kind"] = document.Kind,
+                ["source"] = document.SourceRootLabel,
+            };
+            if (document.Topics.Count > 0)
+            {
+                metadata["topics"] = string.Join(", ", document.Topics.Take(5));
+            }
+
+            var upserted = await _vectorStoreService.UpsertAsync(vectorId, embedding, metadata, cancellationToken);
+            if (upserted)
+            {
+                _knowledgeIndexStore.MarkIndexed(document.RelativePath, contentHash, vectorId);
+                indexed++;
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        return new KnowledgeIndexResult
+        {
+            TotalDocuments = total,
+            Indexed = indexed,
+            Skipped = skipped,
+            Failed = failed,
+            IndexedAt = DateTimeOffset.Now,
+        };
+    }
+
+    /// <summary>
+    /// Returns the current knowledge index status (indexed vs. total documents).
+    /// </summary>
+    public async Task<KnowledgeIndexStatus> GetKnowledgeIndexStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        int totalDocuments;
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedLockedAsync(cancellationToken);
+            totalDocuments = _learningLibrary.Documents.Count;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        var indexedCount = _knowledgeIndexStore.GetIndexedCount();
+        var collectionInfo = await _vectorStoreService.GetCollectionInfoAsync(cancellationToken);
+
+        return new KnowledgeIndexStatus
+        {
+            TotalDocuments = totalDocuments,
+            IndexedDocuments = indexedCount,
+            VectorStorePoints = collectionInfo?.PointsCount ?? 0,
+            VectorStoreStatus = collectionInfo?.Status ?? "unreachable",
+        };
+    }
+}
+
+/// <summary>
+/// Result of a knowledge indexing run.
+/// </summary>
+public sealed class KnowledgeIndexResult
+{
+    public int TotalDocuments { get; set; }
+    public int Indexed { get; set; }
+    public int Skipped { get; set; }
+    public int Failed { get; set; }
+    public DateTimeOffset IndexedAt { get; set; }
+}
+
+/// <summary>
+/// Status snapshot of the knowledge index.
+/// </summary>
+public sealed class KnowledgeIndexStatus
+{
+    public int TotalDocuments { get; set; }
+    public int IndexedDocuments { get; set; }
+    public ulong VectorStorePoints { get; set; }
+    public string VectorStoreStatus { get; set; } = string.Empty;
 }
