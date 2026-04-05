@@ -753,6 +753,14 @@ public sealed class OperatorMemoryStore
             Kind = message.Kind,
             Content = message.Content,
             CreatedAt = message.CreatedAt,
+            ToolCalls = message.ToolCalls?.Select(tc => new ToolCallRecord
+            {
+                ToolName = tc.ToolName,
+                Arguments = tc.Arguments,
+                Result = tc.Result,
+                Status = tc.Status,
+                DurationMs = tc.DurationMs,
+            }).ToList(),
         };
 
     private static SuggestionOutcome CloneOutcome(SuggestionOutcome outcome) =>

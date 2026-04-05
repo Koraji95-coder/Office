@@ -3342,4 +3342,712 @@ public sealed class OfficeBrokerLogicTests
         Assert.NotNull(updated.NextRunAt);
         Assert.True(updated.NextRunAt > DateTimeOffset.Now);
     }
+
+    // ========================================================================
+    // Phase 9 — WPF Client Async Integration Tests
+    // ========================================================================
+
+    // --- PR 9.1: JobPollingService Tests ---
+
+    [Fact]
+    public void JobPollResult_Succeeded_ReturnsTrue()
+    {
+        var result = new JobPollResult
+        {
+            JobId = "test-1",
+            FinalStatus = OfficeJobStatus.Succeeded,
+        };
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void JobPollResult_Failed_ReturnsFalse()
+    {
+        var result = new JobPollResult
+        {
+            JobId = "test-1",
+            FinalStatus = OfficeJobStatus.Failed,
+            Error = "Something went wrong.",
+        };
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void JobPollResult_EmptyStatus_ReturnsFalse()
+    {
+        var result = new JobPollResult();
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void JobPollStatus_DefaultProperties()
+    {
+        var status = new JobPollStatus();
+        Assert.Equal(string.Empty, status.Id);
+        Assert.Equal(string.Empty, status.Type);
+        Assert.Equal(string.Empty, status.Status);
+        Assert.Null(status.StartedAt);
+        Assert.Null(status.CompletedAt);
+        Assert.Null(status.Error);
+        Assert.Null(status.RequestedBy);
+    }
+
+    [Fact]
+    public void JobPollStatus_CanStoreAllProperties()
+    {
+        var now = DateTimeOffset.Now;
+        var status = new JobPollStatus
+        {
+            Id = "job-42",
+            Type = OfficeJobType.MLAnalytics,
+            Status = OfficeJobStatus.Running,
+            CreatedAt = now,
+            StartedAt = now.AddSeconds(1),
+            CompletedAt = null,
+            Error = null,
+            RequestedBy = "test-user",
+        };
+
+        Assert.Equal("job-42", status.Id);
+        Assert.Equal(OfficeJobType.MLAnalytics, status.Type);
+        Assert.Equal(OfficeJobStatus.Running, status.Status);
+        Assert.Equal(now, status.CreatedAt);
+        Assert.Equal(now.AddSeconds(1), status.StartedAt);
+        Assert.Null(status.CompletedAt);
+        Assert.Null(status.Error);
+        Assert.Equal("test-user", status.RequestedBy);
+    }
+
+    [Fact]
+    public void JobActivityItem_StatusTransitions_UpdateIsActive()
+    {
+        var item = new JobActivityItem
+        {
+            Title = "ML Analytics",
+            Agent = "ML Engineer",
+            Model = "llama3.2",
+            Status = OfficeJobStatus.Queued,
+            Summary = "Waiting in queue...",
+        };
+
+        Assert.True(item.IsActive);
+
+        item.Status = OfficeJobStatus.Running;
+        Assert.True(item.IsActive);
+
+        item.Status = OfficeJobStatus.Succeeded;
+        Assert.False(item.IsActive);
+
+        item.Status = OfficeJobStatus.Failed;
+        Assert.False(item.IsActive);
+    }
+
+    [Fact]
+    public void JobActivityItem_CompletedAt_UpdatesDisplayMeta()
+    {
+        var item = new JobActivityItem
+        {
+            Title = "Test",
+            Agent = "Agent",
+            Model = "model",
+            Status = OfficeJobStatus.Running,
+        };
+
+        var metaBefore = item.DisplayMeta;
+        item.Status = OfficeJobStatus.Succeeded;
+        item.CompletedAt = DateTimeOffset.Now;
+        var metaAfter = item.DisplayMeta;
+
+        Assert.Contains("succeeded", metaAfter);
+        Assert.DoesNotContain("succeeded", metaBefore);
+    }
+
+    [Fact]
+    public async Task JobPollingService_SubmitJob_ReturnsNullOnFailure()
+    {
+        // Use a client that points to nothing (will fail immediately)
+        var handler = new FailingHttpHandler();
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        var jobId = await service.SubmitJobAsync("/api/ml/analytics");
+        Assert.Null(jobId);
+    }
+
+    [Fact]
+    public async Task JobPollingService_GetJobStatus_ReturnsNullOnFailure()
+    {
+        var handler = new FailingHttpHandler();
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        var status = await service.GetJobStatusAsync("nonexistent");
+        Assert.Null(status);
+    }
+
+    [Fact]
+    public async Task JobPollingService_PollUntilComplete_TimesOutGracefully()
+    {
+        var handler = new FailingHttpHandler();
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        var result = await service.PollUntilCompleteAsync(
+            "test-job",
+            maxAttempts: 2,
+            pollInterval: TimeSpan.FromMilliseconds(10));
+
+        Assert.Equal(OfficeJobStatus.Failed, result.FinalStatus);
+        Assert.Contains("not found", result.Error);
+    }
+
+    [Fact]
+    public async Task JobPollingService_SubmitAndPoll_ReturnsFailedOnSubmissionFailure()
+    {
+        var handler = new FailingHttpHandler();
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        var result = await service.SubmitAndPollAsync("/api/ml/analytics", null);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(OfficeJobStatus.Failed, result.FinalStatus);
+        Assert.Contains("submission failed", result.Error);
+    }
+
+    [Fact]
+    public async Task JobPollingService_PollUntilComplete_FiresStatusChange()
+    {
+        var statusChanges = new List<string>();
+        var handler = new SequenceHttpHandler(
+        [
+            // First poll returns running
+            new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(new JobPollStatus
+                    {
+                        Id = "j1", Status = OfficeJobStatus.Running, Type = "ml-analytics",
+                    })),
+            },
+            // Second poll returns succeeded
+            new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(new JobPollStatus
+                    {
+                        Id = "j1", Status = OfficeJobStatus.Succeeded, Type = "ml-analytics",
+                        CompletedAt = DateTimeOffset.Now,
+                    })),
+            },
+        ]);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        var result = await service.PollUntilCompleteAsync(
+            "j1",
+            onStatusChange: s => statusChanges.Add(s.Status),
+            pollInterval: TimeSpan.FromMilliseconds(10));
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(OfficeJobStatus.Running, statusChanges);
+        Assert.Contains(OfficeJobStatus.Succeeded, statusChanges);
+    }
+
+    [Fact]
+    public async Task JobPollingService_PollUntilComplete_ReportsCancellation()
+    {
+        var handler = new NeverRespondingHandler();
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") };
+        var service = new JobPollingService(client);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.PollUntilCompleteAsync("j1",
+                pollInterval: TimeSpan.FromMilliseconds(10),
+                cancellationToken: cts.Token));
+    }
+
+    // --- PR 9.2: KnowledgeSearchService Tests ---
+
+    [Fact]
+    public async Task KnowledgeSearchService_EmptyQuery_ReturnsNone()
+    {
+        var handler = new FailingHttpHandler();
+        var embeddingClient = new OllamaSharp.OllamaApiClient(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1") });
+        var embeddingService = new EmbeddingService(embeddingClient);
+        var vectorStore = new VectorStoreService("localhost", 1);
+        var searchService = new KnowledgeSearchService(embeddingService, vectorStore);
+
+        var response = await searchService.SearchAsync("", null);
+        Assert.Equal("none", response.SearchMode);
+        Assert.Empty(response.Results);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_EmptyLibrary_ReturnsEmpty()
+    {
+        var result = KnowledgeSearchService.FallbackTextSearch("test query", null);
+        Assert.Equal("text", result.SearchMode);
+        Assert.Empty(result.Results);
+        Assert.Equal(0, result.TotalResults);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_MatchesByKeyword()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "grounding-guide.md",
+                    RelativePath = "guides/grounding-guide.md",
+                    Summary = "Electrical grounding and bonding practices",
+                    Topics = ["grounding", "bonding", "safety"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motor-control.md",
+                    RelativePath = "guides/motor-control.md",
+                    Summary = "Motor control center design",
+                    Topics = ["motor", "control", "design"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("grounding safety", library);
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("grounding-guide.md", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_NoMatches_ReturnsEmpty()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "grounding-guide.md",
+                    RelativePath = "guides/grounding-guide.md",
+                    Summary = "Electrical grounding and bonding practices",
+                    Topics = ["grounding", "bonding"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("quantum computing", library);
+        Assert.Equal("text", result.SearchMode);
+        Assert.Empty(result.Results);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_RanksMultipleMatches()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "conduit-fill.md",
+                    RelativePath = "guides/conduit-fill.md",
+                    Summary = "Conduit fill calculations and NEC guidelines",
+                    Topics = ["conduit", "NEC"],
+                },
+                new LearningDocument
+                {
+                    FileName = "nec-grounding.md",
+                    RelativePath = "guides/nec-grounding.md",
+                    Summary = "NEC grounding requirements and electrode systems for grounding",
+                    Topics = ["NEC", "grounding", "electrodes"],
+                },
+                new LearningDocument
+                {
+                    FileName = "panel-boards.md",
+                    RelativePath = "guides/panel-boards.md",
+                    Summary = "Panel board sizing and breaker selection",
+                    Topics = ["panels", "breakers"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("NEC grounding", library);
+        Assert.Equal("text", result.SearchMode);
+        Assert.True(result.Results.Count >= 1);
+        // nec-grounding.md should rank highest (matches both tokens)
+        Assert.Equal("nec-grounding.md", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_RespectsTopK()
+    {
+        var docs = Enumerable.Range(1, 20).Select(i => new LearningDocument
+        {
+            FileName = $"doc-{i}.md",
+            RelativePath = $"docs/doc-{i}.md",
+            Summary = $"Document about electrical topic {i}",
+            Topics = ["electrical"],
+        }).ToArray();
+
+        var library = new LearningLibrary { Documents = docs };
+        var result = KnowledgeSearchService.FallbackTextSearch("electrical", library, topK: 3);
+        Assert.Equal(3, result.Results.Count);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_TextFallback_ShortTokensIgnored()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "test.md",
+                    RelativePath = "test.md",
+                    Summary = "A short file about x",
+                    Topics = ["x"],
+                },
+            ],
+        };
+
+        // Single-character tokens should be ignored (< 2 chars)
+        var result = KnowledgeSearchService.FallbackTextSearch("x", library);
+        Assert.Empty(result.Results);
+    }
+
+    [Fact]
+    public void KnowledgeSearchResponse_DefaultValues()
+    {
+        var response = new KnowledgeSearchResponse();
+        Assert.Equal(string.Empty, response.Query);
+        Assert.Equal("none", response.SearchMode);
+        Assert.Empty(response.Results);
+        Assert.Equal(0, response.TotalResults);
+    }
+
+    // --- PR 9.3: Agent Chat with Tool Feedback Tests ---
+
+    [Fact]
+    public void DeskMessageRecord_PlainText_HasNoToolCalls()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "chief",
+            Role = "assistant",
+            Author = "Chief of Staff",
+            Kind = "chat",
+            Content = "Here is your daily brief.",
+        };
+
+        Assert.False(message.HasToolCalls);
+        Assert.Null(message.ToolCalls);
+        Assert.DoesNotContain("tool call", message.Meta);
+    }
+
+    [Fact]
+    public void DeskMessageRecord_WithToolCalls_ReportsHasToolCalls()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "engineering",
+            Role = "assistant",
+            Author = "Engineering Desk",
+            Kind = "chat",
+            Content = "I looked up your training history.",
+            ToolCalls =
+            [
+                new ToolCallRecord
+                {
+                    ToolName = "GetTrainingHistory",
+                    Arguments = "focus: grounding",
+                    Result = "3 recent sessions found.",
+                    Status = "succeeded",
+                    DurationMs = 45,
+                },
+            ],
+        };
+
+        Assert.True(message.HasToolCalls);
+        Assert.Single(message.ToolCalls);
+        Assert.Contains("1 tool call", message.Meta);
+    }
+
+    [Fact]
+    public void DeskMessageRecord_MultipleToolCalls_PluralizesLabel()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "chief",
+            Role = "assistant",
+            Author = "Chief of Staff",
+            Content = "Analysis complete.",
+            ToolCalls =
+            [
+                new ToolCallRecord { ToolName = "GetTrainingHistory", Result = "ok" },
+                new ToolCallRecord { ToolName = "SearchKnowledge", Result = "3 results" },
+                new ToolCallRecord { ToolName = "GetSuiteContext", Result = "context loaded" },
+            ],
+        };
+
+        Assert.True(message.HasToolCalls);
+        Assert.Equal(3, message.ToolCalls.Count);
+        Assert.Contains("3 tool calls", message.Meta);
+    }
+
+    [Fact]
+    public void DeskMessageRecord_EmptyToolCallsList_HasNoToolCalls()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "chief",
+            Role = "assistant",
+            Content = "Plain response.",
+            ToolCalls = [],
+        };
+
+        Assert.False(message.HasToolCalls);
+        Assert.DoesNotContain("tool call", message.Meta);
+    }
+
+    [Fact]
+    public void ToolCallRecord_SucceededStatus_DisplaysCorrectLabel()
+    {
+        var call = new ToolCallRecord
+        {
+            ToolName = "GetTrainingHistory",
+            Status = "succeeded",
+            Result = "Found 3 sessions.",
+            DurationMs = 120,
+        };
+
+        Assert.Contains("🔧", call.DisplayLabel);
+        Assert.Contains("GetTrainingHistory", call.DisplayLabel);
+        Assert.Contains("120ms", call.DisplaySummary);
+    }
+
+    [Fact]
+    public void ToolCallRecord_FailedStatus_DisplaysErrorIcon()
+    {
+        var call = new ToolCallRecord
+        {
+            ToolName = "SearchKnowledge",
+            Status = "failed",
+            Result = "Connection refused.",
+        };
+
+        Assert.Contains("❌", call.DisplayLabel);
+    }
+
+    [Fact]
+    public void ToolCallRecord_SkippedStatus_DisplaysSkipIcon()
+    {
+        var call = new ToolCallRecord
+        {
+            ToolName = "ExportArtifacts",
+            Status = "skipped",
+            Result = "No artifacts to export.",
+        };
+
+        Assert.Contains("⏭️", call.DisplayLabel);
+    }
+
+    [Fact]
+    public void ToolCallRecord_LongResult_Truncates()
+    {
+        var longResult = new string('x', 200);
+        var call = new ToolCallRecord
+        {
+            ToolName = "BigQuery",
+            Result = longResult,
+        };
+
+        Assert.True(call.DisplaySummary.Length < longResult.Length + 50);
+        Assert.Contains("…", call.DisplaySummary);
+    }
+
+    [Fact]
+    public void ToolCallRecord_EmptyResult_ShowsNoOutput()
+    {
+        var call = new ToolCallRecord
+        {
+            ToolName = "SilentTool",
+            Result = "",
+        };
+
+        Assert.Contains("No output", call.DisplaySummary);
+    }
+
+    [Fact]
+    public void ToolCallRecord_NoDuration_OmitsMs()
+    {
+        var call = new ToolCallRecord
+        {
+            ToolName = "QuickTool",
+            Result = "Done.",
+            DurationMs = null,
+        };
+
+        Assert.DoesNotContain("ms", call.DisplaySummary);
+    }
+
+    [Fact]
+    public void ToolCallRecord_DefaultValues()
+    {
+        var call = new ToolCallRecord();
+        Assert.Equal(string.Empty, call.ToolName);
+        Assert.Equal(string.Empty, call.Arguments);
+        Assert.Equal(string.Empty, call.Result);
+        Assert.Equal("succeeded", call.Status);
+        Assert.Null(call.DurationMs);
+    }
+
+    [Fact]
+    public void KnowledgeSearchResult_SimilarityLabels()
+    {
+        Assert.Equal("Very High", new KnowledgeSearchResult { Score = 0.95f }.SimilarityLabel);
+        Assert.Equal("High", new KnowledgeSearchResult { Score = 0.8f }.SimilarityLabel);
+        Assert.Equal("Moderate", new KnowledgeSearchResult { Score = 0.6f }.SimilarityLabel);
+        Assert.Equal("Low", new KnowledgeSearchResult { Score = 0.35f }.SimilarityLabel);
+        Assert.Equal("Weak", new KnowledgeSearchResult { Score = 0.1f }.SimilarityLabel);
+    }
+
+    [Fact]
+    public void KnowledgeSearchResult_DisplaySummary_WithTitle()
+    {
+        var result = new KnowledgeSearchResult
+        {
+            DocumentId = "doc-1",
+            Title = "Grounding Guide",
+            Score = 0.85f,
+        };
+
+        Assert.Contains("Grounding Guide", result.DisplaySummary);
+        Assert.Contains("85", result.DisplaySummary);
+    }
+
+    [Fact]
+    public void KnowledgeSearchResult_DisplaySummary_WithoutTitle()
+    {
+        var result = new KnowledgeSearchResult
+        {
+            DocumentId = "doc-1",
+            Title = "",
+            Score = 0.85f,
+        };
+
+        Assert.Contains("doc-1", result.DisplaySummary);
+    }
+
+    [Fact]
+    public void DeskMessageRecord_BackwardCompatible_SerializesPlainText()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "chief",
+            Role = "user",
+            Author = "You",
+            Content = "Hello desk",
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(message);
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<DeskMessageRecord>(json);
+
+        Assert.NotNull(deserialized);
+        Assert.Equal("Hello desk", deserialized!.Content);
+        Assert.False(deserialized.HasToolCalls);
+        Assert.Null(deserialized.ToolCalls);
+    }
+
+    [Fact]
+    public void DeskMessageRecord_WithToolCalls_RoundTrips()
+    {
+        var message = new DeskMessageRecord
+        {
+            DeskId = "engineering",
+            Role = "assistant",
+            Author = "Engineering",
+            Content = "Analysis done.",
+            ToolCalls =
+            [
+                new ToolCallRecord
+                {
+                    ToolName = "GetTrainingHistory",
+                    Arguments = "focus: grounding",
+                    Result = "Found 3 sessions.",
+                    Status = "succeeded",
+                    DurationMs = 42,
+                },
+            ],
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(message);
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<DeskMessageRecord>(json);
+
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized!.HasToolCalls);
+        Assert.Single(deserialized.ToolCalls!);
+        Assert.Equal("GetTrainingHistory", deserialized.ToolCalls![0].ToolName);
+        Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
+    }
+
+    // --- Test helpers ---
+
+    /// <summary>
+    /// HttpMessageHandler that always throws HttpRequestException.
+    /// </summary>
+    private sealed class FailingHttpHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException("Connection refused (test)");
+        }
+    }
+
+    /// <summary>
+    /// HttpMessageHandler that returns a sequence of pre-built responses.
+    /// </summary>
+    private sealed class SequenceHttpHandler : HttpMessageHandler
+    {
+        private readonly Queue<HttpResponseMessage> _responses;
+
+        public SequenceHttpHandler(IEnumerable<HttpResponseMessage> responses)
+        {
+            _responses = new Queue<HttpResponseMessage>(responses);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (_responses.Count == 0)
+            {
+                throw new HttpRequestException("No more responses (test)");
+            }
+
+            return Task.FromResult(_responses.Dequeue());
+        }
+    }
+
+    /// <summary>
+    /// HttpMessageHandler that never completes (for cancellation tests).
+    /// </summary>
+    private sealed class NeverRespondingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
+    }
 }

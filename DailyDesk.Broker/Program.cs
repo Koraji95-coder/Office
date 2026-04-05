@@ -797,6 +797,32 @@ app.MapGet("/api/knowledge/index-status", async (OfficeBrokerOrchestrator orches
     }
 });
 
+// --- Knowledge Search Endpoint (Phase 9) ---
+
+app.MapPost("/api/knowledge/search", async (KnowledgeSearchRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var searchService = new DailyDesk.Services.KnowledgeSearchService(
+            orchestrator.EmbeddingService,
+            orchestrator.VectorStoreService);
+        var response = await searchService.SearchAsync(
+            request.Query,
+            topK: request.TopK > 0 ? request.TopK : 5,
+            cancellationToken: ct);
+        return Results.Ok(response);
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Knowledge search endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Knowledge search failed",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
 // --- Job Status Endpoints (Phase 3) ---
 
 app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator) =>
@@ -1090,3 +1116,6 @@ internal sealed record CreateWorkflowStepRequest(
     string? Label,
     string? RequestPayload
 );
+
+// Phase 9: Knowledge search request record
+internal sealed record KnowledgeSearchRequest(string Query, int TopK = 5);
