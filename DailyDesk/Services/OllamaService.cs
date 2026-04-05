@@ -167,4 +167,44 @@ public sealed class OllamaService : IModelProvider
             return false;
         }
     }
+
+    /// <summary>
+    /// Generates an embedding vector via the Ollama /api/embed endpoint.
+    /// Returns null if Ollama is unavailable or the model does not support embeddings.
+    /// </summary>
+    public async Task<float[]?> GenerateEmbeddingAsync(
+        string text,
+        string? model = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            var response = await _resiliencePipeline.ExecuteAsync(async ct =>
+            {
+                var request = new EmbedRequest
+                {
+                    Model = model ?? EmbeddingService.DefaultEmbeddingModel,
+                    Input = [text],
+                };
+                return await _client.EmbedAsync(request, ct);
+            }, cancellationToken);
+
+            if (response?.Embeddings is { Count: > 0 })
+            {
+                return response.Embeddings[0].Select(d => (float)d).ToArray();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Embedding generation failed, returning null.");
+            return null;
+        }
+    }
 }

@@ -750,6 +750,52 @@ app.MapPost("/api/ml/export-artifacts", async (HttpContext httpContext, OfficeBr
     }
 });
 
+// --- Knowledge Indexing Endpoints (Phase 5) ---
+
+app.MapPost("/api/ml/index-knowledge", async (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    var sync = httpContext.Request.Query["sync"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (!sync)
+    {
+        var job = orchestrator.JobStore.Enqueue(DailyDesk.Models.OfficeJobType.KnowledgeIndex, "broker");
+        return Results.Accepted($"/api/jobs/{job.Id}", new { jobId = job.Id, status = job.Status });
+    }
+
+    try
+    {
+        var result = await orchestrator.RunKnowledgeIndexAsync(ct);
+        return Results.Ok(result);
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Knowledge indexing endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to index knowledge documents",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+app.MapGet("/api/knowledge/index-status", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        var status = await orchestrator.GetKnowledgeIndexStatusAsync(ct);
+        return Results.Ok(status);
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Knowledge index status endpoint failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Failed to get index status",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
 // --- Job Status Endpoints (Phase 3) ---
 
 app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator) =>

@@ -82,6 +82,7 @@ public sealed class OfficeJobWorker : BackgroundService
                 OfficeJobType.MLEmbeddings => await ExecuteMLEmbeddingsAsync(job.RequestPayload, ct),
                 OfficeJobType.MLPipeline => await ExecuteMLPipelineAsync(ct),
                 OfficeJobType.MLExportArtifacts => await ExecuteMLExportArtifactsAsync(ct),
+                OfficeJobType.KnowledgeIndex => await ExecuteKnowledgeIndexAsync(ct),
                 _ => throw new InvalidOperationException($"Unknown job type: {job.Type}"),
             };
 
@@ -147,6 +148,12 @@ public sealed class OfficeJobWorker : BackgroundService
     private async Task<string> ExecuteMLExportArtifactsAsync(CancellationToken ct)
     {
         var result = await _orchestrator.ExportSuiteArtifactsAsync(ct);
+        return JsonSerializer.Serialize(result, _jsonOptions);
+    }
+
+    private async Task<string> ExecuteKnowledgeIndexAsync(CancellationToken ct)
+    {
+        var result = await _orchestrator.RunKnowledgeIndexAsync(ct);
         return JsonSerializer.Serialize(result, _jsonOptions);
     }
 

@@ -149,6 +149,142 @@ public static class KnowledgePromptContextBuilder
         return builder.Length == 0 ? "none recorded" : builder.ToString().Trim();
     }
 
+    /// <summary>
+    /// Builds context using semantic search (Qdrant) with keyword fallback.
+    /// Semantic results are preferred; keyword results fill remaining slots.
+    /// Falls back entirely to keyword search if embedding or vector store is unavailable.
+    /// </summary>
+    public static async Task<string> BuildRelevantContextWithSemanticSearchAsync(
+        LearningLibrary library,
+        IReadOnlyList<string?> hints,
+        EmbeddingService? embeddingService,
+        VectorStoreService? vectorStoreService,
+        int maxDocuments = 3,
+        int maxTotalCharacters = 2400,
+        int maxExcerptCharacters = 720,
+        CancellationToken cancellationToken = default)
+    {
+        if (library.Documents.Count == 0)
+        {
+            return "none recorded";
+        }
+
+        var semanticPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Attempt semantic search if both services are available
+        if (embeddingService is not null && vectorStoreService is not null)
+        {
+            var queryText = string.Join(" ", hints.Where(h => !string.IsNullOrWhiteSpace(h)));
+            if (!string.IsNullOrWhiteSpace(queryText))
+            {
+                try
+                {
+                    var queryEmbedding = await embeddingService.GenerateEmbeddingAsync(queryText, cancellationToken);
+                    if (queryEmbedding is not null)
+                    {
+                        var searchResults = await vectorStoreService.SearchAsync(queryEmbedding, topK: maxDocuments, cancellationToken);
+                        foreach (var result in searchResults)
+                        {
+                            if (result.Metadata.TryGetValue("path", out var path) && !string.IsNullOrWhiteSpace(path))
+                            {
+                                semanticPaths.Add(path);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Semantic search failed; fall through to keyword search
+                }
+            }
+        }
+
+        var terms = ExtractTerms(hints);
+
+        // Build ranked candidate list: semantic results first, then keyword results
+        var documentsByPath = library.Documents
+            .Where(HasPromptableContent)
+            .ToDictionary(d => d.RelativePath, d => d, StringComparer.OrdinalIgnoreCase);
+
+        var orderedCandidates = new List<LearningDocument>();
+
+        // Add semantic matches first (in search result order)
+        foreach (var path in semanticPaths)
+        {
+            if (documentsByPath.TryGetValue(path, out var doc))
+            {
+                orderedCandidates.Add(doc);
+            }
+        }
+
+        // Fill remaining slots with keyword-ranked documents
+        var keywordCandidates = library.Documents
+            .Where(HasPromptableContent)
+            .Where(d => !semanticPaths.Contains(d.RelativePath))
+            .Select(document => new { Document = document, Score = ScoreDocument(document, terms) })
+            .OrderByDescending(item => item.Score)
+            .ThenByDescending(item => item.Document.LastUpdated)
+            .Select(item => item.Document)
+            .ToList();
+
+        orderedCandidates.AddRange(keywordCandidates);
+
+        if (orderedCandidates.Count == 0)
+        {
+            return "none recorded";
+        }
+
+        // Build output using the same formatting as the synchronous method
+        var builder = new StringBuilder();
+        var remainingCharacters = Math.Max(400, maxTotalCharacters);
+        var added = 0;
+
+        foreach (var document in orderedCandidates)
+        {
+            if (added >= maxDocuments || remainingCharacters <= 180)
+            {
+                break;
+            }
+
+            var excerptBudget = Math.Min(maxExcerptCharacters, Math.Max(220, remainingCharacters - 160));
+            var excerpt = BuildExcerpt(document, terms, excerptBudget);
+            if (string.IsNullOrWhiteSpace(excerpt))
+            {
+                continue;
+            }
+
+            var topics = document.Topics.Count == 0
+                ? "none"
+                : string.Join(", ", document.Topics.Take(4));
+
+            var block =
+                $"[{document.SourceRootLabel}] {document.RelativePath} ({document.Kind}){Environment.NewLine}"
+                + $"topics: {topics}{Environment.NewLine}"
+                + $"evidence: {excerpt}";
+
+            if (builder.Length > 0)
+            {
+                block = $"{Environment.NewLine}{Environment.NewLine}{block}";
+            }
+
+            if (block.Length > remainingCharacters && added > 0)
+            {
+                break;
+            }
+
+            if (block.Length > remainingCharacters)
+            {
+                block = TrimToLength(block, remainingCharacters);
+            }
+
+            builder.Append(block);
+            remainingCharacters -= block.Length;
+            added++;
+        }
+
+        return builder.Length == 0 ? "none recorded" : builder.ToString().Trim();
+    }
+
     private static bool HasPromptableContent(LearningDocument document)
     {
         if (!string.IsNullOrWhiteSpace(document.ExtractedText))

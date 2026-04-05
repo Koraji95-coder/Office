@@ -1886,4 +1886,352 @@ public sealed class OfficeBrokerLogicTests
 
         return null;
     }
+
+    // --- Phase 5: Semantic Search Tests ---
+
+    [Fact]
+    public void OfficeJobType_KnowledgeIndex_HasExpectedValue()
+    {
+        Assert.Equal("knowledge-index", OfficeJobType.KnowledgeIndex);
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_ComputeContentHash_ReturnsConsistentHash()
+    {
+        var hash1 = KnowledgeIndexStore.ComputeContentHash("Hello, world!");
+        var hash2 = KnowledgeIndexStore.ComputeContentHash("Hello, world!");
+        Assert.Equal(hash1, hash2);
+        Assert.NotEmpty(hash1);
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_ComputeContentHash_DifferentInputsDifferentHashes()
+    {
+        var hash1 = KnowledgeIndexStore.ComputeContentHash("Hello, world!");
+        var hash2 = KnowledgeIndexStore.ComputeContentHash("Goodbye, world!");
+        Assert.NotEqual(hash1, hash2);
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_ComputeContentHash_EmptyReturnsEmpty()
+    {
+        Assert.Equal(string.Empty, KnowledgeIndexStore.ComputeContentHash(null));
+        Assert.Equal(string.Empty, KnowledgeIndexStore.ComputeContentHash(""));
+        Assert.Equal(string.Empty, KnowledgeIndexStore.ComputeContentHash("   "));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_NeedsIndexing_TrueForNewDocument()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        Assert.True(store.NeedsIndexing("doc/test.md", "abc123"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_NeedsIndexing_FalseAfterMarking()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/test.md", "abc123", "vec-001");
+        Assert.False(store.NeedsIndexing("doc/test.md", "abc123"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_NeedsIndexing_TrueAfterContentChange()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/test.md", "abc123", "vec-001");
+        Assert.True(store.NeedsIndexing("doc/test.md", "different-hash"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_GetIndexedCount_TracksCorrectly()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        Assert.Equal(0, store.GetIndexedCount());
+        store.MarkIndexed("doc/a.md", "hash-a", "vec-a");
+        store.MarkIndexed("doc/b.md", "hash-b", "vec-b");
+        Assert.Equal(2, store.GetIndexedCount());
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_RemoveDocument_RemovesEntry()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/test.md", "abc123", "vec-001");
+        Assert.Equal(1, store.GetIndexedCount());
+
+        var removed = store.RemoveDocument("doc/test.md");
+        Assert.True(removed);
+        Assert.Equal(0, store.GetIndexedCount());
+        Assert.True(store.NeedsIndexing("doc/test.md", "abc123"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_RemoveDocument_FalseForMissing()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        Assert.False(store.RemoveDocument("nonexistent.md"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_GetVectorId_ReturnsCorrectId()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/test.md", "abc123", "vec-001");
+        Assert.Equal("vec-001", store.GetVectorId("doc/test.md"));
+        Assert.Null(store.GetVectorId("nonexistent.md"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_MarkIndexed_UpdatesExistingEntry()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/test.md", "hash-v1", "vec-v1");
+        store.MarkIndexed("doc/test.md", "hash-v2", "vec-v2");
+
+        Assert.Equal(1, store.GetIndexedCount());
+        Assert.Equal("vec-v2", store.GetVectorId("doc/test.md"));
+        Assert.False(store.NeedsIndexing("doc/test.md", "hash-v2"));
+    }
+
+    [Fact]
+    public void KnowledgeIndexStore_GetAllIndexed_ReturnsAll()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var store = new KnowledgeIndexStore(db);
+
+        store.MarkIndexed("doc/a.md", "ha", "va");
+        store.MarkIndexed("doc/b.md", "hb", "vb");
+        store.MarkIndexed("doc/c.md", "hc", "vc");
+
+        var all = store.GetAllIndexed();
+        Assert.Equal(3, all.Count);
+        Assert.Contains(all, r => r.DocumentPath == "doc/a.md");
+        Assert.Contains(all, r => r.DocumentPath == "doc/b.md");
+        Assert.Contains(all, r => r.DocumentPath == "doc/c.md");
+    }
+
+    [Fact]
+    public void EmbeddingService_Model_DefaultsToNomicEmbedText()
+    {
+        var httpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri("http://127.0.0.1:1/") };
+        var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+        var service = new EmbeddingService(ollamaClient);
+        Assert.Equal(EmbeddingService.DefaultEmbeddingModel, service.Model);
+        Assert.Equal("nomic-embed-text", service.Model);
+    }
+
+    [Fact]
+    public async Task EmbeddingService_GenerateEmbeddingAsync_ReturnsNullForEmptyText()
+    {
+        var httpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri("http://127.0.0.1:1/") };
+        var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+        var service = new EmbeddingService(ollamaClient);
+
+        Assert.Null(await service.GenerateEmbeddingAsync(""));
+        Assert.Null(await service.GenerateEmbeddingAsync(null!));
+        Assert.Null(await service.GenerateEmbeddingAsync("   "));
+    }
+
+    [Fact]
+    public async Task EmbeddingService_GenerateEmbeddingAsync_ReturnsNullWhenOllamaUnavailable()
+    {
+        // Use unreachable endpoint to verify graceful fallback
+        var httpClient = new System.Net.Http.HttpClient
+        {
+            BaseAddress = new Uri("http://127.0.0.1:1/"),
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+        var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+        var service = new EmbeddingService(ollamaClient);
+
+        var result = await service.GenerateEmbeddingAsync("test text");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task EmbeddingService_GenerateBatchEmbeddingsAsync_ReturnsNullForEmptyList()
+    {
+        var httpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri("http://127.0.0.1:1/") };
+        var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+        var service = new EmbeddingService(ollamaClient);
+
+        Assert.Null(await service.GenerateBatchEmbeddingsAsync(Array.Empty<string>()));
+    }
+
+    [Fact]
+    public async Task EmbeddingService_GenerateBatchEmbeddingsAsync_ReturnsNullWhenOllamaUnavailable()
+    {
+        var httpClient = new System.Net.Http.HttpClient
+        {
+            BaseAddress = new Uri("http://127.0.0.1:1/"),
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+        var ollamaClient = new OllamaSharp.OllamaApiClient(httpClient);
+        var service = new EmbeddingService(ollamaClient);
+
+        var result = await service.GenerateBatchEmbeddingsAsync(new[] { "hello" });
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void VectorSearchResult_DefaultValues()
+    {
+        var result = new VectorSearchResult();
+        Assert.Equal(string.Empty, result.DocumentId);
+        Assert.Equal(0f, result.Score);
+        Assert.NotNull(result.Metadata);
+        Assert.Empty(result.Metadata);
+    }
+
+    [Fact]
+    public void VectorCollectionInfo_DefaultValues()
+    {
+        var info = new VectorCollectionInfo();
+        Assert.Equal(string.Empty, info.Name);
+        Assert.Equal(0UL, info.PointsCount);
+        Assert.Equal(0UL, info.VectorSize);
+        Assert.Equal(string.Empty, info.Status);
+    }
+
+    [Fact]
+    public void KnowledgeIndexResult_DefaultValues()
+    {
+        var result = new KnowledgeIndexResult();
+        Assert.Equal(0, result.TotalDocuments);
+        Assert.Equal(0, result.Indexed);
+        Assert.Equal(0, result.Skipped);
+        Assert.Equal(0, result.Failed);
+    }
+
+    [Fact]
+    public void KnowledgeIndexStatus_DefaultValues()
+    {
+        var status = new KnowledgeIndexStatus();
+        Assert.Equal(0, status.TotalDocuments);
+        Assert.Equal(0, status.IndexedDocuments);
+        Assert.Equal(0UL, status.VectorStorePoints);
+        Assert.Equal(string.Empty, status.VectorStoreStatus);
+    }
+
+    [Fact]
+    public async Task OllamaService_GenerateEmbeddingAsync_ReturnsNullWhenUnreachable()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        var result = await service.GenerateEmbeddingAsync("test text");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task OllamaService_GenerateEmbeddingAsync_ReturnsNullForEmptyText()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        Assert.Null(await service.GenerateEmbeddingAsync(""));
+        Assert.Null(await service.GenerateEmbeddingAsync(null!));
+    }
+
+    [Fact]
+    public async Task KnowledgePromptContextBuilder_SemanticSearchAsync_FallsBackToKeywordWhenServicesNull()
+    {
+        var library = new LearningLibrary
+        {
+            Documents = new[]
+            {
+                new LearningDocument
+                {
+                    RelativePath = "doc1.md",
+                    FileName = "doc1.md",
+                    Kind = "md",
+                    ExtractedText = "Machine learning is a subset of artificial intelligence.",
+                    SourceRootLabel = "Test",
+                    Topics = new[] { "ML", "AI" },
+                },
+            },
+        };
+
+        // When embedding/vector services are null, should fall back to keyword search
+        var result = await KnowledgePromptContextBuilder.BuildRelevantContextWithSemanticSearchAsync(
+            library,
+            new[] { "machine learning" },
+            embeddingService: null,
+            vectorStoreService: null);
+
+        Assert.NotEqual("none recorded", result);
+        Assert.Contains("doc1.md", result);
+    }
+
+    [Fact]
+    public async Task KnowledgePromptContextBuilder_SemanticSearchAsync_ReturnsNoneForEmptyLibrary()
+    {
+        var library = new LearningLibrary();
+        var result = await KnowledgePromptContextBuilder.BuildRelevantContextWithSemanticSearchAsync(
+            library,
+            new[] { "anything" },
+            embeddingService: null,
+            vectorStoreService: null);
+
+        Assert.Equal("none recorded", result);
+    }
+
+    [Fact]
+    public void IndexedDocumentRecord_DefaultValues()
+    {
+        var record = new IndexedDocumentRecord();
+        Assert.NotNull(record.Id);
+        Assert.Equal(string.Empty, record.DocumentPath);
+        Assert.Equal(string.Empty, record.ContentHash);
+        Assert.Equal(string.Empty, record.VectorId);
+    }
+
+    [Fact]
+    public void OfficeDatabase_KnowledgeIndex_CollectionAccessible()
+    {
+        using var tmpDir = new TempDirectory();
+        var db = new OfficeDatabase(tmpDir.Path);
+        var collection = db.KnowledgeIndex;
+        Assert.NotNull(collection);
+        Assert.Equal(0, collection.Count());
+    }
+
+    /// <summary>Helper for creating disposable temp directories in tests.</summary>
+    private sealed class TempDirectory : IDisposable
+    {
+        public string Path { get; }
+        public TempDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "office-test-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(Path);
+        }
+        public void Dispose()
+        {
+            try { Directory.Delete(Path, recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

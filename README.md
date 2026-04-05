@@ -71,6 +71,20 @@ Enable the pipeline in `dailydesk.settings.json`:
 | POST | `/api/ml/embeddings` | Run PyTorch document embeddings (optional query) |
 | POST | `/api/ml/pipeline` | Run full ML pipeline (all three engines + artifact export) |
 | POST | `/api/ml/export-artifacts` | Export Suite integration artifacts |
+| POST | `/api/ml/index-knowledge` | Index knowledge documents into vector store (async, `?sync=true` for blocking) |
+| GET | `/api/knowledge/index-status` | Get knowledge index status (indexed vs. total) |
+
+## Qdrant Setup (Phase 5 — Semantic Search)
+
+Semantic search requires a local Qdrant vector database. Run Qdrant as a Docker container:
+
+```bash
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
+  -v qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
+```
+
+Qdrant is **optional** — all semantic search features fall back gracefully to keyword search when Qdrant is unavailable.
 
 ## Local Roots
 

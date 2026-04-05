@@ -73,6 +73,9 @@ public sealed class OfficeDatabase : IDisposable
     public ILiteCollection<PersistedMLResult> MLEmbeddingsResults =>
         _db.GetCollection<PersistedMLResult>("ml_embeddings");
 
+    public ILiteCollection<IndexedDocumentRecord> KnowledgeIndex =>
+        _db.GetCollection<IndexedDocumentRecord>("knowledge_index");
+
     private void EnsureIndexes()
     {
         PracticeAttempts.EnsureIndex(x => x.CompletedAt);
@@ -85,6 +88,7 @@ public sealed class OfficeDatabase : IDisposable
         Jobs.EnsureIndex(x => x.Id);
         Jobs.EnsureIndex(x => x.Status);
         Jobs.EnsureIndex(x => x.CreatedAt);
+        KnowledgeIndex.EnsureIndex(x => x.DocumentPath);
     }
 
     /// <summary>
