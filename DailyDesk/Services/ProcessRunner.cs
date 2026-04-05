@@ -57,4 +57,41 @@ public sealed class ProcessRunner
 
         return output;
     }
+
+    /// <summary>
+    /// Checks whether Python 3 is available on this system.
+    /// Returns the version string (e.g. "Python 3.12.0") or null if unavailable.
+    /// </summary>
+    public async Task<string?> CheckPythonAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var output = await RunAsync("python3", "--version", null, cancellationToken);
+            var version = output.Trim();
+            if (!string.IsNullOrWhiteSpace(version))
+            {
+                return version;
+            }
+        }
+        catch
+        {
+            // python3 not found, try python
+        }
+
+        try
+        {
+            var output = await RunAsync("python", "--version", null, cancellationToken);
+            var version = output.Trim();
+            if (!string.IsNullOrWhiteSpace(version) && version.StartsWith("Python 3", StringComparison.OrdinalIgnoreCase))
+            {
+                return version;
+            }
+        }
+        catch
+        {
+            // python not found either
+        }
+
+        return null;
+    }
 }

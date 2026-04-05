@@ -50,6 +50,7 @@ builder.Services.AddSingleton(
 );
 builder.Services.AddSingleton<OfficeBrokerOrchestrator>();
 builder.Services.AddHostedService<OfficeJobWorker>();
+builder.Services.AddHostedService<JobRetentionWorker>();
 
 var app = builder.Build();
 var logger = app.Logger;
@@ -68,6 +69,25 @@ app.MapGet("/health", async (OfficeBrokerOrchestrator orchestrator, Cancellation
         return Results.Problem(
             detail: exception.Message,
             title: "Office broker health check failed",
+            statusCode: StatusCodes.Status500InternalServerError
+        );
+    }
+});
+
+// --- Detailed Health Check (Phase 4) ---
+
+app.MapGet("/api/health", async (OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await orchestrator.GetDetailedHealthAsync(ct));
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Detailed health check failed.");
+        return Results.Problem(
+            detail: exception.Message,
+            title: "Detailed health check failed",
             statusCode: StatusCodes.Status500InternalServerError
         );
     }
@@ -753,6 +773,13 @@ app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orche
     }
 
     return Results.Ok(new { jobs, total = orchestrator.JobStore.GetTotalCount() });
+});
+
+// --- Job Metrics Endpoint (Phase 4) ---
+
+app.MapGet("/api/jobs/metrics", (OfficeBrokerOrchestrator orchestrator) =>
+{
+    return Results.Ok(orchestrator.JobStore.GetMetrics());
 });
 
 app.MapGet("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>

@@ -36,6 +36,7 @@ public sealed class DailySettings
     public string MLModel { get; init; } = "qwen3:8b";
     public bool EnableMLPipeline { get; init; }
     public string MLArtifactExportPath { get; init; } = string.Empty;
+    public int JobRetentionDays { get; init; } = 30;
 
     public string ResolveMLArtifactExportPath(string baseDirectory)
     {

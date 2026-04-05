@@ -38,6 +38,7 @@ public sealed class OfficeBrokerOrchestrator
     private readonly OfficeDatabase _officeDatabase;
     private readonly OfficeJobStore _jobStore;
     private readonly MLResultStore _mlResultStore;
+    private readonly ProcessRunner _processRunner;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -77,10 +78,10 @@ public sealed class OfficeBrokerOrchestrator
         _jobStore = new OfficeJobStore(_officeDatabase);
         _mlResultStore = new MLResultStore(_officeDatabase, lf.CreateLogger<MLResultStore>());
 
-        var processRunner = new ProcessRunner(lf.CreateLogger<ProcessRunner>());
-        _modelProvider = new OllamaService(_settings.OllamaEndpoint, processRunner, ollamaPipeline, lf.CreateLogger<OllamaService>());
+        _processRunner = new ProcessRunner(lf.CreateLogger<ProcessRunner>());
+        _modelProvider = new OllamaService(_settings.OllamaEndpoint, _processRunner, ollamaPipeline, lf.CreateLogger<OllamaService>());
         _suiteSnapshotService = new SuiteSnapshotService(
-            processRunner,
+            _processRunner,
             _settings.SuiteRuntimeStatusEndpoint
         );
         _trainingGeneratorService = new TrainingGeneratorService(
@@ -89,7 +90,7 @@ public sealed class OfficeBrokerOrchestrator
         );
         _trainingStore = new TrainingStore(_stateRootPath, _officeDatabase, lf.CreateLogger<TrainingStore>());
         _knowledgeImportService = new KnowledgeImportService(
-            processRunner,
+            _processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts", "extract_document_text.py")
         );
         _learningProfileService = new LearningProfileService();
@@ -98,7 +99,7 @@ public sealed class OfficeBrokerOrchestrator
         _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath, _officeDatabase, lf.CreateLogger<OperatorMemoryStore>());
         _sessionStore = new OfficeSessionStateStore(_stateRootPath, _officeDatabase);
         _mlAnalyticsService = new MLAnalyticsService(
-            processRunner,
+            _processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts"),
             new OnnxMLEngine(Path.Combine(_officeRootPath, "DailyDesk", "Models", "onnx")),
             resiliencePipeline: pythonPipeline,
@@ -110,6 +111,97 @@ public sealed class OfficeBrokerOrchestrator
     /// Provides access to the job store for the background worker and job endpoints.
     /// </summary>
     public OfficeJobStore JobStore => _jobStore;
+
+    /// <summary>
+    /// Configured retention period (in days) for completed jobs.
+    /// </summary>
+    public int JobRetentionDays => _settings.JobRetentionDays;
+
+    /// <summary>
+    /// Returns a detailed health status for each subsystem.
+    /// </summary>
+    public async Task<OfficeHealthReport> GetDetailedHealthAsync(CancellationToken cancellationToken = default)
+    {
+        var report = new OfficeHealthReport();
+
+        // Ollama
+        try
+        {
+            var reachable = await _modelProvider.PingAsync(cancellationToken);
+            report.Ollama = reachable
+                ? new SubsystemHealth { Status = HealthStatus.Ok }
+                : new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Ollama did not respond to ping." };
+        }
+        catch (Exception ex)
+        {
+            report.Ollama = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+        }
+
+        // Python
+        try
+        {
+            var version = await _processRunner.CheckPythonAsync(cancellationToken);
+            report.Python = version is not null
+                ? new SubsystemHealth { Status = HealthStatus.Ok, Detail = version }
+                : new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Python 3 not found on PATH." };
+        }
+        catch (Exception ex)
+        {
+            report.Python = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+        }
+
+        // LiteDB
+        try
+        {
+            // A simple query to confirm the DB is accessible
+            _officeDatabase.Jobs.Count();
+            report.LiteDB = new SubsystemHealth { Status = HealthStatus.Ok };
+        }
+        catch (Exception ex)
+        {
+            report.LiteDB = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+        }
+
+        // Job worker — check for stuck jobs as a signal of worker health
+        try
+        {
+            var runningJobs = _jobStore.ListByStatus(OfficeJobStatus.Running);
+            var stuckCount = runningJobs.Count(j =>
+                j.StartedAt.HasValue && (DateTimeOffset.Now - j.StartedAt.Value).TotalMinutes > 10);
+
+            if (stuckCount > 0)
+            {
+                report.JobWorker = new SubsystemHealth
+                {
+                    Status = HealthStatus.Degraded,
+                    Detail = $"{stuckCount} job(s) running for more than 10 minutes."
+                };
+            }
+            else
+            {
+                report.JobWorker = new SubsystemHealth
+                {
+                    Status = HealthStatus.Ok,
+                    Detail = $"{runningJobs.Count} job(s) currently running."
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            report.JobWorker = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+        }
+
+        // Compute overall status
+        var statuses = new[] { report.Ollama.Status, report.Python.Status, report.LiteDB.Status, report.JobWorker.Status };
+        if (statuses.Any(s => s == HealthStatus.Unavailable))
+            report.Overall = HealthStatus.Unavailable;
+        else if (statuses.Any(s => s == HealthStatus.Degraded))
+            report.Overall = HealthStatus.Degraded;
+        else
+            report.Overall = HealthStatus.Ok;
+
+        return report;
+    }
 
     public async Task<object> GetHealthAsync(CancellationToken cancellationToken = default)
     {
