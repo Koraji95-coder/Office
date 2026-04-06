@@ -3997,6 +3997,606 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- Phase 10: Research Query Integration Tests ---
+
+    // ResearchReport model
+
+    [Fact]
+    public void ResearchReport_DefaultSummary_IsExpected()
+    {
+        var report = new ResearchReport();
+        Assert.Equal("No live research run yet.", report.Summary);
+    }
+
+    [Fact]
+    public void ResearchReport_DefaultKeyTakeaways_IsEmpty()
+    {
+        var report = new ResearchReport();
+        Assert.Empty(report.KeyTakeaways);
+    }
+
+    [Fact]
+    public void ResearchReport_DefaultActionMoves_IsEmpty()
+    {
+        var report = new ResearchReport();
+        Assert.Empty(report.ActionMoves);
+    }
+
+    [Fact]
+    public void ResearchReport_DefaultSources_IsEmpty()
+    {
+        var report = new ResearchReport();
+        Assert.Empty(report.Sources);
+    }
+
+    [Fact]
+    public void ResearchReport_RunSummary_ContainsSourceCount()
+    {
+        var report = new ResearchReport
+        {
+            Query = "relay protection fundamentals",
+            Perspective = "EE Mentor",
+            Model = "qwen3:14b",
+            GenerationSource = "live web + ollama synthesis",
+            Sources =
+            [
+                new ResearchSource { Title = "IEEE Source 1", Url = "https://ieee.org/1", Domain = "ieee.org" },
+                new ResearchSource { Title = "IEEE Source 2", Url = "https://ieee.org/2", Domain = "ieee.org" },
+            ],
+        };
+
+        Assert.Contains("2", report.RunSummary);
+        Assert.Contains("EE Mentor", report.RunSummary);
+        Assert.Contains("qwen3:14b", report.RunSummary);
+    }
+
+    [Fact]
+    public void ResearchReport_RunSummary_ContainsPerspectiveAndModel()
+    {
+        var report = new ResearchReport
+        {
+            Perspective = "Business Strategist",
+            Model = "qwen3:8b",
+            GenerationSource = "live web + fallback synthesis",
+        };
+
+        Assert.Contains("Business Strategist", report.RunSummary);
+        Assert.Contains("qwen3:8b", report.RunSummary);
+    }
+
+    [Fact]
+    public void ResearchReport_RunSummary_ContainsGenerationSource()
+    {
+        var report = new ResearchReport
+        {
+            GenerationSource = "live web search returned no usable sources",
+        };
+
+        Assert.Contains("live web search returned no usable sources", report.RunSummary);
+    }
+
+    [Fact]
+    public void ResearchReport_WithTakeawaysAndMoves_ReturnsExpectedCounts()
+    {
+        var report = new ResearchReport
+        {
+            KeyTakeaways = ["Takeaway A", "Takeaway B", "Takeaway C"],
+            ActionMoves = ["Move 1", "Move 2"],
+        };
+
+        Assert.Equal(3, report.KeyTakeaways.Count);
+        Assert.Equal(2, report.ActionMoves.Count);
+    }
+
+    // ResearchSource model
+
+    [Fact]
+    public void ResearchSource_DefaultValues_AreEmpty()
+    {
+        var source = new ResearchSource();
+        Assert.Equal(string.Empty, source.Title);
+        Assert.Equal(string.Empty, source.Url);
+        Assert.Equal(string.Empty, source.Domain);
+        Assert.Equal(string.Empty, source.SearchSnippet);
+        Assert.Equal(string.Empty, source.Extract);
+    }
+
+    [Fact]
+    public void ResearchSource_DisplaySummary_WithDomain_ShowsDomainInParentheses()
+    {
+        var source = new ResearchSource
+        {
+            Title = "IEEE Relay Protection Guide",
+            Domain = "ieee.org",
+        };
+
+        Assert.Equal("IEEE Relay Protection Guide (ieee.org)", source.DisplaySummary);
+    }
+
+    [Fact]
+    public void ResearchSource_DisplaySummary_NoDomain_ShowsTitleOnly()
+    {
+        var source = new ResearchSource
+        {
+            Title = "Relay Protection Overview",
+            Domain = "",
+        };
+
+        Assert.Equal("Relay Protection Overview", source.DisplaySummary);
+    }
+
+    [Fact]
+    public void ResearchSource_DisplaySummary_WhitespaceDomain_ShowsTitleOnly()
+    {
+        var source = new ResearchSource
+        {
+            Title = "DraftFlow Approval Routing",
+            Domain = "   ",
+        };
+
+        Assert.Equal("DraftFlow Approval Routing", source.DisplaySummary);
+    }
+
+    // ResearchWatchlist model
+
+    [Fact]
+    public void ResearchWatchlist_Interval_Daily_IsOneDay()
+    {
+        var watchlist = new ResearchWatchlist { Frequency = "Daily" };
+        Assert.Equal(TimeSpan.FromDays(1), watchlist.Interval);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_Interval_Weekly_IsSevenDays()
+    {
+        var watchlist = new ResearchWatchlist { Frequency = "Weekly" };
+        Assert.Equal(TimeSpan.FromDays(7), watchlist.Interval);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_Interval_TwiceWeekly_IsThreeDays()
+    {
+        var watchlist = new ResearchWatchlist { Frequency = "Twice Weekly" };
+        Assert.Equal(TimeSpan.FromDays(3), watchlist.Interval);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_IsDue_WhenNeverRun_IsTrue()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            IsEnabled = true,
+            LastRunAt = null,
+        };
+
+        Assert.True(watchlist.IsDue);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_IsDue_WhenDisabled_IsFalse()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            IsEnabled = false,
+            LastRunAt = null,
+        };
+
+        Assert.False(watchlist.IsDue);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_IsDue_WhenRecentlyRun_IsFalse()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            IsEnabled = true,
+            Frequency = "Daily",
+            LastRunAt = DateTimeOffset.Now.AddHours(-1),
+        };
+
+        Assert.False(watchlist.IsDue);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_IsDue_WhenPastInterval_IsTrue()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            IsEnabled = true,
+            Frequency = "Daily",
+            LastRunAt = DateTimeOffset.Now.AddDays(-2),
+        };
+
+        Assert.True(watchlist.IsDue);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_DueSummary_NeverRun_ShowsNeverRun()
+    {
+        var watchlist = new ResearchWatchlist { LastRunAt = null };
+        Assert.Equal("never run", watchlist.DueSummary);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_DueSummary_WithHistory_ShowsFrequency()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            Frequency = "Weekly",
+            LastRunAt = DateTimeOffset.Now.AddDays(-3),
+        };
+
+        Assert.Contains("Weekly", watchlist.DueSummary);
+        Assert.Contains("last", watchlist.DueSummary);
+        Assert.Contains("next", watchlist.DueSummary);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_DefaultValues_AreExpected()
+    {
+        var watchlist = new ResearchWatchlist();
+        Assert.Equal("Weekly", watchlist.Frequency);
+        Assert.Equal("EE Mentor", watchlist.PreferredPerspective);
+        Assert.True(watchlist.SaveToKnowledgeDefault);
+        Assert.True(watchlist.IsEnabled);
+        Assert.NotEmpty(watchlist.Id);
+    }
+
+    // OfficeResearchSection model
+
+    [Fact]
+    public void OfficeResearchSection_DefaultSummary_PromptsUserToRunResearch()
+    {
+        var section = new OfficeResearchSection();
+        Assert.Contains("live research", section.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OfficeResearchSection_DefaultRunSummary_IsExpected()
+    {
+        var section = new OfficeResearchSection();
+        Assert.Equal("No live research run yet.", section.RunSummary);
+    }
+
+    [Fact]
+    public void OfficeResearchSection_LatestReport_IsNullByDefault()
+    {
+        var section = new OfficeResearchSection();
+        Assert.Null(section.LatestReport);
+    }
+
+    [Fact]
+    public void OfficeResearchSection_DefaultHistory_IsEmpty()
+    {
+        var section = new OfficeResearchSection();
+        Assert.Empty(section.History);
+    }
+
+    [Fact]
+    public void OfficeResearchRun_DefaultValues_AreExpected()
+    {
+        var run = new OfficeResearchRun();
+        Assert.Equal(string.Empty, run.Id);
+        Assert.Equal(string.Empty, run.Title);
+        Assert.Equal(string.Empty, run.Summary);
+    }
+
+    // LiveResearchService static factory methods (via reflection)
+
+    [Fact]
+    public void LiveResearchService_BuildEmptyReport_ReturnsNarrowQueryGuidance()
+    {
+        var method = typeof(LiveResearchService).GetMethod(
+            "BuildEmptyReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(method);
+
+        var result = (ResearchReport?)method!.Invoke(
+            null,
+            ["relay protection test", "EE Mentor", "qwen3:14b"]
+        );
+
+        Assert.NotNull(result);
+        Assert.Contains("No live sources", result!.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("relay protection test", result.Query);
+        Assert.Equal("EE Mentor", result.Perspective);
+        Assert.Equal("qwen3:14b", result.Model);
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildEmptyReport_HasKeyTakeawaysAboutNarrowingQuery()
+    {
+        var method = typeof(LiveResearchService).GetMethod(
+            "BuildEmptyReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(method);
+
+        var result = (ResearchReport?)method!.Invoke(
+            null,
+            ["my query", "Business Strategist", "qwen3:14b"]
+        );
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result!.KeyTakeaways);
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildEmptyReport_HasActionMovesAboutNarrowingQuery()
+    {
+        var method = typeof(LiveResearchService).GetMethod(
+            "BuildEmptyReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(method);
+
+        var result = (ResearchReport?)method!.Invoke(
+            null,
+            ["my query", "EE Mentor", "qwen3:14b"]
+        );
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result!.ActionMoves);
+        Assert.Contains(result.ActionMoves, move => move.Contains("narrower", StringComparison.OrdinalIgnoreCase)
+            || move.Contains("query", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildFallbackReport_IncludesQueryAndSourceCount()
+    {
+        var buildFallbackMethod = typeof(LiveResearchService).GetMethod(
+            "BuildFallbackReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(buildFallbackMethod);
+
+        var sources = new List<ResearchSource>
+        {
+            new() { Title = "IEEE Grounding Reference", Url = "https://ieee.org/1", Domain = "ieee.org", Extract = "Grounding systems explained." },
+            new() { Title = "NEC Code Summary", Url = "https://nec.org/1", Domain = "nec.org", Extract = "NEC requirements for grounding." },
+        };
+        var snapshot = new SuiteSnapshot();
+        var historySummary = new TrainingHistorySummary();
+
+        var result = (ResearchReport?)buildFallbackMethod!.Invoke(
+            null,
+            ["grounding systems", "EE Mentor", "qwen3:14b", sources, snapshot, historySummary]
+        );
+
+        Assert.NotNull(result);
+        Assert.Contains("2", result!.Summary);
+        Assert.Contains("grounding systems", result.Summary);
+        Assert.Equal("grounding systems", result.Query);
+        Assert.Equal("EE Mentor", result.Perspective);
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildFallbackReport_HasActionMoves()
+    {
+        var buildFallbackMethod = typeof(LiveResearchService).GetMethod(
+            "BuildFallbackReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(buildFallbackMethod);
+
+        var sources = new List<ResearchSource>
+        {
+            new() { Title = "Source A", Url = "https://example.com/a", Domain = "example.com", Extract = "Some content." },
+        };
+
+        var result = (ResearchReport?)buildFallbackMethod!.Invoke(
+            null,
+            ["approval routing", "Business Strategist", "qwen3:14b", sources, new SuiteSnapshot(), new TrainingHistorySummary()]
+        );
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result!.ActionMoves);
+        Assert.Equal(3, result.ActionMoves.Count);
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildFallbackReport_TakeawaysUseDomainAsPrefix()
+    {
+        var buildFallbackMethod = typeof(LiveResearchService).GetMethod(
+            "BuildFallbackReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(buildFallbackMethod);
+
+        var sources = new List<ResearchSource>
+        {
+            new() { Title = "Relay Guide", Url = "https://relayguide.com/1", Domain = "relayguide.com", Extract = "Relay types explained." },
+        };
+
+        var result = (ResearchReport?)buildFallbackMethod!.Invoke(
+            null,
+            ["relay types", "EE Mentor", "qwen3:14b", sources, new SuiteSnapshot(), new TrainingHistorySummary()]
+        );
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result!.KeyTakeaways);
+        Assert.Contains(result.KeyTakeaways, t => t.StartsWith("relayguide.com:", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildSystemPrompt_IncludesPerspective()
+    {
+        var buildSystemPromptMethod = typeof(LiveResearchService).GetMethod(
+            "BuildSystemPrompt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(buildSystemPromptMethod);
+
+        var result = (string?)buildSystemPromptMethod!.Invoke(null, ["EE Mentor"]);
+
+        Assert.NotNull(result);
+        Assert.Contains("EE Mentor", result!);
+    }
+
+    [Fact]
+    public void LiveResearchService_BuildSystemPrompt_InstructsJsonOnly()
+    {
+        var buildSystemPromptMethod = typeof(LiveResearchService).GetMethod(
+            "BuildSystemPrompt",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(buildSystemPromptMethod);
+
+        var result = (string?)buildSystemPromptMethod!.Invoke(null, ["Business Strategist"]);
+
+        Assert.NotNull(result);
+        Assert.Contains("JSON", result!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LiveResearchService_NormalizeSearchUrl_ReturnsEmptyForNull()
+    {
+        var normalizeMethod = typeof(LiveResearchService).GetMethod(
+            "NormalizeSearchUrl",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(normalizeMethod);
+
+        var result = (string?)normalizeMethod!.Invoke(null, [string.Empty]);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void LiveResearchService_NormalizeSearchUrl_HandlesDoubleSlashProtocol()
+    {
+        var normalizeMethod = typeof(LiveResearchService).GetMethod(
+            "NormalizeSearchUrl",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(normalizeMethod);
+
+        var result = (string?)normalizeMethod!.Invoke(null, ["//ieee.org/some-page"]);
+        Assert.NotNull(result);
+        Assert.StartsWith("https://", result!);
+    }
+
+    [Fact]
+    public void LiveResearchService_NormalizeSearchUrl_HandlesUddgEncoding()
+    {
+        var normalizeMethod = typeof(LiveResearchService).GetMethod(
+            "NormalizeSearchUrl",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(normalizeMethod);
+
+        var encoded = Uri.EscapeDataString("https://ieee.org/relay-protection");
+        var raw = $"https://duckduckgo.com/l/?uddg={encoded}&rut=abc";
+
+        var result = (string?)normalizeMethod!.Invoke(null, [raw]);
+        Assert.NotNull(result);
+        Assert.Equal("https://ieee.org/relay-protection", result);
+    }
+
+    [Fact]
+    public void LiveResearchService_NormalizeSearchUrl_HandlesPlainHttps()
+    {
+        var normalizeMethod = typeof(LiveResearchService).GetMethod(
+            "NormalizeSearchUrl",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(normalizeMethod);
+
+        var result = (string?)normalizeMethod!.Invoke(null, ["https://example.com/page"]);
+        Assert.Equal("https://example.com/page", result);
+    }
+
+    // LiveResearchService construction and static contract tests
+
+    [Fact]
+    public void LiveResearchService_CanBeConstructed_WithModelProvider()
+    {
+        var modelProvider = new StubModelProvider();
+        var service = new LiveResearchService(modelProvider);
+        Assert.NotNull(service);
+    }
+
+    [Fact]
+    public void LiveResearchService_ConvertReport_WithNullContract_ReturnsNull()
+    {
+        var convertMethod = typeof(LiveResearchService).GetMethod(
+            "ConvertReport",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        Assert.NotNull(convertMethod);
+
+        var sources = new List<ResearchSource>
+        {
+            new() { Title = "Source A", Url = "https://example.com/a", Domain = "example.com" },
+        };
+
+        var result = convertMethod!.Invoke(
+            null,
+            ["relay protection", "EE Mentor", "qwen3:14b", "ollama", sources, null]
+        );
+
+        Assert.Null(result);
+    }
+
+    // Research query pattern helpers (per AGENT_REPLY_GUIDE.md)
+
+    [Theory]
+    [InlineData("/research relay protection fundamentals", true)]
+    [InlineData("/research DraftFlow approval routing", true)]
+    [InlineData("/RESEARCH competitor analysis", true)]
+    [InlineData("research relay protection", false)]
+    [InlineData("Use live research for this.", false)]
+    [InlineData("", false)]
+    public void ResearchQueryPattern_SlashResearchPrefix_IsDetectedCorrectly(string input, bool expected)
+    {
+        var actual = input.TrimStart().StartsWith("/research", StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("/research relay protection fundamentals", "relay protection fundamentals")]
+    [InlineData("/research   DraftFlow approval routing  ", "DraftFlow approval routing")]
+    [InlineData("/RESEARCH competitor analysis", "competitor analysis")]
+    public void ResearchQueryPattern_SlashResearchPrefix_ExtractsQueryCorrectly(string input, string expectedQuery)
+    {
+        var prefix = "/research";
+        var trimmed = input.TrimStart();
+        var actualQuery = trimmed[prefix.Length..].Trim();
+        Assert.Equal(expectedQuery, actualQuery);
+    }
+
+    private sealed class StubModelProvider : IModelProvider
+    {
+        public string ProviderLabel => "Stub";
+        public string ProviderId => "stub";
+
+        public Task<IReadOnlyList<string>> GetInstalledModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        public Task<string> GenerateAsync(
+            string model,
+            string systemPrompt,
+            string userPrompt,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public Task<T?> GenerateJsonAsync<T>(
+            string model,
+            string systemPrompt,
+            string userPrompt,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<T?>(default);
+
+        public Task<bool> PingAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<float[]?> GenerateEmbeddingAsync(
+            string text,
+            string? model = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<float[]?>(null);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
