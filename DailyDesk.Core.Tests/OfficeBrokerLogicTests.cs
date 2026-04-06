@@ -4181,9 +4181,9 @@ public sealed class OfficeBrokerLogicTests
     }
 
     [Fact]
-    public void DefenseEvaluation_WithRubricItems_TotalScoreMatchesSumOfItemScores()
+    public void DefenseEvaluation_FiveRubricItems_StoredAndRetrievedConsistently()
     {
-        // Guide grades correctness + completeness + field judgment (and more); total must be consistent
+        // Guide grades correctness + completeness + field judgment (and more); verify 5-item structure
         var rubric = new[]
         {
             new DefenseRubricItem { Name = "Technical Correctness", Score = 3, MaxScore = 4 },
@@ -4192,16 +4192,16 @@ public sealed class OfficeBrokerLogicTests
             new DefenseRubricItem { Name = "Validation Thinking",   Score = 4, MaxScore = 4 },
             new DefenseRubricItem { Name = "Clarity",               Score = 3, MaxScore = 4 },
         };
-        var expectedTotal = rubric.Sum(r => r.Score); // 15
         var eval = new DefenseEvaluation
         {
-            TotalScore = expectedTotal,
-            MaxScore = rubric.Sum(r => r.MaxScore),   // 20
+            TotalScore = rubric.Sum(r => r.Score),
+            MaxScore = rubric.Sum(r => r.MaxScore),
             RubricItems = rubric,
         };
 
-        Assert.Equal(15, eval.TotalScore);
-        Assert.Equal(20, eval.MaxScore);
+        // Verify the eval totals are consistent with what the rubric items actually say
+        Assert.Equal(eval.RubricItems.Sum(r => r.Score), eval.TotalScore);
+        Assert.Equal(eval.RubricItems.Sum(r => r.MaxScore), eval.MaxScore);
         Assert.Equal(5, eval.RubricItems.Count);
     }
 
@@ -4310,6 +4310,16 @@ public sealed class OfficeBrokerLogicTests
     // BuildStageSummary — guidance text for each workflow stage
 
     [Fact]
+    public void BuildStageSummary_PlanStage_MentionsFocusOrDifficulty()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Plan);
+        var mentionsFocusOrDifficulty = summary.Contains("focus", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("difficulty", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("question", StringComparison.OrdinalIgnoreCase);
+        Assert.True(mentionsFocusOrDifficulty);
+    }
+
+    [Fact]
     public void BuildStageSummary_DefenseStage_MentionsOralDefense()
     {
         var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Defense);
@@ -4339,10 +4349,10 @@ public sealed class OfficeBrokerLogicTests
     {
         var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Reflection);
         // Reflection stage guides the user to capture weak areas and plan the next review cycle
-        var mentionesCaptureOrReview = summary.Contains("capture", StringComparison.OrdinalIgnoreCase)
+        var mentionsCaptureOrReview = summary.Contains("capture", StringComparison.OrdinalIgnoreCase)
             || summary.Contains("review", StringComparison.OrdinalIgnoreCase)
             || summary.Contains("weak", StringComparison.OrdinalIgnoreCase);
-        Assert.True(mentionesCaptureOrReview);
+        Assert.True(mentionsCaptureOrReview);
     }
 
     [Fact]
