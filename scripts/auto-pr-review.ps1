@@ -23,7 +23,7 @@ if (Test-Path $reviewedFile) {
     $reviewed = @()
 }
 
-$repos = @("Koraji95-coder/Office", "Koraji95-coder/Suite")
+$repos = @("Koraji95-coder/Office")
 
 foreach ($repo in $repos) {
     try {
@@ -247,6 +247,7 @@ Keep it concise. No fluff.
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
 
 
