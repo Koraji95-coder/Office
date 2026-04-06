@@ -72,7 +72,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
     }
 
     [Fact]
-    public async Task Results_Problem_IncludesDetailField()
+    public async Task Results_Problem_IncludesStaticDetailField()
     {
         await using var app = await BuildErrorTriggerAppAsync();
         using var client = app.GetTestClient();
@@ -81,7 +81,11 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
 
         var json = await response.Content.ReadFromJsonAsync<JsonObject>();
         Assert.NotNull(json);
-        Assert.True(json.ContainsKey("detail"), "Broker pattern sets 'detail' to ex.Message");
+        Assert.True(json.ContainsKey("detail"), "Broker pattern must set the 'detail' field");
+        Assert.Equal(
+            "An unexpected error occurred. See server logs for details.",
+            json["detail"]!.GetValue<string>()
+        );
     }
 
     [Fact]
@@ -323,10 +327,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated GET server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "GET endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -343,10 +347,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated POST server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "POST endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -363,10 +367,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated DELETE server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "DELETE endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
