@@ -76,7 +76,7 @@ foreach ($repo in $repos) {
                 # No checks or all checks passed - proceed
             } catch {
                 # No checks configured - that's fine, proceed
-                Write-Host "INFO: $repoShort#$($pr.number) - no CI checks configured, proceeding"
+                # No checks configured - proceed silently
             }
 
             # ========== GATE 5: Check mergeability ==========
@@ -247,4 +247,6 @@ Keep it concise. No fluff.
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
+
 
