@@ -162,7 +162,17 @@ Keep it concise. No fluff.
                         Start-Sleep -Seconds 3
                     }
 
-                    # Step 2: Merge
+                    # Step 2: Check mergeability, then merge
+                    $mergeSucceeded = $false
+
+                    # Re-fetch PR to get fresh mergeable state
+                    $freshPr = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
+                    if ($freshPr.mergeable -eq $false) {
+                        Write-Host "CONFLICT: $repo#$($pr.number) has merge conflicts — skipping. Needs manual resolution."
+                        $reviewed += $prKey
+                        continue
+                    }
+
                     $mergeBody = @{
                         commit_title = "auto-merge: $($pr.title) [score $score/10]"
                         merge_method = "squash"
@@ -171,23 +181,24 @@ Keep it concise. No fluff.
                         Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" `
                             -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
                         Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
+                        $mergeSucceeded = $true
                     } catch {
-                        if ($_.Exception.Response.StatusCode -eq 405 -or $_.Exception.Response.StatusCode -eq 409) {
-                            Write-Host "Merge blocked on $repo#$($pr.number) — attempting branch update..."
-                            try {
-                                Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/update-branch" `
-                                    -Method PUT -Headers $headers -ContentType "application/json" `
-                                    -Body ('{"expected_head_sha":"' + $pr.head.sha + '"}')
-                                Write-Host "Branch updated for $repo#$($pr.number) — will retry merge next cycle."
-                            } catch {
-                                Write-Host "Branch update failed for $repo#$($pr.number) — needs manual resolution."
-                            }
+                        $statusCode = $_.Exception.Response.StatusCode
+                        if ($statusCode -eq 409) {
+                            Write-Host "CONFLICT: $repo#$($pr.number) — merge conflict detected. Skipping."
+                        } elseif ($statusCode -eq 405) {
+                            Write-Host "BLOCKED: $repo#$($pr.number) — PR not mergeable (checks pending or draft). Will retry next cycle."
                         } else {
-                            throw $_
+                            Write-Host "MERGE FAILED: $repo#$($pr.number) — HTTP $statusCode. $($_.ErrorDetails.Message)"
                         }
                     }
 
-                    # Notify Discord
+                    if (-not $mergeSucceeded) {
+                        $reviewed += $prKey
+                        continue
+                    }
+
+                    # Notify Discord (only on actual successful merge)
                     $mergePayload = @{
                         content = "<@$userId>"
                         embeds = @(@{
@@ -231,3 +242,5 @@ Keep it concise. No fluff.
 }
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
+
+
