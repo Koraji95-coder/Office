@@ -126,6 +126,12 @@ Navigation model
 - Groups stay fixed: Publishing and Evidence, Automation Lab, Agent Lab, Architecture and Code, Developer Docs
 - Tool detail is a second depth for launch readiness and graduation path
 
+Architecture and Code tools
+
+- Architecture Map — spatial layer view of all Office services, their deployment boundaries, and Suite integration paths; see architecture-tools-guide.md
+- Architecture Graph — directed dependency graph showing how services, stores, agents, and broker endpoints connect; see architecture-tools-guide.md
+- Refactor pressure notes — developer-authored notes flagging technical debt and extension points; linked to source files via the repo coach
+
 Layout hierarchy
 
 - Workshop purpose first
