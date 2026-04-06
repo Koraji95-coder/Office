@@ -3997,6 +3997,399 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- Phase 10 (AGENT_REPLY_GUIDE chunk3): Oral Defense Scenario Compliance Tests ---
+
+    // OralDefenseScenario — question sequencing model
+
+    [Fact]
+    public void OralDefenseScenario_DefaultPrompt_IsNotEmpty()
+    {
+        var scenario = new OralDefenseScenario();
+        Assert.False(string.IsNullOrWhiteSpace(scenario.Prompt));
+    }
+
+    [Fact]
+    public void OralDefenseScenario_DefaultTopic_IsSet()
+    {
+        var scenario = new OralDefenseScenario();
+        Assert.False(string.IsNullOrWhiteSpace(scenario.Topic));
+    }
+
+    [Fact]
+    public void OralDefenseScenario_DefaultTitle_IsNotEmpty()
+    {
+        var scenario = new OralDefenseScenario();
+        Assert.False(string.IsNullOrWhiteSpace(scenario.Title));
+    }
+
+    [Fact]
+    public void OralDefenseScenario_FollowUpQuestions_DefaultToEmptyCollection()
+    {
+        var scenario = new OralDefenseScenario();
+        // Guide: ask one question at a time — follow-ups are separate, not bundled into the main prompt
+        Assert.NotNull(scenario.FollowUpQuestions);
+        Assert.Empty(scenario.FollowUpQuestions);
+    }
+
+    [Fact]
+    public void OralDefenseScenario_MainPromptAndFollowUps_AreStructurallySeparate()
+    {
+        // Guide chunk3: one technical question at a time, so the primary Prompt and
+        // any follow-up questions must occupy distinct fields rather than being merged.
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "AC circuits",
+            Title = "AC Circuit Fundamentals Defense",
+            Prompt = "Explain how impedance differs from resistance in an AC circuit.",
+            FollowUpQuestions =
+            [
+                "How would you validate your impedance calculation on site?",
+                "What failure mode arises when capacitive and inductive reactance cancel?",
+            ],
+        };
+
+        Assert.Equal("Explain how impedance differs from resistance in an AC circuit.", scenario.Prompt);
+        Assert.Equal(2, scenario.FollowUpQuestions.Count);
+        Assert.DoesNotContain("How would you validate", scenario.Prompt);
+    }
+
+    [Fact]
+    public void OralDefenseScenario_WhatGoodLooksLike_DefaultIsNotEmpty()
+    {
+        // Guide: grade for correctness, completeness, and field judgment — a rubric hint must be present
+        var scenario = new OralDefenseScenario();
+        Assert.False(string.IsNullOrWhiteSpace(scenario.WhatGoodLooksLike));
+    }
+
+    [Fact]
+    public void OralDefenseScenario_SuiteConnection_DefaultIsNotEmpty()
+    {
+        // Guide: grounding the defense to real production context
+        var scenario = new OralDefenseScenario();
+        Assert.False(string.IsNullOrWhiteSpace(scenario.SuiteConnection));
+    }
+
+    // DefenseRubricItem — grading criteria (correctness, completeness, field judgment)
+
+    [Fact]
+    public void DefenseRubricItem_MaxScore_IsFour()
+    {
+        // Rubric is 0–4 per criterion; guide grades correctness, completeness, and field judgment
+        var item = new DefenseRubricItem();
+        Assert.Equal(4, item.MaxScore);
+    }
+
+    [Fact]
+    public void DefenseRubricItem_DisplaySummary_ContainsNameScoreAndFeedback()
+    {
+        var item = new DefenseRubricItem
+        {
+            Name = "Technical Correctness",
+            Score = 3,
+            MaxScore = 4,
+            Feedback = "References domain-specific concepts accurately.",
+        };
+
+        Assert.Contains("Technical Correctness", item.DisplaySummary);
+        Assert.Contains("3/4", item.DisplaySummary);
+        Assert.Contains("References domain-specific concepts accurately.", item.DisplaySummary);
+    }
+
+    [Fact]
+    public void DefenseRubricItem_ZeroScore_DisplaySummaryStillFormatted()
+    {
+        var item = new DefenseRubricItem
+        {
+            Name = "Field Judgment",
+            Score = 0,
+            MaxScore = 4,
+            Feedback = "No tradeoff reasoning provided.",
+        };
+
+        Assert.Contains("Field Judgment", item.DisplaySummary);
+        Assert.Contains("0/4", item.DisplaySummary);
+    }
+
+    [Fact]
+    public void DefenseRubricItem_PerfectScore_DisplaySummaryFormatted()
+    {
+        var item = new DefenseRubricItem
+        {
+            Name = "Clarity",
+            Score = 4,
+            MaxScore = 4,
+            Feedback = "Well-structured argument of appropriate length.",
+        };
+
+        Assert.Contains("4/4", item.DisplaySummary);
+    }
+
+    // DefenseEvaluation — grading result aggregation
+
+    [Fact]
+    public void DefenseEvaluation_MaxScore_DefaultIsTwenty()
+    {
+        // 5 rubric items × 4 points each = 20 max — consistent with guide's comprehensive grading
+        var eval = new DefenseEvaluation();
+        Assert.Equal(20, eval.MaxScore);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_ScoreRatio_CalculatesCorrectly()
+    {
+        var eval = new DefenseEvaluation { TotalScore = 15, MaxScore = 20 };
+        Assert.Equal(0.75, eval.ScoreRatio, precision: 5);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_ScoreRatio_ZeroMaxScore_ReturnsZero()
+    {
+        var eval = new DefenseEvaluation { TotalScore = 0, MaxScore = 0 };
+        Assert.Equal(0.0, eval.ScoreRatio, precision: 5);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_DisplaySummary_ContainsScoreAndSummary()
+    {
+        var eval = new DefenseEvaluation
+        {
+            TotalScore = 15,
+            MaxScore = 20,
+            Summary = "Strong domain knowledge with minor gaps in tradeoff reasoning.",
+        };
+
+        Assert.Contains("15/20", eval.DisplaySummary);
+        // P0 format is locale-dependent (e.g. "75%" or "75 %") — verify score text is present
+        Assert.Contains("75", eval.DisplaySummary);
+        Assert.Contains("Strong domain knowledge", eval.DisplaySummary);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_RecommendedFollowUps_DefaultToEmptyCollection()
+    {
+        var eval = new DefenseEvaluation();
+        Assert.NotNull(eval.RecommendedFollowUps);
+        Assert.Empty(eval.RecommendedFollowUps);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_RubricItems_DefaultToEmptyCollection()
+    {
+        var eval = new DefenseEvaluation();
+        Assert.NotNull(eval.RubricItems);
+        Assert.Empty(eval.RubricItems);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_WithRubricItems_TotalScoreMatchesSumOfItemScores()
+    {
+        // Guide grades correctness + completeness + field judgment (and more); total must be consistent
+        var rubric = new[]
+        {
+            new DefenseRubricItem { Name = "Technical Correctness", Score = 3, MaxScore = 4 },
+            new DefenseRubricItem { Name = "Tradeoff Reasoning",    Score = 3, MaxScore = 4 },
+            new DefenseRubricItem { Name = "Failure-Mode Awareness",Score = 2, MaxScore = 4 },
+            new DefenseRubricItem { Name = "Validation Thinking",   Score = 4, MaxScore = 4 },
+            new DefenseRubricItem { Name = "Clarity",               Score = 3, MaxScore = 4 },
+        };
+        var expectedTotal = rubric.Sum(r => r.Score); // 15
+        var eval = new DefenseEvaluation
+        {
+            TotalScore = expectedTotal,
+            MaxScore = rubric.Sum(r => r.MaxScore),   // 20
+            RubricItems = rubric,
+        };
+
+        Assert.Equal(15, eval.TotalScore);
+        Assert.Equal(20, eval.MaxScore);
+        Assert.Equal(5, eval.RubricItems.Count);
+    }
+
+    // OralDefenseAttemptRecord — saved graded attempt
+
+    [Fact]
+    public void OralDefenseAttemptRecord_DefaultMaxScore_IsTwenty()
+    {
+        var record = new OralDefenseAttemptRecord();
+        Assert.Equal(20, record.MaxScore);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_ScoreRatio_CalculatesCorrectly()
+    {
+        var record = new OralDefenseAttemptRecord { TotalScore = 12, MaxScore = 20 };
+        Assert.Equal(0.6, record.ScoreRatio, precision: 5);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_DisplaySummary_ContainsTimestampScoreAndTopic()
+    {
+        var at = new DateTimeOffset(2026, 4, 6, 14, 30, 0, TimeSpan.Zero);
+        var record = new OralDefenseAttemptRecord
+        {
+            Topic = "AC Circuits",
+            TotalScore = 15,
+            MaxScore = 20,
+            CompletedAt = at,
+        };
+
+        Assert.Contains("2026-04-06", record.DisplaySummary);
+        Assert.Contains("15/20", record.DisplaySummary);
+        Assert.Contains("AC Circuits", record.DisplaySummary);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_DisplaySummary_ContainsPercentage()
+    {
+        var record = new OralDefenseAttemptRecord
+        {
+            Topic = "Grounding",
+            TotalScore = 20,
+            MaxScore = 20,
+            CompletedAt = DateTimeOffset.UtcNow,
+        };
+
+        // ScoreRatio is 1.0; P0 format is locale-dependent ("100%" or "100 %")
+        Assert.Contains("100", record.DisplaySummary);
+    }
+
+    // Session state transitions for oral defense workflow
+
+    [Fact]
+    public void ResolveStage_DefenseGenerated_TransitionsToDefenseStage()
+    {
+        // Guide: after practice the desk moves into oral defense questioning
+        var state = new OfficeLiveSessionState
+        {
+            PracticeGenerated = true,
+            PracticeScored = false,
+            DefenseGenerated = true,
+        };
+
+        var stage = OfficeStudySessionLogic.ResolveStage(state);
+        Assert.Equal(TrainingSessionStage.Defense, stage);
+    }
+
+    [Fact]
+    public void ResolveStage_PracticeScored_TransitionsToDefenseStage()
+    {
+        var state = new OfficeLiveSessionState
+        {
+            PracticeGenerated = true,
+            PracticeScored = true,
+        };
+
+        var stage = OfficeStudySessionLogic.ResolveStage(state);
+        Assert.Equal(TrainingSessionStage.Defense, stage);
+    }
+
+    [Fact]
+    public void ResolveStage_DefenseScored_TransitionsToReflectionStage()
+    {
+        // Guide: after grading the oral defense response the session moves to reflection
+        var state = new OfficeLiveSessionState
+        {
+            PracticeGenerated = true,
+            PracticeScored = true,
+            DefenseGenerated = true,
+            DefenseScored = true,
+        };
+
+        var stage = OfficeStudySessionLogic.ResolveStage(state);
+        Assert.Equal(TrainingSessionStage.Reflection, stage);
+    }
+
+    [Fact]
+    public void ResolveStage_NothingDone_ReturnsPlanStage()
+    {
+        var state = new OfficeLiveSessionState();
+        var stage = OfficeStudySessionLogic.ResolveStage(state);
+        Assert.Equal(TrainingSessionStage.Plan, stage);
+    }
+
+    // BuildStageSummary — guidance text for each workflow stage
+
+    [Fact]
+    public void BuildStageSummary_DefenseStage_MentionsOralDefense()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Defense);
+        Assert.Contains("oral defense", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildStageSummary_DefenseStage_MentionsExplanationOrReasoning()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Defense);
+        // The defense stage should reference explanation quality or tradeoff reasoning per the guide
+        var mentionsExplanation = summary.Contains("explanation", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("reasoning", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("tradeoff", StringComparison.OrdinalIgnoreCase);
+        Assert.True(mentionsExplanation);
+    }
+
+    [Fact]
+    public void BuildStageSummary_PracticeStage_MentionsPractice()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Practice);
+        Assert.Contains("practice", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildStageSummary_ReflectionStage_MentionsCaptureOrReview()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Reflection);
+        // Reflection stage guides the user to capture weak areas and plan the next review cycle
+        var mentionesCaptureOrReview = summary.Contains("capture", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("review", StringComparison.OrdinalIgnoreCase)
+            || summary.Contains("weak", StringComparison.OrdinalIgnoreCase);
+        Assert.True(mentionesCaptureOrReview);
+    }
+
+    [Fact]
+    public void BuildStageSummary_CompleteStage_MentionsComplete()
+    {
+        var summary = OfficeStudySessionLogic.BuildStageSummary(TrainingSessionStage.Complete);
+        Assert.Contains("complete", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // OfficeLiveSessionState — defense property defaults
+
+    [Fact]
+    public void OfficeLiveSessionState_DefenseFlags_DefaultToFalse()
+    {
+        var state = new OfficeLiveSessionState();
+        Assert.False(state.DefenseGenerated);
+        Assert.False(state.DefenseScored);
+    }
+
+    [Fact]
+    public void OfficeLiveSessionState_LastDefenseEvaluation_DefaultsToNull()
+    {
+        var state = new OfficeLiveSessionState();
+        Assert.Null(state.LastDefenseEvaluation);
+    }
+
+    [Fact]
+    public void OfficeLiveSessionState_DefenseAnswerDraft_DefaultsToEmpty()
+    {
+        var state = new OfficeLiveSessionState();
+        Assert.Equal(string.Empty, state.DefenseAnswerDraft);
+    }
+
+    [Fact]
+    public void OfficeLiveSessionState_ActiveDefenseScenario_DefaultsToNonNull()
+    {
+        var state = new OfficeLiveSessionState();
+        Assert.NotNull(state.ActiveDefenseScenario);
+    }
+
+    [Fact]
+    public void OfficeLiveSessionState_DefenseScoreSummary_DefaultsToNoScoreYet()
+    {
+        var state = new OfficeLiveSessionState();
+        Assert.False(string.IsNullOrWhiteSpace(state.DefenseScoreSummary));
+    }
+
     // --- Test helpers ---
 
     /// <summary>
