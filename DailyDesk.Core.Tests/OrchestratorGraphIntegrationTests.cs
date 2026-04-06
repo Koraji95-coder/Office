@@ -438,7 +438,7 @@ public sealed class OrchestratorGraphIntegrationTests
     public void OrchestratorGraph_KnowledgeCoordinator_CanBeConstructedIndependently()
     {
         using var tmpDir = new TempDirectory();
-        var db = new OfficeDatabase(tmpDir.Path);
+        using var db = new OfficeDatabase(tmpDir.Path);
 
         // Should not throw — no reference to OfficeBrokerOrchestrator required.
         var coordinator = BuildKnowledgeCoordinator(db);
@@ -450,7 +450,7 @@ public sealed class OrchestratorGraphIntegrationTests
     public async Task OrchestratorGraph_KnowledgeCoordinator_EmptyDocumentList_ReturnsZeroCounts()
     {
         using var tmpDir = new TempDirectory();
-        var db = new OfficeDatabase(tmpDir.Path);
+        using var db = new OfficeDatabase(tmpDir.Path);
         var coordinator = BuildKnowledgeCoordinator(db);
 
         // Indexing an empty list must always succeed with zero counts.
@@ -466,7 +466,7 @@ public sealed class OrchestratorGraphIntegrationTests
     public async Task OrchestratorGraph_KnowledgeCoordinator_DocumentWithNoText_IsSkipped()
     {
         using var tmpDir = new TempDirectory();
-        var db = new OfficeDatabase(tmpDir.Path);
+        using var db = new OfficeDatabase(tmpDir.Path);
         var coordinator = BuildKnowledgeCoordinator(db);
 
         var documents = new[]
@@ -493,12 +493,15 @@ public sealed class OrchestratorGraphIntegrationTests
     [Fact]
     public async Task OrchestratorGraph_KnowledgeCoordinator_StateIsolatedFromTrainingStore()
     {
-        // Verifies that KnowledgeIndexStore state does not bleed into TrainingStore.
+        // Verifies that KnowledgeIndexStore writes do not bleed into TrainingStore.
+        // The test performs a real KnowledgeIndexStore write (MarkIndexed) so that the
+        // assertion is not trivially true: if the stores were accidentally sharing the
+        // same backing collection, the attempt count would differ.
         using var tmpDir = new TempDirectory();
-        var db = new OfficeDatabase(tmpDir.Path);
+        using var db = new OfficeDatabase(tmpDir.Path);
 
         var studyCoordinator = BuildStudyCoordinator(tmpDir.Path);
-        var knowledgeCoordinator = BuildKnowledgeCoordinator(db);
+        var knowledgeIndexStore = new KnowledgeIndexStore(db);
 
         // Save a practice attempt via StudySessionCoordinator.
         var test = BuildTest(2);
@@ -506,10 +509,15 @@ public sealed class OrchestratorGraphIntegrationTests
         var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correctCount);
         await studyCoordinator.SavePracticeAttemptAsync(attempt);
 
-        // Index an empty document list via KnowledgeCoordinator — should not
-        // disturb the TrainingStore written by StudySessionCoordinator.
-        await knowledgeCoordinator.RunKnowledgeIndexAsync([]);
+        // Write a real entry to KnowledgeIndexStore — if stores shared backing state
+        // this would disturb the TrainingStore's attempt count.
+        var contentHash = KnowledgeIndexStore.ComputeContentHash("isolation test content");
+        knowledgeIndexStore.MarkIndexed("docs/isolation-test.md", contentHash, "vec-abc123");
 
+        // Verify the KnowledgeIndexStore recorded the entry.
+        Assert.Equal(1, knowledgeIndexStore.GetIndexedCount());
+
+        // Verify TrainingStore is unaffected by the KnowledgeIndexStore write.
         var trainingStore = new TrainingStore(tmpDir.Path, db: null);
         var attempts = trainingStore.LoadAllAttempts();
 
