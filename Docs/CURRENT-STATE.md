@@ -141,7 +141,48 @@ Knowledge documents are indexed into a Qdrant vector database via Ollama-generat
 - `KnowledgeIndexStore` tracks indexed document hashes in LiteDB to avoid re-indexing unchanged documents.
 - `KnowledgePromptContextBuilder.BuildRelevantContextWithSemanticSearchAsync()` queries Qdrant first, then fills remaining slots with keyword search.
 - New job type `knowledge-index` for background document indexing.
-- Endpoints: `POST /api/ml/index-knowledge`, `GET /api/knowledge/index-status`.
+- Endpoints: `POST /api/ml/index-knowledge`, `GET /api/knowledge/index-status`, `POST /api/knowledge/search`.
+
+### 15. Agent Orchestration via Semantic Kernel (Phase 6)
+
+**Where:** `OfficeKernelFactory.cs`, `DeskAgent.cs`, `DailyDesk/Services/Agents/`.
+
+`Microsoft.SemanticKernel` 1.71.0 powers all five desk agents:
+- `OfficeKernelFactory` builds an SK `Kernel` configured for the local Ollama endpoint.
+- `DeskAgent` base class wraps an SK `ChatCompletionAgent` with system prompt and tool registration.
+- Five desk agents (`ChiefOfStaffAgent`, `EngineeringDeskAgent`, `SuiteContextAgent`, `GrowthOpsAgent`, `MLEngineerAgent`) each have desk-specific tools and personality.
+- Agent dispatch in `SendChatAsync` routes to the correct agent based on route, with fallback to direct `IModelProvider`.
+- `DeskThreadState.Summary` enables multi-turn memory across conversations.
+- `DeskMessageRecord.ToolCalls` records tool invocations per message.
+
+### 16. Document Extraction via Docling (Phase 7)
+
+**Where:** `DailyDesk/Scripts/extract_document_text.py`, `KnowledgeImportService.cs`, `LearningDocument.cs`.
+
+- Python extraction script uses Docling when installed (PDF tables/figures, DOCX, PPTX, HTML, OCR).
+- Falls back to `pypdf`/`python-docx` when Docling is not installed.
+- Output format extended to `{ ok, text, metadata, tables, figures }`.
+- `KnowledgeImportService.ExtractViaPythonRichAsync` returns full extraction response.
+- `LearningDocument` model includes optional `ExtractedTable` and `ExtractedFigure` fields.
+
+### 17. Scheduled Automation & Workflows (Phase 8)
+
+**Where:** `JobSchedule.cs`, `JobSchedulerStore.cs`, `JobSchedulerWorker.cs`, `WorkflowTemplate.cs`, `WorkflowStore.cs`.
+
+- `JobSchedulerStore` (LiteDB `job_schedules`) stores scheduled job definitions with interval, enabled flag, and last run time.
+- `JobSchedulerWorker : BackgroundService` checks schedules every minute and enqueues jobs via `OfficeJobStore`.
+- `daily-run` job type orchestrates state refresh → ML pipeline → artifact export → operator suggestions.
+- `WorkflowStore` (LiteDB `workflow_templates`) stores operator-defined workflow templates with 3 built-ins: "Daily Run", "Exam Prep", "Knowledge Refresh".
+- Endpoints: `/api/schedules` CRUD, `/api/daily-run/latest`, `/api/workflows` CRUD + `/api/workflows/{id}/run`.
+
+### 18. WPF Client Async Integration (Phase 9)
+
+**Where:** `JobPollingService.cs`, `KnowledgeSearchService.cs`, `KnowledgeSearchResult.cs`, `DeskMessageRecord.cs`.
+
+- `JobPollingService` submits ML requests, polls `GET /api/jobs/{jobId}` every 2 seconds, and updates ViewModels on completion.
+- `KnowledgeSearchService` calls `POST /api/knowledge/search` for semantic search with similarity scores and text fallback.
+- `KnowledgeSearchResult` model carries document metadata and relevance score.
+- `ToolCallRecord` in `DeskMessageRecord` surfaces agent tool invocations to the WPF UI.
 
 ---
 
@@ -150,7 +191,7 @@ Knowledge documents are indexed into a Qdrant vector database via Ollama-generat
 | Project | NuGet Packages |
 |---------|---------------|
 | `DailyDesk` | None (project ref to Core only) |
-| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4, `AngleSharp` 1.4.0, `OllamaSharp` 5.4.25, `LiteDB` 5.0.21, `Polly.Core` 8.6.6, `Qdrant.Client` 1.17.0 |
+| `DailyDesk.Core` | `Microsoft.ML.OnnxRuntime` 1.24.4, `AngleSharp` 1.4.0, `OllamaSharp` 5.4.25, `LiteDB` 5.0.21, `Polly.Core` 8.6.6, `Qdrant.Client` 1.17.0, `Microsoft.SemanticKernel` 1.71.0 |
 | `DailyDesk.Broker` | `FluentValidation` 12.1.1, `Serilog.AspNetCore` 10.0.0 |
 | `DailyDesk.Core.Tests` | `xunit` 2.9.3, `xunit.runner.visualstudio` 2.8.2, `Microsoft.NET.Test.Sdk` 17.14.1, `coverlet.collector` 6.0.4 |
 
@@ -194,18 +235,19 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 
 ## API Endpoints
 
-### Core Endpoints (25 existing)
+### Core Endpoints
 - Health, state, chat, study, research, watchlist, inbox, library, history, workspace, ML.
 
-### Job Endpoints (Phase 3 — 4 endpoints)
+### Job Endpoints (Phase 3 — 5 endpoints)
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET | `/api/jobs` | List recent jobs (last 50), supports `?status=...&type=...` filters |
 | GET | `/api/jobs/{jobId}` | Get job status and metadata |
 | GET | `/api/jobs/{jobId}/result` | Get job result JSON (succeeded only) |
+| GET | `/api/jobs/metrics` | Get job metrics: counts by status, average duration, queue depth |
 | DELETE | `/api/jobs/{jobId}` | Delete a completed job (succeeded/failed only) |
 
-### ML Endpoints (Updated)
+### ML Endpoints (Updated — all async by default)
 | Method | Endpoint | Default | `?sync=true` |
 |--------|----------|---------|-------------|
 | POST | `/api/ml/analytics` | Returns `{ jobId, status }` | Blocks and returns result |
@@ -213,16 +255,39 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | POST | `/api/ml/embeddings` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/pipeline` | Returns `{ jobId, status }` | Blocks and returns result |
 | POST | `/api/ml/export-artifacts` | Returns `{ jobId, status }` | Blocks and returns result |
+| POST | `/api/ml/index-knowledge` | Returns `{ jobId, status }` | Blocks and returns result |
 
-### Knowledge Indexing Endpoints (Phase 5 — 2 endpoints)
+### Knowledge Endpoints (Phase 5 — 3 endpoints)
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/api/ml/index-knowledge` | Trigger knowledge document indexing (async by default, `?sync=true` for blocking) |
 | GET | `/api/knowledge/index-status` | Get indexed vs. total document count and vector store status |
+| POST | `/api/knowledge/search` | Semantic search across knowledge library |
+
+### Health Endpoint (Phase 4)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/health` | Structured subsystem health (Ollama, Python, LiteDB, job worker) |
+
+### Schedule Endpoints (Phase 8 — 4 endpoints)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/schedules` | List all job schedules |
+| POST | `/api/schedules` | Create a new schedule |
+| PUT | `/api/schedules/{id}` | Update a schedule (enable/disable, change interval) |
+| DELETE | `/api/schedules/{id}` | Remove a schedule |
+
+### Daily Run & Workflow Endpoints (Phase 8 — 5 endpoints)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/daily-run/latest` | Get most recent daily run summary |
+| GET | `/api/workflows` | List workflow templates |
+| POST | `/api/workflows` | Create a workflow template |
+| POST | `/api/workflows/{id}/run` | Execute a workflow template |
+| DELETE | `/api/workflows/{id}` | Remove a workflow template |
 
 ---
 
-## Test Coverage (128 tests)
+## Test Coverage (243 tests)
 
 | Area | Tests | Coverage |
 |------|-------|----------|
@@ -235,20 +300,11 @@ dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj
 | MLResultStore LiteDB | 3 | Analytics, forecast, embeddings persistence |
 | Job model unit tests | 8 | Enqueue, retrieve, dequeue, mark succeeded/failed, list recent |
 | Stale job recovery | 4 | Old running → failed, recent running preserved, queued/completed ignored, count |
-| Job model integration tests (PR 5) | 13 | FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips |
-| **Job management & retention (PR 6)** | **9** | **DeleteById (completed/nonexistent/queued/failed), DeleteOlderThan (expired/active), ListByStatus (filter/limit), GetTotalCount** |
-| **Phase 5: Semantic search** | **28** | **EmbeddingService (model defaults, empty/null/unreachable), VectorSearchResult/CollectionInfo defaults, KnowledgeIndexStore (CRUD, hash, indexing lifecycle), OllamaService embedding fallback, KnowledgePromptContextBuilder semantic fallback, IndexedDocumentRecord defaults, OfficeDatabase KnowledgeIndex collection** |
-
----
-
-## Phase 4 — Future Evaluation (Not Started)
-
-### Semantic Kernel for Agent Orchestration
-- **Prerequisite:** Phase 5 complete + stable tool/plugin boundary in the broker.
-- **Integration point:** Replace `PromptComposer` + `OfficeRouteCatalog` with SK agents. Each desk becomes an SK agent with its own tools and system prompt.
-- **Evaluate when:** The 5 agent desks need tool-calling capabilities.
-
-### Docling for Richer Document Extraction
-- **Prerequisite:** None (optional at any phase).
-- **Integration point:** Replace `extract_document_text.py` with Docling pipeline. Keep the same `ProcessRunner` subprocess model.
-- **Evaluate when:** PDF table extraction, PowerPoint content extraction, or OCR for scanned documents is needed.
+| Job model integration tests | 13 | FIFO ordering, full lifecycle succeed/fail, edge cases, payload round-trip, ListRecent limits/mixed statuses, idempotent recovery, multi-iteration, dequeue skips |
+| Job management & retention | 9 | DeleteById (completed/nonexistent/queued/failed), DeleteOlderThan (expired/active), ListByStatus (filter/limit), GetTotalCount |
+| Phase 4: Health & Metrics | 6 | Health report model defaults, job metrics calculation, average duration, retention worker |
+| Phase 5: Semantic search | 28 | EmbeddingService (model defaults, empty/null/unreachable), VectorSearchResult/CollectionInfo defaults, KnowledgeIndexStore (CRUD, hash, indexing lifecycle), OllamaService embedding fallback, KnowledgePromptContextBuilder semantic fallback, IndexedDocumentRecord defaults, OfficeDatabase KnowledgeIndex collection |
+| Phase 6: Agent orchestration | 30 | OfficeKernelFactory, DeskAgent base class, 5 desk agents (dispatch, fallback, summary), DeskThreadState summary, DeskMessageRecord ToolCalls, OperatorMemoryStore CloneDeskMessage |
+| Phase 7: Docling extraction | 10 | ExtractedTable/Figure models, KnowledgeImportService rich extraction, LearningDocument fields |
+| Phase 8: Scheduling & workflows | 60 | JobSchedule CRUD, JobSchedulerStore (enabled/disabled/due), WorkflowStore (built-ins, CRUD), WorkflowTemplate step execution, DailyRunTemplate model, OfficeJobType daily-run |
+| Phase 9: WPF async integration | 40 | JobPollingService state transitions, KnowledgeSearchService (semantic/fallback/empty), KnowledgeSearchResult model, ToolCallRecord in messages |
