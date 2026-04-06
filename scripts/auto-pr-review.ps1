@@ -249,8 +249,23 @@ $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
                         commit_title = "auto-merge: $($pr.title) [score $score/10]"
                         merge_method = "squash"
                     } | ConvertTo-Json -Compress
-                    Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
-                    Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
+                    try {
+                        Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
+                        Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
+                    } catch {
+                        if ($_.Exception.Response.StatusCode -eq 405 -or $_.Exception.Response.StatusCode -eq 409) {
+                            Write-Host "Merge conflict on $repo#$($pr.number) — attempting branch update..."
+                            try {
+                                Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/update-branch" `
+                                    -Method PUT -Headers $headers -ContentType "application/json" -Body '{"expected_head_sha":"'+ $pr.head.sha +'"}'
+                                Write-Host "Branch updated for $repo#$($pr.number) — will retry merge next cycle."
+                            } catch {
+                                Write-Host "Branch update failed for $repo#$($pr.number) — needs manual resolution."
+                            }
+                        } else {
+                            throw $_
+                        }
+                    }
 
                     # Notify Discord
                     $mergePayload = @{
@@ -418,5 +433,6 @@ $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 }
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
+
 
 
