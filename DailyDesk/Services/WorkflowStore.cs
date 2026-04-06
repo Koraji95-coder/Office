@@ -107,6 +107,43 @@ public sealed class WorkflowStore
                     new WorkflowStep { JobType = OfficeJobType.MLEmbeddings, Label = "Refresh Document Embeddings" },
                 ],
             },
+            new WorkflowTemplate
+            {
+                Name = "Electrical Drawing QA Review",
+                Description = "QA/QC compliance workflow for electrical construction drawings. " +
+                    "Covers code-reference review, floor-plan alignment, switchboard verification, " +
+                    "and standards documentation per the RAIC / Watercare QA/QC templates.",
+                BuiltIn = true,
+                FailurePolicy = WorkflowFailurePolicy.Abort,
+                Steps =
+                [
+                    new WorkflowStep
+                    {
+                        JobType = OfficeJobType.KnowledgeIndex,
+                        Label = "Index Electrical Standards Documents",
+                    },
+                    new WorkflowStep
+                    {
+                        JobType = OfficeJobType.MLAnalytics,
+                        Label = "Verify Code References and General Notes",
+                    },
+                    new WorkflowStep
+                    {
+                        JobType = OfficeJobType.MLAnalytics,
+                        Label = "Check Floor Plan Alignment with Architectural Drawings",
+                    },
+                    new WorkflowStep
+                    {
+                        JobType = OfficeJobType.MLAnalytics,
+                        Label = "Switchboard and Distribution Centre Verification",
+                    },
+                    new WorkflowStep
+                    {
+                        JobType = OfficeJobType.MLExportArtifacts,
+                        Label = "Export QA/QC Compliance Report",
+                    },
+                ],
+            },
         };
 
         foreach (var template in builtIns)

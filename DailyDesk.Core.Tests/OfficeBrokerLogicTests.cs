@@ -3997,6 +3997,321 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // ========================================================================
+    // Electrical QA/QC Standards Compliance Integration Tests
+    // Derived from: 20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md
+    // References: RAIC Internal Review Checklist, Watercare QA/QC templates,
+    //             Engineering Drawings Review Checklist, ELEC Schematic Design Checklist
+    // ========================================================================
+
+    [Fact]
+    public void WorkflowStore_SeedsElectricalQAReviewTemplate()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var all = store.ListAll();
+        Assert.Contains(all, w => w.Name == "Electrical Drawing QA Review" && w.BuiltIn);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_IsBuiltInAndCannotBeDeleted()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.True(template.BuiltIn);
+        Assert.False(store.Delete(template.Id));
+        Assert.NotNull(store.GetById(template.Id));
+    }
+
+    [Fact]
+    public void ElectricalQAReview_HasCorrectFailurePolicy()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // Per QA/QC checklist: a drawing compliance failure must halt subsequent steps.
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.Equal(WorkflowFailurePolicy.Abort, template.FailurePolicy);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_HasFiveOrderedSteps()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.Equal(5, template.Steps.Count);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_FirstStep_IndexesElectricalStandardsDocuments()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+
+        // Step 1: knowledge must be indexed before analytics can run.
+        var firstStep = template.Steps[0];
+        Assert.Equal(OfficeJobType.KnowledgeIndex, firstStep.JobType);
+        Assert.Contains("Electrical Standards", firstStep.Label, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_ContainsCodeReferencesAndGeneralNotesStep()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // ELEC Schematic Design Checklist: "Review code references and confirm applicable
+        // electrical codes and standards are listed."
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.Contains(template.Steps, s =>
+            s.JobType == OfficeJobType.MLAnalytics &&
+            s.Label.Contains("Code References", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ElectricalQAReview_ContainsFloorPlanAlignmentStep()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // ELEC Schematic Design Checklist: "Confirm that floor plan backgrounds align
+        // with the architectural drawings."
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.Contains(template.Steps, s =>
+            s.JobType == OfficeJobType.MLAnalytics &&
+            s.Label.Contains("Floor Plan", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ElectricalQAReview_ContainsSwitchboardVerificationStep()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // Watercare QA/QC templates – 1.13 Minimum mandatory tests:
+        // "3. Switchboards, distribution centres and control centres"
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        Assert.Contains(template.Steps, s =>
+            s.JobType == OfficeJobType.MLAnalytics &&
+            s.Label.Contains("Switchboard", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ElectricalQAReview_LastStep_ExportsComplianceReport()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+
+        // Final step must export the QA/QC compliance artefacts.
+        var lastStep = template.Steps[^1];
+        Assert.Equal(OfficeJobType.MLExportArtifacts, lastStep.JobType);
+        Assert.Contains("QA", lastStep.Label, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_WorkflowExecution_EnqueuesAllStepsInOrder()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+        var jobStore = new OfficeJobStore(db);
+
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+
+        // Simulate what POST /api/workflows/{id}/run does.
+        foreach (var step in template.Steps)
+        {
+            jobStore.Enqueue(step.JobType, "workflow:electrical-qa", step.RequestPayload);
+        }
+
+        // Dequeue and verify FIFO order matches the checklist sequence:
+        // 1. knowledge-index  2. ml-analytics (×3)  3. ml-export-artifacts
+        var dequeued = new List<OfficeJob>();
+        OfficeJob? next;
+        while ((next = jobStore.DequeueNext()) is not null)
+        {
+            dequeued.Add(next);
+        }
+
+        Assert.Equal(5, dequeued.Count);
+        Assert.Equal(OfficeJobType.KnowledgeIndex, dequeued[0].Type);
+        Assert.Equal(OfficeJobType.MLAnalytics, dequeued[1].Type);
+        Assert.Equal(OfficeJobType.MLAnalytics, dequeued[2].Type);
+        Assert.Equal(OfficeJobType.MLAnalytics, dequeued[3].Type);
+        Assert.Equal(OfficeJobType.MLExportArtifacts, dequeued[4].Type);
+    }
+
+    [Fact]
+    public void ElectricalQAReview_AllAnalyticsStepsHaveDistinctLabels()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // Each QA/QC checklist item must be uniquely identifiable by label.
+        var template = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+        var labels = template.Steps.Select(s => s.Label).ToList();
+        Assert.Equal(labels.Count, labels.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void WorkflowStore_SeedsAllFourBuiltInTemplatesIncludingElectricalQA()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var builtIns = store.ListAll().Where(w => w.BuiltIn).ToList();
+        Assert.Equal(4, builtIns.Count);
+        Assert.Contains(builtIns, w => w.Name == "Daily Run");
+        Assert.Contains(builtIns, w => w.Name == "Exam Prep");
+        Assert.Contains(builtIns, w => w.Name == "Knowledge Refresh");
+        Assert.Contains(builtIns, w => w.Name == "Electrical Drawing QA Review");
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_FindsElectricalQADocumentBySwitchboardTerm()
+    {
+        // Watercare mandatory test: switchboard verification must be searchable via
+        // the knowledge base.
+        var docs = new[]
+        {
+            new LearningDocument
+            {
+                FileName = "qa-switchboard-checklist.md",
+                RelativePath = "Knowledge/qa-switchboard-checklist.md",
+                Summary = "QA/QC checklist for switchboard and distribution centre verification.",
+                Topics = ["electrical", "switchboard", "qa"],
+            },
+            new LearningDocument
+            {
+                FileName = "general-notes.md",
+                RelativePath = "Knowledge/general-notes.md",
+                Summary = "General project notes and references.",
+                Topics = ["general"],
+            },
+        };
+
+        var library = new LearningLibrary { Documents = docs };
+        var result = KnowledgeSearchService.FallbackTextSearch("switchboard", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.True(result.Results.Count >= 1);
+        Assert.Equal("qa-switchboard-checklist.md", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_FindsElectricalQADocumentByCodeReferencesTerm()
+    {
+        // ELEC Schematic Design Checklist: code references must be reviewable via search.
+        var docs = new[]
+        {
+            new LearningDocument
+            {
+                FileName = "electrical-code-references.md",
+                RelativePath = "Knowledge/electrical-code-references.md",
+                Summary = "Review of applicable electrical codes and standards references for construction.",
+                Topics = ["electrical", "codes", "standards"],
+            },
+            new LearningDocument
+            {
+                FileName = "unrelated.md",
+                RelativePath = "Knowledge/unrelated.md",
+                Summary = "Marketing document.",
+                Topics = ["marketing"],
+            },
+        };
+
+        var library = new LearningLibrary { Documents = docs };
+        var result = KnowledgeSearchService.FallbackTextSearch("electrical codes standards", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.True(result.Results.Count >= 1);
+        Assert.Contains(result.Results, r => r.Title == "electrical-code-references.md");
+    }
+
+    [Fact]
+    public void KnowledgeSearchService_FindsElectricalQADocumentByFloorPlanTerm()
+    {
+        // ELEC Schematic Design Checklist: floor plan alignment with architectural drawings.
+        var docs = new[]
+        {
+            new LearningDocument
+            {
+                FileName = "floor-plan-alignment.md",
+                RelativePath = "Knowledge/floor-plan-alignment.md",
+                Summary = "Floor plan background alignment verification with architectural drawings.",
+                Topics = ["electrical", "floor-plan", "architectural"],
+            },
+            new LearningDocument
+            {
+                FileName = "unrelated.md",
+                RelativePath = "Knowledge/unrelated.md",
+                Summary = "Generic project document.",
+                Topics = ["general"],
+            },
+        };
+
+        var library = new LearningLibrary { Documents = docs };
+        var result = KnowledgeSearchService.FallbackTextSearch("floor plan alignment architectural", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.True(result.Results.Count >= 1);
+        Assert.Contains(result.Results, r => r.Title == "floor-plan-alignment.md");
+    }
+
+    [Fact]
+    public void ElectricalQAWorkflow_CanBeRecreatedAsCustomTemplate()
+    {
+        // Operators must be able to clone the built-in QA checklist into a custom template
+        // for project-specific customisation.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var builtIn = store.ListAll().Single(w => w.Name == "Electrical Drawing QA Review");
+
+        var custom = store.Create(new WorkflowTemplate
+        {
+            Name = "Site-Specific Electrical QA Review",
+            Description = "Customised electrical QA review for substation project.",
+            FailurePolicy = builtIn.FailurePolicy,
+            Steps = builtIn.Steps.Select(s => new WorkflowStep
+            {
+                JobType = s.JobType,
+                Label = s.Label,
+                RequestPayload = s.RequestPayload,
+            }).ToList(),
+        });
+
+        Assert.NotNull(custom.Id);
+        Assert.NotEqual(builtIn.Id, custom.Id);
+        Assert.Equal(builtIn.Steps.Count, custom.Steps.Count);
+        Assert.False(custom.BuiltIn);
+
+        // Custom template can be deleted; built-in cannot.
+        Assert.True(store.Delete(custom.Id));
+        Assert.False(store.Delete(builtIn.Id));
+    }
+
     // --- Test helpers ---
 
     /// <summary>
