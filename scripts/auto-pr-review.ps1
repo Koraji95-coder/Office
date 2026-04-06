@@ -1,3 +1,15 @@
+# Ensure Ollama has a model loaded
+$ollamaRunning = $false
+try {
+    $ps = Invoke-RestMethod -Uri "http://localhost:11434/api/ps" -ErrorAction Stop
+    if ($ps.models.Count -gt 0) { $ollamaRunning = $true }
+} catch {}
+
+if (-not $ollamaRunning) {
+    Write-Host "Loading qwen3:14b..."
+    Start-Process -FilePath "ollama" -ArgumentList "run qwen3:14b" -WindowStyle Hidden
+    Start-Sleep -Seconds 30
+}
 $webhook = "https://discord.com/api/webhooks/1490590808603361291/SCVngVWu8BmQ87KBfwWZsKjk1nlwrOmSMcfy8F_tn2v2ELtJcDLGWKNhO3Zwy5pAMl_l"
 $userId = "1356296581472718988"
 $ghToken = $env:GITHUB_TOKEN
@@ -108,3 +120,4 @@ Keep it concise. No fluff.
 }
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
+
