@@ -2676,6 +2676,258 @@ public sealed class OfficeBrokerLogicTests
     }
 
     // ========================================================================
+    // File Upload Edge Cases: Integration Tests
+    // ========================================================================
+
+    // --- Invalid / unsupported file types ---
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_SkipsUnsupportedFileTypes()
+    {
+        // Arrange: populate a temp dir with only unsupported extensions
+        using var tmp = new TempDirectory();
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "photo.jpg"), "not a document");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "data.csv"), "a,b,c");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "app.exe"), "binary");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "config.json"), "{}");
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: no supported documents discovered
+        Assert.Empty(library.Documents);
+    }
+
+    [Theory]
+    [InlineData(".txt")]
+    [InlineData(".md")]
+    [InlineData(".docx")]
+    [InlineData(".pptx")]
+    [InlineData(".pdf")]
+    [InlineData(".onepkg")]
+    public void KnowledgeImportService_SupportedExtensions_IncludesExpected(string extension)
+    {
+        // Use reflection to access the private SupportedExtensions set
+        var field = typeof(KnowledgeImportService).GetField(
+            "SupportedExtensions",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+        );
+        Assert.NotNull(field);
+        var extensions = (HashSet<string>)field!.GetValue(null)!;
+        Assert.Contains(extension, extensions);
+    }
+
+    [Fact]
+    public void KnowledgeImportService_SupportedExtensions_ExcludesCommonInvalidTypes()
+    {
+        var field = typeof(KnowledgeImportService).GetField(
+            "SupportedExtensions",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+        );
+        Assert.NotNull(field);
+        var extensions = (HashSet<string>)field!.GetValue(null)!;
+        Assert.DoesNotContain(".jpg", extensions);
+        Assert.DoesNotContain(".png", extensions);
+        Assert.DoesNotContain(".csv", extensions);
+        Assert.DoesNotContain(".exe", extensions);
+        Assert.DoesNotContain(".json", extensions);
+        Assert.DoesNotContain(".xml", extensions);
+    }
+
+    // --- Large file handling ---
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_LargeTextFile_TruncatesExtractedText()
+    {
+        // Arrange: create a .txt file whose content exceeds the 12 000-char limit
+        using var tmp = new TempDirectory();
+        var largeContent = new string('A', 20_000);
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "large.txt"), largeContent);
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: document loaded, extracted text is truncated to ≤12 000 chars + "..."
+        Assert.Single(library.Documents);
+        var doc = library.Documents[0];
+        Assert.NotNull(doc.ExtractedText);
+        Assert.True(doc.ExtractedText!.Length <= 12_000,
+            $"ExtractedText should be ≤12 000 chars but was {doc.ExtractedText!.Length}");
+        Assert.EndsWith("...", doc.ExtractedText);
+    }
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_LargeTextFile_TruncatesSummary()
+    {
+        // Arrange: create a .txt file whose content exceeds the 320-char summary limit
+        using var tmp = new TempDirectory();
+        var largeContent = new string('B', 2_000);
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "summary-test.txt"), largeContent);
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: summary is capped at 320 chars and ends with "..."
+        Assert.Single(library.Documents);
+        var doc = library.Documents[0];
+        Assert.NotNull(doc.Summary);
+        Assert.True(doc.Summary!.Length <= 320,
+            $"Summary should be ≤320 chars but was {doc.Summary!.Length}");
+        Assert.EndsWith("...", doc.Summary);
+    }
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_SmallTextFile_DoesNotTruncate()
+    {
+        // Arrange: a small file that should not be truncated
+        using var tmp = new TempDirectory();
+        const string smallContent = "Hello, world!";
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "small.txt"), smallContent);
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: extracted text and summary are not truncated
+        Assert.Single(library.Documents);
+        var doc = library.Documents[0];
+        Assert.Equal(smallContent, doc.ExtractedText);
+        Assert.Equal(smallContent, doc.Summary);
+    }
+
+    // --- 64-document load limit ---
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_EnforcesMaxDocumentLimit()
+    {
+        // Arrange: create 70 .txt files in the temp directory
+        using var tmp = new TempDirectory();
+        for (var i = 1; i <= 70; i++)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tmp.Path, $"doc{i:D3}.txt"),
+                $"Content of document {i}"
+            );
+        }
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: only 64 documents are loaded
+        Assert.Equal(64, library.Documents.Count);
+    }
+
+    // --- Cancellation / network-interruption analogue ---
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_RespectsExternalCancellation()
+    {
+        // Arrange: create several .txt files to process
+        using var tmp = new TempDirectory();
+        for (var i = 1; i <= 20; i++)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(tmp.Path, $"file{i:D2}.txt"),
+                $"Content {i}"
+            );
+        }
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // pre-cancelled token simulates an interrupted connection
+
+        // Act & Assert: OperationCanceledException is raised
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.LoadAsync(tmp.Path, cancellationToken: cts.Token)
+        );
+    }
+
+    // --- Error recovery: a single corrupt document does not abort the batch ---
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_CorruptDocxDoesNotAbortBatch()
+    {
+        // Arrange: one valid .txt file and one corrupt .docx file (not a real ZIP)
+        using var tmp = new TempDirectory();
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "valid.txt"), "Valid content");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "corrupt.docx"), "not a zip");
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act: should not throw; the corrupt .docx is logged as a failed import
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: both files attempted, valid one loaded cleanly, corrupt one has error summary
+        Assert.Equal(2, library.Documents.Count);
+
+        var validDoc = library.Documents.FirstOrDefault(d => d.FileName == "valid.txt");
+        Assert.NotNull(validDoc);
+        Assert.Equal("Valid content", validDoc!.ExtractedText);
+
+        var corruptDoc = library.Documents.FirstOrDefault(d => d.FileName == "corrupt.docx");
+        Assert.NotNull(corruptDoc);
+        Assert.NotNull(corruptDoc!.Summary);
+        Assert.StartsWith("Import failed:", corruptDoc.Summary);
+    }
+
+    [Fact]
+    public async Task KnowledgeImportService_LoadAsync_AllCorruptFiles_ReturnsErrorSummaryForEach()
+    {
+        // Arrange: multiple corrupt .docx files (invalid ZIPs)
+        using var tmp = new TempDirectory();
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "bad1.docx"), "garbage");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "bad2.docx"), "garbage");
+        await File.WriteAllTextAsync(Path.Combine(tmp.Path, "bad3.pptx"), "garbage");
+
+        var service = new KnowledgeImportService(
+            new ProcessRunner(),
+            pythonScriptPath: Path.Combine(tmp.Path, "nonexistent.py")
+        );
+
+        // Act
+        var library = await service.LoadAsync(tmp.Path);
+
+        // Assert: all three loaded with failure summaries, none threw
+        Assert.Equal(3, library.Documents.Count);
+        foreach (var doc in library.Documents)
+        {
+            Assert.NotNull(doc.Summary);
+            Assert.StartsWith("Import failed:", doc.Summary);
+        }
+    }
+
+    // ========================================================================
     // Phase 8: Scheduled Automation & Operator Workflows
     // ========================================================================
 
