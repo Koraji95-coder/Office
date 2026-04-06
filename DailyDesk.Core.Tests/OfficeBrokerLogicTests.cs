@@ -4050,4 +4050,266 @@ public sealed class OfficeBrokerLogicTests
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
         }
     }
+
+    // ========================================================================
+    // CI/CD Pipeline: Deployment Pipeline Stage Tests
+    // Validates build-stage artifacts, test-stage invariants, and
+    // deploy-stage contract checks to harden the deployment pipeline.
+    // ========================================================================
+
+    // --- Build-stage: project structure and constants ---
+
+    [Fact]
+    public void DeploymentPipeline_AllJobTypes_AreNonEmpty()
+    {
+        // Every OfficeJobType constant that the pipeline may enqueue must have
+        // a non-empty string value so that downstream workers can dispatch on it.
+        Assert.NotEmpty(OfficeJobType.MLAnalytics);
+        Assert.NotEmpty(OfficeJobType.MLForecast);
+        Assert.NotEmpty(OfficeJobType.MLEmbeddings);
+        Assert.NotEmpty(OfficeJobType.MLPipeline);
+        Assert.NotEmpty(OfficeJobType.MLExportArtifacts);
+        Assert.NotEmpty(OfficeJobType.KnowledgeIndex);
+        Assert.NotEmpty(OfficeJobType.DailyRun);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_AllJobStatuses_AreNonEmpty()
+    {
+        // Every OfficeJobStatus constant used throughout the pipeline must be a
+        // non-empty lowercase string so that LiteDB queries and API responses
+        // stay consistent.
+        Assert.NotEmpty(OfficeJobStatus.Queued);
+        Assert.NotEmpty(OfficeJobStatus.Running);
+        Assert.NotEmpty(OfficeJobStatus.Succeeded);
+        Assert.NotEmpty(OfficeJobStatus.Failed);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobStatusConstants_AreLowercase()
+    {
+        Assert.Equal(OfficeJobStatus.Queued, OfficeJobStatus.Queued.ToLowerInvariant());
+        Assert.Equal(OfficeJobStatus.Running, OfficeJobStatus.Running.ToLowerInvariant());
+        Assert.Equal(OfficeJobStatus.Succeeded, OfficeJobStatus.Succeeded.ToLowerInvariant());
+        Assert.Equal(OfficeJobStatus.Failed, OfficeJobStatus.Failed.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobTypeConstants_AreLowercase()
+    {
+        Assert.Equal(OfficeJobType.MLAnalytics, OfficeJobType.MLAnalytics.ToLowerInvariant());
+        Assert.Equal(OfficeJobType.MLPipeline, OfficeJobType.MLPipeline.ToLowerInvariant());
+        Assert.Equal(OfficeJobType.KnowledgeIndex, OfficeJobType.KnowledgeIndex.ToLowerInvariant());
+        Assert.Equal(OfficeJobType.DailyRun, OfficeJobType.DailyRun.ToLowerInvariant());
+    }
+
+    // --- Build-stage: health report model ---
+
+    [Fact]
+    public void DeploymentPipeline_OfficeHealthReport_DefaultsToOk()
+    {
+        // The health report must default to "ok" so that the /api/health endpoint
+        // returns a passing response when all subsystems are operational.
+        var report = new OfficeHealthReport();
+        Assert.Equal(HealthStatus.Ok, report.Overall);
+        Assert.Equal(HealthStatus.Ok, report.Ollama.Status);
+        Assert.Equal(HealthStatus.Ok, report.Python.Status);
+        Assert.Equal(HealthStatus.Ok, report.LiteDB.Status);
+        Assert.Equal(HealthStatus.Ok, report.JobWorker.Status);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_HealthStatus_AllConstantsPresent()
+    {
+        Assert.Equal("ok", HealthStatus.Ok);
+        Assert.Equal("degraded", HealthStatus.Degraded);
+        Assert.Equal("unavailable", HealthStatus.Unavailable);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_SubsystemHealth_CanBeMarkedUnavailable()
+    {
+        var health = new SubsystemHealth
+        {
+            Status = HealthStatus.Unavailable,
+            Detail = "Service unreachable",
+        };
+
+        Assert.Equal(HealthStatus.Unavailable, health.Status);
+        Assert.Equal("Service unreachable", health.Detail);
+    }
+
+    // --- Test-stage: job metrics ---
+
+    [Fact]
+    public void DeploymentPipeline_JobMetrics_DefaultsAreZero()
+    {
+        var metrics = new OfficeJobMetrics();
+        Assert.Equal(0, metrics.TotalJobs);
+        Assert.Equal(0, metrics.QueuedCount);
+        Assert.Equal(0, metrics.RunningCount);
+        Assert.Equal(0, metrics.SucceededCount);
+        Assert.Equal(0, metrics.FailedCount);
+        Assert.Null(metrics.AverageDurationSeconds);
+        Assert.Equal(0, metrics.CompletedLastHour);
+        Assert.Equal(0, metrics.CompletedLastDay);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobStore_GetMetrics_ReflectsEnqueuedJobs()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        store.Enqueue(OfficeJobType.MLPipeline, "ci-pipeline");
+        store.Enqueue(OfficeJobType.KnowledgeIndex, "ci-pipeline");
+
+        var metrics = store.GetMetrics();
+
+        Assert.Equal(2, metrics.TotalJobs);
+        Assert.Equal(2, metrics.QueuedCount);
+        Assert.Equal(0, metrics.RunningCount);
+        Assert.Equal(0, metrics.SucceededCount);
+        Assert.Equal(0, metrics.FailedCount);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobStore_GetMetrics_ReflectsCompletedJobs()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLAnalytics, "ci-pipeline");
+        store.DequeueNext();
+        store.MarkSucceeded(job.Id, resultJson: null);
+
+        var metrics = store.GetMetrics();
+
+        Assert.Equal(1, metrics.TotalJobs);
+        Assert.Equal(0, metrics.QueuedCount);
+        Assert.Equal(1, metrics.SucceededCount);
+    }
+
+    // --- Deploy-stage: workflow template contracts ---
+
+    [Fact]
+    public void DeploymentPipeline_BuiltInWorkflows_AllHaveSteps()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var builtIns = store.ListAll().Where(w => w.BuiltIn).ToList();
+
+        Assert.NotEmpty(builtIns);
+        foreach (var wf in builtIns)
+        {
+            Assert.NotEmpty(wf.Steps);
+            Assert.NotEmpty(wf.Name);
+        }
+    }
+
+    [Fact]
+    public void DeploymentPipeline_BuiltInWorkflows_UseKnownJobTypes()
+    {
+        var knownTypes = new HashSet<string>
+        {
+            OfficeJobType.MLAnalytics,
+            OfficeJobType.MLForecast,
+            OfficeJobType.MLEmbeddings,
+            OfficeJobType.MLPipeline,
+            OfficeJobType.MLExportArtifacts,
+            OfficeJobType.KnowledgeIndex,
+            OfficeJobType.DailyRun,
+        };
+
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var builtIns = store.ListAll().Where(w => w.BuiltIn).ToList();
+
+        foreach (var wf in builtIns)
+        {
+            foreach (var step in wf.Steps)
+            {
+                Assert.Contains(step.JobType, knownTypes);
+            }
+        }
+    }
+
+    [Fact]
+    public void DeploymentPipeline_WorkflowFailurePolicies_AreValid()
+    {
+        var validPolicies = new[] { WorkflowFailurePolicy.Abort, WorkflowFailurePolicy.Continue };
+
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var templates = store.ListAll();
+        foreach (var template in templates)
+        {
+            Assert.Contains(template.FailurePolicy, validPolicies);
+        }
+    }
+
+    [Fact]
+    public void DeploymentPipeline_NewJob_HasQueuedStatus()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.DailyRun, "ci-deploy-check");
+
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+        Assert.Null(job.StartedAt);
+        Assert.Null(job.CompletedAt);
+        Assert.Null(job.Error);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobLifecycle_TransitionsCorrectly()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        // Enqueue → Running → Succeeded
+        var job = store.Enqueue(OfficeJobType.MLPipeline, "ci-deploy-check");
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+
+        var running = store.DequeueNext();
+        Assert.NotNull(running);
+        Assert.Equal(OfficeJobStatus.Running, running!.Status);
+        Assert.NotNull(running.StartedAt);
+
+        store.MarkSucceeded(running.Id, resultJson: "{\"stage\":\"deploy\"}");
+        var completed = store.GetById(running.Id);
+        Assert.NotNull(completed);
+        Assert.Equal(OfficeJobStatus.Succeeded, completed!.Status);
+        Assert.NotNull(completed.CompletedAt);
+        Assert.Null(completed.Error);
+    }
+
+    [Fact]
+    public void DeploymentPipeline_JobFailure_RecordsError()
+    {
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLPipeline, "ci-deploy-check");
+        store.DequeueNext();
+        store.MarkFailed(job.Id, "Deploy stage failed: artifact missing.");
+
+        var failed = store.GetById(job.Id);
+        Assert.NotNull(failed);
+        Assert.Equal(OfficeJobStatus.Failed, failed!.Status);
+        Assert.Equal("Deploy stage failed: artifact missing.", failed.Error);
+        Assert.NotNull(failed.CompletedAt);
+    }
 }

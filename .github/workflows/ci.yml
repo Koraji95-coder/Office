@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Stage 1: Build
+  # ─────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
+
+      - name: Build core library
+        run: dotnet build DailyDesk.Core/DailyDesk.Core.csproj --no-restore --configuration Release
+
+      - name: Build broker
+        run: dotnet build DailyDesk.Broker/DailyDesk.Broker.csproj --no-restore --configuration Release
+
+      - name: Build test project
+        run: dotnet build DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj --no-restore --configuration Release
+
+  # ─────────────────────────────────────────────
+  # Stage 2: Test
+  # ─────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
+
+      - name: Run tests
+        run: >
+          dotnet test DailyDesk.Core.Tests/DailyDesk.Core.Tests.csproj
+          --no-restore
+          --configuration Release
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults/*.trx
+
+  # ─────────────────────────────────────────────
+  # Stage 3: Deploy validation
+  # Publishes the broker and verifies the output
+  # contains the expected startup artifacts.
+  # ─────────────────────────────────────────────
+  deploy-validation:
+    name: Deploy Validation
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore DailyDesk.Broker/DailyDesk.Broker.csproj
+
+      - name: Publish broker
+        run: >
+          dotnet publish DailyDesk.Broker/DailyDesk.Broker.csproj
+          --configuration Release
+          --output ./artifacts/DailyDesk.Broker/publish
+
+      - name: Verify publish output contains broker executable
+        run: |
+          if [ ! -f "./artifacts/DailyDesk.Broker/publish/DailyDesk.Broker" ] && \
+             [ ! -f "./artifacts/DailyDesk.Broker/publish/DailyDesk.Broker.dll" ]; then
+            echo "ERROR: Broker publish output is missing the expected executable."
+            ls ./artifacts/DailyDesk.Broker/publish/
+            exit 1
+          fi
+          echo "Broker publish output verified."
+
+      - name: Verify core library is present in publish output
+        run: |
+          if [ ! -f "./artifacts/DailyDesk.Broker/publish/DailyDesk.Core.dll" ]; then
+            echo "ERROR: DailyDesk.Core.dll not found in publish output."
+            ls ./artifacts/DailyDesk.Broker/publish/
+            exit 1
+          fi
+          echo "Core library present in publish output."
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: broker-publish
+          path: ./artifacts/DailyDesk.Broker/publish/
