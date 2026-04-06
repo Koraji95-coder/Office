@@ -4796,6 +4796,529 @@ public sealed class OfficeBrokerLogicTests
         Assert.Contains("Relay Coordination Defense", evaluation.Summary);
     }
 
+    // --- AGENT_REPLY_GUIDE.md chunk7: Electrical Drafting Production Control Compliance Tests ---
+    // Covers: approval routing, revision tracking, issue-set handling, audit trail,
+    // and AutoCAD-related workflow fit requirements from the Electrical Drafting Workflows section.
+
+    // -- Approval Routing --
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_NewAction_IsPending()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Research DraftFlow for electrical drafting production control",
+            SourceAgent = "business",
+            ActionType = "research",
+            Priority = "high",
+            Rationale = "Evaluate approval routing and revision tracking for electrical drawing sets.",
+        };
+
+        Assert.True(action.IsPending);
+        Assert.Equal("pending", action.Status);
+        Assert.Equal("pending review", action.StatusSummary);
+        Assert.Equal("pending", action.InboxBadgeText);
+    }
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_ApproveOnly_MovesToAccepted()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Research approval routing patterns for electrical drawing review",
+            SourceAgent = "business",
+            ActionType = "research",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Approve only. Relevant but not for now. Keep for later comparison.",
+            },
+        };
+
+        Assert.False(action.IsPending);
+        Assert.True(action.IsAccepted);
+        Assert.True(action.NeedsFollowThrough);
+        Assert.Equal("approved next", action.InboxBadgeText);
+    }
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_ApproveAndQueue_ShowsQueuedBadge()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Evaluate issue-set approval flow for electrical drafting",
+            SourceAgent = "business",
+            ActionType = "research",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Approve and queue. Needed for drafting workflow evaluation.",
+            },
+            ExecutionStatus = "queued",
+        };
+
+        Assert.True(action.IsAccepted);
+        Assert.True(action.IsQueued);
+        Assert.True(action.HasExecution);
+        Assert.Equal("queued", action.InboxBadgeText);
+        Assert.Equal("queued", action.ExecutionStatusSummary);
+    }
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_ApproveAndRun_ShowsRunningBadge()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Research audit trail requirements for AutoCAD drawing packages",
+            SourceAgent = "business",
+            ActionType = "research",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Approve and run. Need audit trail data immediately.",
+            },
+            ExecutionStatus = "running",
+            ExecutionSummary = "Searching live sources for audit trail and revision control patterns.",
+        };
+
+        Assert.True(action.IsRunning);
+        Assert.True(action.HasExecution);
+        Assert.Equal("running now", action.ExecutionStatusSummary);
+        Assert.Equal("running now", action.InboxBadgeText);
+        Assert.Contains("audit trail", action.InboxSummary);
+    }
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_Completed_ShowsCompletedBadge()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Research revision tracking for electrical drafting production control",
+            SourceAgent = "business",
+            ActionType = "research",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Approve and run.",
+            },
+            ExecutionStatus = "completed",
+            ExecutionSummary = "Research complete. 4 sources found on revision control and issue-set handling.",
+        };
+
+        Assert.True(action.IsCompleted);
+        Assert.True(action.HasExecution);
+        Assert.Equal("completed", action.ExecutionStatusSummary);
+        Assert.Equal("completed", action.InboxBadgeText);
+    }
+
+    [Fact]
+    public void ProductionControl_ApprovalRouting_DisplaySummary_IncludesAgentPriorityTitle()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Compare AutoCAD workflow fit for drawing review tools",
+            SourceAgent = "business",
+            Priority = "high",
+        };
+
+        Assert.Equal("business | high | Compare AutoCAD workflow fit for drawing review tools", action.DisplaySummary);
+    }
+
+    // -- Revision Tracking --
+
+    [Fact]
+    public void ProductionControl_RevisionTracking_ResearchReport_RunSummaryIncludesMetadata()
+    {
+        var generatedAt = new DateTimeOffset(2026, 3, 24, 0, 6, 0, TimeSpan.Zero);
+        var report = new ResearchReport
+        {
+            Query = "electrical drafting production control revision tracking",
+            Perspective = "Business Strategist",
+            Model = "gemma3:12b",
+            Summary = "Revision control patterns for electrical drafting require tracking sheet revisions, signoff states, and audit trails.",
+            GenerationSource = "live web + ollama synthesis",
+            GeneratedAt = generatedAt,
+            Sources = [new ResearchSource { Domain = "www.draftflow.org", Url = "https://www.draftflow.org/" }],
+        };
+
+        Assert.Contains("2026-03-24", report.RunSummary);
+        Assert.Contains("Business Strategist", report.RunSummary);
+        Assert.Contains("gemma3:12b", report.RunSummary);
+        Assert.Single(report.Sources);
+    }
+
+    [Fact]
+    public void ProductionControl_RevisionTracking_ResearchReport_MultipleSourcesTracked()
+    {
+        var report = new ResearchReport
+        {
+            Query = "revision tracking and signoff states for electrical drawing packages",
+            Perspective = "Business Strategist",
+            Model = "gemma3:12b",
+            GenerationSource = "live web + ollama synthesis",
+            KeyTakeaways =
+            [
+                "Revision control must track sheet revisions and signoff states.",
+                "Audit trail is required for issued-for-construction drawing packages.",
+                "Issue-set approval gates prevent premature drawing release.",
+            ],
+            Sources =
+            [
+                new ResearchSource { Domain = "www.draftflow.org", Url = "https://www.draftflow.org/" },
+                new ResearchSource { Domain = "www.flowlu.com", Url = "https://www.flowlu.com/blog/productivity/approval-workflow-software/" },
+                new ResearchSource { Domain = "productive.io", Url = "https://productive.io/blog/workflow-approval-software/" },
+            ],
+        };
+
+        Assert.Equal(3, report.Sources.Count);
+        Assert.Equal(3, report.KeyTakeaways.Count);
+        Assert.Contains(report.KeyTakeaways, t => t.Contains("Revision control"));
+        Assert.Contains(report.KeyTakeaways, t => t.Contains("Audit trail"));
+        Assert.Contains(report.KeyTakeaways, t => t.Contains("Issue-set"));
+    }
+
+    [Fact]
+    public void ProductionControl_RevisionTracking_ResearchWatchlist_WeeklyInterval_IsCorrect()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            Topic = "electrical drafting production control",
+            Query = "Research DraftFlow for electrical drafting production control. Return: approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.",
+            Frequency = "Weekly",
+            PreferredPerspective = "Business Strategist",
+            LastRunAt = new DateTimeOffset(2026, 3, 24, 0, 6, 0, TimeSpan.Zero),
+        };
+
+        Assert.Equal(TimeSpan.FromDays(7), watchlist.Interval);
+        Assert.True(watchlist.IsDue);
+        Assert.Contains("Weekly", watchlist.DueSummary);
+    }
+
+    [Fact]
+    public void ProductionControl_RevisionTracking_ResearchWatchlist_NeverRun_IsDue()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            Topic = "revision control for electrical drawing sets",
+            Frequency = "Weekly",
+            IsEnabled = true,
+            LastRunAt = null,
+        };
+
+        Assert.True(watchlist.IsDue);
+        Assert.Equal("never run", watchlist.DueSummary);
+    }
+
+    // -- Issue-Set Handling --
+
+    [Fact]
+    public void ProductionControl_IssueSetHandling_PendingApproval_IsUnresolved()
+    {
+        var issueSetAction = new SuggestedAction
+        {
+            Title = "Evaluate issue-set approval flow patterns for electrical drafting teams",
+            SourceAgent = "suite",
+            ActionType = "analysis",
+            Priority = "medium",
+            Rationale = "Compare issue-set approval flow. Return: issue states, approval gates, rejection paths, and resubmission rules.",
+        };
+
+        Assert.True(issueSetAction.IsPending);
+        Assert.False(issueSetAction.IsAccepted);
+        Assert.False(issueSetAction.HasExecution);
+        Assert.False(issueSetAction.NeedsFollowThrough);
+    }
+
+    [Fact]
+    public void ProductionControl_IssueSetHandling_AcceptedItem_NeedsFollowThrough_WhenNotQueued()
+    {
+        var issueSetAction = new SuggestedAction
+        {
+            Title = "Issue-set approval gate research for electrical packages",
+            SourceAgent = "suite",
+            ActionType = "analysis",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Approve only. Keep for later comparison against Suite approval flow.",
+            },
+            ExecutionStatus = "not_queued",
+        };
+
+        Assert.True(issueSetAction.IsAccepted);
+        Assert.True(issueSetAction.NeedsFollowThrough);
+        Assert.False(issueSetAction.HasExecution);
+        Assert.Equal("approved next", issueSetAction.InboxBadgeText);
+        Assert.Contains("Approved.", issueSetAction.InboxSummary);
+    }
+
+    [Fact]
+    public void ProductionControl_IssueSetHandling_InboxSection_TracksPendingAndApprovedItems()
+    {
+        var pending = new SuggestedAction
+        {
+            Title = "Issue-set handling for drawing review routing",
+            SourceAgent = "suite",
+            Priority = "medium",
+        };
+        var accepted = new SuggestedAction
+        {
+            Title = "Approval gate validation for electrical issue sets",
+            SourceAgent = "business",
+            Priority = "high",
+            Outcome = new SuggestionOutcome { Status = "accepted", Reason = "Approve only." },
+        };
+
+        var inbox = new OfficeInboxSection
+        {
+            PendingApproval = [pending],
+            Approved = [accepted],
+            Summary = "2 items: 1 pending, 1 approved.",
+        };
+
+        Assert.Single(inbox.PendingApproval);
+        Assert.Single(inbox.Approved);
+        Assert.Contains("2 items", inbox.Summary);
+    }
+
+    [Fact]
+    public void ProductionControl_IssueSetHandling_FailedExecution_ShowsNeedsRetry()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Research issue-set rejection and resubmission rules",
+            SourceAgent = "business",
+            Outcome = new SuggestionOutcome { Status = "accepted", Reason = "Approve and run." },
+            ExecutionStatus = "failed",
+            ExecutionSummary = "Research failed: no sources found for resubmission rules.",
+        };
+
+        Assert.True(action.IsFailed);
+        Assert.True(action.HasExecution);
+        Assert.Equal("needs retry", action.ExecutionStatusSummary);
+        Assert.Equal("needs retry", action.InboxBadgeText);
+    }
+
+    // -- Audit Trail --
+
+    [Fact]
+    public void ProductionControl_AuditTrail_OutcomeRecordedAt_IsCaptured()
+    {
+        var recordedAt = new DateTimeOffset(2026, 3, 24, 8, 30, 0, TimeSpan.Zero);
+        var outcome = new SuggestionOutcome
+        {
+            Status = "accepted",
+            Reason = "Approve and run. Focus on audit trail and signoff requirements.",
+            OutcomeNote = "Needed for IFC drawing package validation.",
+            RecordedAt = recordedAt,
+        };
+
+        Assert.Equal(recordedAt, outcome.RecordedAt);
+        Assert.Contains("accepted", outcome.DisplaySummary);
+        Assert.Contains("audit trail", outcome.DisplaySummary);
+        Assert.Contains("IFC drawing package", outcome.DisplaySummary);
+    }
+
+    [Fact]
+    public void ProductionControl_AuditTrail_OutcomeDisplaySummary_IncludesStatusReasonAndNote()
+    {
+        var outcome = new SuggestionOutcome
+        {
+            Status = "accepted",
+            Reason = "Approve and run.",
+            OutcomeNote = "Return signoff states and audit trail steps.",
+        };
+
+        Assert.Contains("accepted", outcome.DisplaySummary);
+        Assert.Contains("Approve and run.", outcome.DisplaySummary);
+        Assert.Contains("Return signoff states and audit trail steps.", outcome.DisplaySummary);
+    }
+
+    [Fact]
+    public void ProductionControl_AuditTrail_OutcomeDisplaySummary_OmitsNoteWhenEmpty()
+    {
+        var outcome = new SuggestionOutcome
+        {
+            Status = "accepted",
+            Reason = "Approve only.",
+            OutcomeNote = string.Empty,
+        };
+
+        Assert.Equal("accepted | Approve only.", outcome.DisplaySummary);
+    }
+
+    [Fact]
+    public void ProductionControl_AuditTrail_AutoStagedAction_WasAutoStagedIsTrue()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Audit trail research for drawing transmittal packages",
+            SourceAgent = "business",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "auto-staged via approval routing.",
+            },
+            ExecutionStatus = "queued",
+        };
+
+        Assert.True(action.WasAutoStaged);
+    }
+
+    [Fact]
+    public void ProductionControl_AuditTrail_ManualApproval_WasAutoStagedIsFalse()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Manual audit trail review for electrical IFC package",
+            SourceAgent = "chief",
+            Outcome = new SuggestionOutcome
+            {
+                Status = "accepted",
+                Reason = "Operator approved manually.",
+            },
+        };
+
+        Assert.False(action.WasAutoStaged);
+    }
+
+    [Fact]
+    public void ProductionControl_AuditTrail_LatestResult_IsTrackedWhenPresent()
+    {
+        var action = new SuggestedAction
+        {
+            Title = "Audit trail and transmittal tracking for electrical drawing sets",
+            SourceAgent = "business",
+            Outcome = new SuggestionOutcome { Status = "accepted", Reason = "Approve and run." },
+            ExecutionStatus = "completed",
+            LatestResultSummary = "4 sources found covering audit trail, revision control, and package handoff.",
+            LatestResultSources = ["www.draftflow.org", "www.flowlu.com"],
+            LatestResultPath = "Knowledge/Research/drafting-audit-trail.md",
+        };
+
+        Assert.True(action.HasLatestResult);
+        Assert.Contains("audit trail", action.LatestResultSummary);
+        Assert.Equal(2, action.LatestResultSources.Count);
+        Assert.Contains("drafting-audit-trail.md", action.LatestResultPath);
+    }
+
+    // -- AutoCAD Workflow Fit --
+
+    [Fact]
+    public void ProductionControl_AutoCADWorkflowFit_BusinessRoute_ResolvesToCorrectTitle()
+    {
+        var route = OfficeRouteCatalog.NormalizeRoute("business");
+        var title = OfficeRouteCatalog.ResolveRouteTitle(route);
+        var displayTitle = OfficeRouteCatalog.ResolveRouteDisplayTitle(route);
+        var perspective = OfficeRouteCatalog.ResolvePerspective(route);
+
+        Assert.Equal("business", route);
+        Assert.Equal("Business Ops", title);
+        Assert.Equal("Growth Ops", displayTitle);
+        Assert.Equal("Business Strategist", perspective);
+    }
+
+    [Fact]
+    public void ProductionControl_AutoCADWorkflowFit_ResearchReport_IncludesAutoCADSourceDomain()
+    {
+        var report = new ResearchReport
+        {
+            Query = "DraftFlow electrical drafting production control AutoCAD workflow fit",
+            Perspective = "Business Strategist",
+            Model = "gemma3:12b",
+            GenerationSource = "live web + ollama synthesis",
+            Summary = "DraftFlow integrates directly with AutoCAD workflows, supporting revision tracking, approval routing, and audit trail for electrical drawing packages.",
+            ActionMoves =
+            [
+                "Evaluate DraftFlow to see if its AutoCAD integration aligns with Suite needs.",
+                "Focus on approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.",
+                "Ignore CRM, invoicing, and general PM features.",
+            ],
+            Sources =
+            [
+                new ResearchSource { Domain = "www.draftflow.org", Url = "https://www.draftflow.org/" },
+            ],
+        };
+
+        Assert.Contains("AutoCAD", report.Summary);
+        Assert.Single(report.Sources);
+        Assert.Equal("www.draftflow.org", report.Sources[0].Domain);
+        Assert.Equal(3, report.ActionMoves.Count);
+        Assert.Contains(report.ActionMoves, m => m.Contains("AutoCAD"));
+    }
+
+    [Fact]
+    public void ProductionControl_AutoCADWorkflowFit_ResearchWatchlist_UsesBusinessStrategistPerspective()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            Topic = "AutoCAD workflow fit for electrical drafting production control",
+            Query = "Research DraftFlow for electrical drafting production control. Return: approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit. Ignore CRM, invoicing, and general PM features.",
+            Frequency = "Weekly",
+            PreferredPerspective = "Business Strategist",
+            IsEnabled = true,
+        };
+
+        Assert.Equal("Business Strategist", watchlist.PreferredPerspective);
+        Assert.Contains("AutoCAD workflow fit", watchlist.Query);
+        Assert.Contains("approval routing", watchlist.Query);
+        Assert.Contains("revision tracking", watchlist.Query);
+        Assert.Contains("issue-set handling", watchlist.Query);
+        Assert.Contains("audit trail", watchlist.Query);
+    }
+
+    [Fact]
+    public void ProductionControl_AutoCADWorkflowFit_ResearchSection_DefaultSummaryIsUsefulPrompt()
+    {
+        var section = new OfficeResearchSection();
+
+        Assert.Contains("Run a live research query", section.Summary);
+        Assert.Contains("No live research run yet", section.RunSummary);
+    }
+
+    [Fact]
+    public void ProductionControl_FullWorkflowCycle_ApproveAndRun_TracksCompleteLifecycle()
+    {
+        // Simulate full approval routing lifecycle for a production control research item.
+        var action = new SuggestedAction
+        {
+            Title = "Research DraftFlow for electrical drafting production control",
+            SourceAgent = "business",
+            ActionType = "research",
+            Priority = "high",
+            Rationale = "Evaluate approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.",
+        };
+
+        // Step 1: Pending (initial state)
+        Assert.True(action.IsPending);
+        Assert.Equal("pending", action.InboxBadgeText);
+
+        // Step 2: Accepted (Approve & run)
+        action.Outcome = new SuggestionOutcome
+        {
+            Status = "accepted",
+            Reason = "Approve and run. Focus on approval routing, audit trail, revision control, and handoff. Ignore generic PM features.",
+            RecordedAt = DateTimeOffset.Now,
+        };
+        action.ExecutionStatus = "running";
+        Assert.True(action.IsAccepted);
+        Assert.True(action.IsRunning);
+        Assert.Equal("running now", action.InboxBadgeText);
+
+        // Step 3: Completed with result
+        action.ExecutionStatus = "completed";
+        action.LatestResultSummary = "DraftFlow supports approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.";
+        action.LatestResultSources = ["www.draftflow.org"];
+        Assert.True(action.IsCompleted);
+        Assert.True(action.HasLatestResult);
+        Assert.Equal("completed", action.InboxBadgeText);
+        Assert.Contains("approval routing", action.LatestResultSummary);
+        Assert.Contains("revision tracking", action.LatestResultSummary);
+        Assert.Contains("issue-set handling", action.LatestResultSummary);
+        Assert.Contains("audit trail", action.LatestResultSummary);
+        Assert.Contains("AutoCAD workflow fit", action.LatestResultSummary);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
