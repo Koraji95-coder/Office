@@ -1641,7 +1641,7 @@ public sealed partial class MainViewModel : ObservableObject
     private int ParseQuestionCount()
     {
         return int.TryParse(PracticeQuestionCountText, out var parsed)
-            ? Math.Clamp(parsed, 3, 10)
+            ? Math.Clamp(parsed, 3, 15)
             : 6;
     }
 

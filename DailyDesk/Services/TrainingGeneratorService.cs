@@ -25,7 +25,7 @@ public sealed class TrainingGeneratorService
         CancellationToken cancellationToken = default
     )
     {
-        var safeCount = Math.Clamp(questionCount, 3, 10);
+        var safeCount = Math.Clamp(questionCount, 3, 15);
 
         try
         {
@@ -66,20 +66,7 @@ public sealed class TrainingGeneratorService
     }
 
     private static string BuildSystemPrompt(int questionCount) =>
-        $"""
-        You create practice tests for an aspiring electrical engineer who is also building operator-first automation software.
-        Return strict JSON only.
-        Generate exactly {questionCount} multiple-choice questions.
-        Each question must include:
-        - topic
-        - difficulty
-        - prompt
-        - four options with keys A, B, C, D
-        - correctOptionKey
-        - explanation
-        - suiteConnection
-        Keep the questions focused on electrical reasoning, standards, drafting safety, production workflows, and engineering judgment.
-        """;
+        PromptComposer.BuildPracticeTestSystemPrompt(questionCount);
 
     private static string BuildUserPrompt(
         string focus,
@@ -498,6 +485,76 @@ public sealed class TrainingGeneratorService
             2,
             "A narrow, reliable job is easier to trust, explain, support, and measure than a broad AI platform pitch.",
             "This question ties your engineering work directly to business judgment, which is part of the Daily Desk goal."
+        ),
+        new(
+            "Transformers",
+            "Intermediate",
+            "Which transformer connection is commonly used to block zero-sequence current from propagating between networks?",
+            [
+                "Delta-delta, because both windings share the same reference.",
+                "Wye-wye with a solid neutral on both sides.",
+                "Delta-wye, because the delta winding isolates zero-sequence on that side.",
+                "Autotransformer, because of its reduced copper losses.",
+            ],
+            2,
+            "A delta winding does not provide a return path for zero-sequence current, effectively isolating ground faults from propagating.",
+            "Understanding transformer connections is essential when designing Suite workflows that model protection zones and grounding boundaries."
+        ),
+        new(
+            "Short-Circuit Analysis",
+            "Challenging",
+            "Why must a short-circuit study be performed before selecting protective devices for a new distribution system?",
+            [
+                "To determine the aesthetic layout of the single-line diagram.",
+                "To verify the available fault current and ensure device interrupting ratings are not exceeded.",
+                "To remove the need for coordination studies entirely.",
+                "To allow the use of smaller conductor sizes throughout the system.",
+            ],
+            1,
+            "Protective devices must be rated to interrupt the maximum available fault current; exceeding the interrupting rating creates a catastrophic failure risk.",
+            "This engineering gate maps directly to Suite's review-first principle: you must validate the system state before authorizing downstream actions."
+        ),
+        new(
+            "Arc Flash",
+            "Fundamental",
+            "What is the primary purpose of an arc flash hazard analysis?",
+            [
+                "To eliminate the need for personal protective equipment in a facility.",
+                "To determine the incident energy at a work location and select appropriate PPE.",
+                "To replace the short-circuit study with a single unified calculation.",
+                "To verify that all conductors are oversized for future load growth.",
+            ],
+            1,
+            "Arc flash analysis quantifies the thermal energy released during a fault at a given location, allowing workers to select PPE rated above that threshold.",
+            "Safety-critical analysis steps like arc flash review are natural candidates for operator-approval gates in Suite's production workflow."
+        ),
+        new(
+            "Single-Line Diagrams",
+            "Fundamental",
+            "Why are single-line diagrams the standard reference document for an electrical power system?",
+            [
+                "Because they show all three phases simultaneously for maximum detail.",
+                "Because they provide a simplified, symbolic view of system topology that supports design, analysis, and communication.",
+                "Because regulatory bodies require three-line diagrams for all studies.",
+                "Because they replace the need for equipment schedules and load lists.",
+            ],
+            1,
+            "Single-line diagrams abstract phase detail to focus on topology, equipment connections, and protective device placement, making them the primary communication tool.",
+            "Suite's drawing-production workflows revolve around single-line diagram control, so understanding their purpose is foundational to every workflow gate."
+        ),
+        new(
+            "Load Flow",
+            "Intermediate",
+            "What does a load flow (power flow) study primarily determine in a power system?",
+            [
+                "The maximum short-circuit current at every bus.",
+                "The steady-state voltages, currents, and power flows throughout the network under expected loading.",
+                "The arc flash incident energy at every panel.",
+                "The harmonic distortion spectrum across all feeders.",
+            ],
+            1,
+            "Load flow studies solve for the steady-state operating point, revealing voltage profiles and power distribution so engineers can identify overloads and voltage violations.",
+            "Steady-state system knowledge is a prerequisite for trustable automation; Suite workflows should be grounded in the same principle of knowing the current state before making changes."
         ),
     ];
 }

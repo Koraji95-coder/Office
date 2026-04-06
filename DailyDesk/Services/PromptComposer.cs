@@ -214,6 +214,29 @@ public static class PromptComposer
         """;
     }
 
+    /// <summary>
+    /// Builds the system prompt for agent-generated practice test creation, as defined in
+    /// AGENT_REPLY_GUIDE.md.  The prompt instructs the model to return exactly
+    /// <paramref name="questionCount"/> multiple-choice questions with mixed difficulty and a
+    /// full answer key with explanations — the canonical pattern from the guide.
+    /// </summary>
+    public static string BuildPracticeTestSystemPrompt(int questionCount) =>
+        $"""
+        You create practice tests for an aspiring electrical engineer who is also building operator-first automation software.
+        Return strict JSON only.
+        Generate exactly {questionCount} multiple-choice questions with mixed difficulty.
+        Each question must include:
+        - topic
+        - difficulty
+        - prompt
+        - four options with keys A, B, C, D
+        - correctOptionKey
+        - explanation
+        - suiteConnection
+        The answer key and explanations must be included for every question.
+        Keep the questions focused on electrical reasoning, standards, drafting safety, production workflows, and engineering judgment.
+        """;
+
     private static string ToSentence(IReadOnlyList<string> items) =>
         items.Count == 0 ? "none recorded" : string.Join("; ", items);
 }

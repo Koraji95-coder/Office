@@ -3997,11 +3997,270 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- AGENT_REPLY_GUIDE Practice Test Compliance Tests ---
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackReturns15Questions()
+    {
+        // AGENT_REPLY_GUIDE.md specifies: "Return 15 questions with mixed difficulty
+        // and an answer key with explanations at the end."
+        // When the model is unavailable the fallback library must be able to supply 15 questions.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        Assert.Equal(15, result.Questions.Count);
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackQuestionsHaveAnswerKey()
+    {
+        // AGENT_REPLY_GUIDE.md specifies an answer key for every question.
+        // Every question must carry a non-empty CorrectOptionKey.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        Assert.All(result.Questions, q =>
+            Assert.False(string.IsNullOrWhiteSpace(q.CorrectOptionKey),
+                $"Question '{q.Prompt}' is missing a CorrectOptionKey (answer key)."));
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackQuestionsHaveExplanations()
+    {
+        // AGENT_REPLY_GUIDE.md specifies explanations for every answer in the answer key.
+        // Every question must carry a non-empty Explanation.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        Assert.All(result.Questions, q =>
+            Assert.False(string.IsNullOrWhiteSpace(q.Explanation),
+                $"Question '{q.Prompt}' is missing an Explanation."));
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackCorrectOptionKeysAreValid()
+    {
+        // Every CorrectOptionKey must be one of A, B, C, D — matching the four-option format
+        // specified in AGENT_REPLY_GUIDE.md.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        var validKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A", "B", "C", "D" };
+        Assert.All(result.Questions, q =>
+            Assert.Contains(q.CorrectOptionKey, validKeys));
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackLibraryHasMixedDifficulty()
+    {
+        // AGENT_REPLY_GUIDE.md specifies "mixed difficulty". The fallback library must
+        // provide questions across more than one difficulty level.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        var distinctDifficulties = result.Questions
+            .Select(q => q.Difficulty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Assert.True(distinctDifficulties.Count > 1,
+            $"Expected mixed difficulty but only found: {string.Join(", ", distinctDifficulties)}");
+    }
+
+    [Fact]
+    public void AgentGuide_PracticeTest_SystemPromptRequires15Questions()
+    {
+        // The system prompt issued to the model must explicitly ask for the guide's
+        // 15-question count so that model-generated tests comply with AGENT_REPLY_GUIDE.md.
+        var prompt = PromptComposer.BuildPracticeTestSystemPrompt(15);
+
+        Assert.Contains("15", prompt, StringComparison.Ordinal);
+        Assert.Contains("mixed difficulty", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("answer key", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("explanation", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AgentGuide_PracticeTest_SystemPromptRespectsQuestionCountParameter()
+    {
+        // Verify that the question count is honoured when different values are requested,
+        // ensuring the prompt is parameterised correctly and not hard-coded.
+        var prompt10 = PromptComposer.BuildPracticeTestSystemPrompt(10);
+        var prompt15 = PromptComposer.BuildPracticeTestSystemPrompt(15);
+
+        Assert.Contains("10", prompt10, StringComparison.Ordinal);
+        Assert.Contains("15", prompt15, StringComparison.Ordinal);
+        Assert.NotEqual(prompt10, prompt15);
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_FallbackEachQuestionHasFourOptions()
+    {
+        // Every question in the practice test must present exactly four labelled options
+        // (A, B, C, D) as required by the guide's answer-key format.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "electrical engineering",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        Assert.All(result.Questions, q =>
+        {
+            Assert.Equal(4, q.Options.Count);
+            Assert.All(q.Options, o =>
+                Assert.False(string.IsNullOrWhiteSpace(o.Text),
+                    $"Option on question '{q.Prompt}' has empty text."));
+        });
+    }
+
+    [Fact]
+    public async Task AgentGuide_PracticeTest_GenerationSourceIsRecorded()
+    {
+        // Practice tests must record their generation source so operators can audit
+        // whether the test came from the live model or the fallback library.
+        var service = new TrainingGeneratorService(
+            new StubFailingModelProvider(),
+            "test-model"
+        );
+
+        var result = await service.CreatePracticeTestAsync(
+            focus: "protection",
+            difficulty: "Mixed",
+            questionCount: 15,
+            snapshot: new SuiteSnapshot(),
+            trainingHistory: new TrainingHistorySummary(),
+            learningProfile: new LearningProfile(),
+            learningLibrary: new LearningLibrary { RootPath = string.Empty, Documents = [] },
+            studyTracks: []
+        );
+
+        Assert.False(string.IsNullOrWhiteSpace(result.GenerationSource));
+    }
+
+    [Fact]
+    public void AgentGuide_PracticeTest_EngineeringDeskAgentSupportsTestCoaching()
+    {
+        // The Engineering Desk agent's system prompt must reference practice-test coaching,
+        // confirming that the agent is wired to implement the AGENT_REPLY_GUIDE.md practice
+        // test pattern.
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var kernel = factory.CreateKernel("unused-model");
+        var agent = new DailyDesk.Services.Agents.EngineeringDeskAgent(kernel);
+
+        Assert.Contains("practice-test", agent.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
-    /// HttpMessageHandler that always throws HttpRequestException.
+    /// IModelProvider stub that always fails, causing TrainingGeneratorService to use
+    /// its local fallback question library.  Used by AGENT_REPLY_GUIDE compliance tests.
     /// </summary>
+    private sealed class StubFailingModelProvider : IModelProvider
+    {
+        public string ProviderId => "stub-failing";
+        public string ProviderLabel => "Stub (always fails)";
+
+        public Task<IReadOnlyList<string>> GetInstalledModelsAsync(
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        public Task<string> GenerateAsync(
+            string model,
+            string systemPrompt,
+            string userPrompt,
+            CancellationToken cancellationToken = default)
+            => Task.FromException<string>(
+                new InvalidOperationException("Stub model provider always fails."));
+
+        public Task<T?> GenerateJsonAsync<T>(
+            string model,
+            string systemPrompt,
+            string userPrompt,
+            CancellationToken cancellationToken = default)
+            => Task.FromException<T?>(
+                new InvalidOperationException("Stub model provider always fails."));
+
+        public Task<bool> PingAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+    }
+
+
     private sealed class FailingHttpHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
