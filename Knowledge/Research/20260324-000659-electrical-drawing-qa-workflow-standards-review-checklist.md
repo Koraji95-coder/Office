@@ -9,6 +9,8 @@
 
 electrical drawing QA workflow standards review checklist
 
+> **See also:** [`20260406-electrical-qaqc-workflow-integration-standards.md`](./20260406-electrical-qaqc-workflow-integration-standards.md) — documents how the sources below (particularly the Watercare QA/QC PDF template) integrate with the end-to-end electrical construction workflow, covering mandatory test categories, review hierarchy, and Daily Desk integration.
+
 ## Key Takeaways
 
 - RAIC Checklist for Internal Review of Electrical Drawings emphasizes quality assurance throughout development.
