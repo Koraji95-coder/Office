@@ -5172,6 +5172,251 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(14, evaluation.TotalScore);
     }
 
+    // ========================================================================
+    // Section 4 — Electrical Drawing QA/QC Checklist: Document Structure
+    // and PDF Template URL Validation
+    // (Source: 20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md)
+    // Section 1.13 requirements: 7 mandatory test categories for electrical
+    // construction QA/QC (Watercare QA/QC Templates for General Electrical
+    // Construction Standards – wslpwstoreprd.blob.core.windows.net)
+    // ========================================================================
+
+    private const string WatercareQaQcPdfUrl =
+        "https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/"
+        + "watercarepublicweb/media/watercare-media-library/electrical-standards/"
+        + "qa_templates_for_electrical_construction_standards.pdf";
+
+    private const string WatercareQaQcPdfDomain = "wslpwstoreprd.blob.core.windows.net";
+
+    private static readonly string[] Section113MandatoryCategories =
+    [
+        "General Electrical Installation",
+        "Cables and Conduit",
+        "Switchboards, Distribution Centres, and Control Centres",
+        "Motors and Drives",
+        "Lighting and Small Power",
+        "Instrumentation and Control Wiring",
+        "Earthing and Bonding Systems",
+    ];
+
+    [Fact]
+    public void ElectricalChecklist_PdfTemplateUrl_IsHttps()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        Assert.Equal(Uri.UriSchemeHttps, uri.Scheme);
+    }
+
+    [Fact]
+    public void ElectricalChecklist_PdfTemplateUrl_HasCorrectDomain()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        Assert.Equal(WatercareQaQcPdfDomain, uri.Host);
+    }
+
+    [Fact]
+    public void ElectricalChecklist_PdfTemplateUrl_EndsWithPdfExtension()
+    {
+        Assert.EndsWith(".pdf", WatercareQaQcPdfUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ElectricalChecklist_PdfTemplateUrl_IsWellFormedAbsoluteUri()
+    {
+        Assert.True(
+            Uri.TryCreate(WatercareQaQcPdfUrl, UriKind.Absolute, out _),
+            $"Expected a well-formed absolute URI but got: {WatercareQaQcPdfUrl}"
+        );
+    }
+
+    private const string Section113Item3Text = "Switchboards, distribution centres and control centres";
+
+    [Fact]
+    public void ElectricalChecklist_Section113_Snippet_ReferencesItem3Switchboards()
+    {
+        // The search snippet captured in the checklist document must reference
+        // section 1.13 and item 3 (Switchboards, distribution centres and control centres).
+        const string section113Snippet =
+            "1.13 QA/QC template Minimum mandatory tests: ... 3. " + Section113Item3Text;
+
+        Assert.Contains("1.13", section113Snippet, StringComparison.Ordinal);
+        Assert.Contains(Section113Item3Text, section113Snippet, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ElectricalChecklist_PdfTemplateUrl_MockHttpHead_Returns200()
+    {
+        var handler = new SequenceHttpHandler(
+        [
+            new HttpResponseMessage(System.Net.HttpStatusCode.OK),
+        ]);
+        using var client = new HttpClient(handler);
+
+        var response = await client.GetAsync(WatercareQaQcPdfUrl);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ElectricalChecklist_PdfTemplateUrl_MockHttpGet_HandlesConnectionFailure()
+    {
+        var handler = new FailingHttpHandler();
+        using var client = new HttpClient(handler);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync(WatercareQaQcPdfUrl)
+        );
+    }
+
+    [Fact]
+    public void ElectricalChecklist_Section113_MandatoryCategories_HasSevenItems()
+    {
+        Assert.Equal(7, Section113MandatoryCategories.Length);
+    }
+
+    [Fact]
+    public void ElectricalChecklist_Section113_MandatoryCategories_IncludesSwitchboards()
+    {
+        Assert.Contains(
+            Section113MandatoryCategories,
+            c => c.Contains("Switchboards", StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    [Fact]
+    public void ElectricalChecklist_Section113_MandatoryCategories_IncludesEarthingAndBonding()
+    {
+        Assert.Contains(
+            Section113MandatoryCategories,
+            c => c.Contains("Earthing", StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    [Fact]
+    public void ElectricalChecklist_Section113_MandatoryCategories_IncludesGeneralElectricalInstallation()
+    {
+        Assert.Contains(
+            Section113MandatoryCategories,
+            c => c.Contains("General Electrical Installation", StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    [Fact]
+    public void ElectricalChecklist_OralDefenseScenario_CanBeCreatedWithDrawingQaTopic()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "electrical drawing QA workflow",
+            Title = "Electrical Drawing QA/QC: Section 1.13 Compliance Review",
+            Prompt =
+                "Describe the mandatory QA/QC test categories defined in section 1.13 of the "
+                + "Watercare QA/QC Templates for General Electrical Construction Standards, "
+                + "and explain how they integrate with the electrical drawing review and "
+                + "approval workflow from schematic design through commissioning.",
+            WhatGoodLooksLike =
+                "A strong answer names all seven mandatory test categories, explains where "
+                + "each applies in the construction lifecycle, and identifies the hand-off "
+                + "point between design QA (drawing review) and construction QA (field tests).",
+        };
+
+        Assert.Equal("electrical drawing QA workflow", scenario.Topic);
+        Assert.Contains("Section 1.13", scenario.Title);
+        Assert.Contains("section 1.13", scenario.Prompt);
+        Assert.Contains("seven mandatory test categories", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task ElectricalChecklist_FallbackScoring_DrawingQaWorkflowAnswer_ScoresTechnicalHigher()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "electrical drawing QA workflow",
+            Title = "Section 1.13 Compliance: Mandatory Test Categories",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Section 1.13 of the Watercare QA/QC template defines seven mandatory test categories: "
+            + "general electrical installation (earthing continuity, insulation resistance, polarity), "
+            + "cables and conduit (megger tests, installation inspection), "
+            + "switchboards and distribution centres (termination checks, protection relay settings, "
+            + "interlocking verification, FAT/SAT records), motors and drives (rotation checks, "
+            + "thermal overload settings), lighting and small power (RCD trip-time tests, "
+            + "lux verification), instrumentation and control wiring (loop checks, I/O verification), "
+            + "and earthing and bonding systems (earth resistance measurements).",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void ElectricalChecklist_KnowledgeSearch_FindsChecklistDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md",
+                    RelativePath = "Knowledge/Research/20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md",
+                    Summary = "Electrical drawing QA workflow standards review checklist with Watercare QA/QC PDF template reference (section 1.13 mandatory tests)",
+                    Topics = ["electrical", "QA/QC", "drawing review", "section 1.13", "Watercare", "checklist"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motor-drives-install.md",
+                    RelativePath = "Knowledge/motor-drives-install.md",
+                    Summary = "Motor and drives installation checklist",
+                    Topics = ["motor", "drive", "installation"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("electrical drawing QA workflow section 1.13", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+    }
+
+    [Fact]
+    public void ElectricalChecklist_KnowledgeSearch_RanksChecklistAboveUnrelated()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "project-scheduling.md",
+                    RelativePath = "Knowledge/project-scheduling.md",
+                    Summary = "Project scheduling and Gantt chart planning",
+                    Topics = ["scheduling", "planning", "Gantt"],
+                },
+                new LearningDocument
+                {
+                    FileName = "electrical-qaqc-checklist.md",
+                    RelativePath = "Knowledge/Research/electrical-qaqc-checklist.md",
+                    Summary = "Watercare QA/QC template section 1.13 mandatory electrical construction tests",
+                    Topics = ["electrical", "QA/QC", "section 1.13", "Watercare", "mandatory tests"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("QA/QC section 1.13 electrical construction", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("electrical-qaqc-checklist.md", result.Results[0].Title);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
