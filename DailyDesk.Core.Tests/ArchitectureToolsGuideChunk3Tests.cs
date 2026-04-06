@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Xunit;
 
 namespace DailyDesk.Core.Tests;
@@ -17,6 +16,8 @@ namespace DailyDesk.Core.Tests;
 ///      Docs/REFACTOR-PRESSURE.md satisfies the requirements stated in chunk 3
 ///      of the guide: a source-file link, a meaningful pressure description,
 ///      and a non-empty suggested next action.
+///
+/// Document-parsing helpers are shared via <see cref="RefactorPressureTestHelpers"/>.
 /// </summary>
 public sealed class ArchitectureToolsGuideChunk3Tests
 {
@@ -24,32 +25,16 @@ public sealed class ArchitectureToolsGuideChunk3Tests
     // Helpers
     // -----------------------------------------------------------------------
 
-    /// <summary>
-    /// Walks up from the test assembly's base directory to find the repository
-    /// root (identified by the presence of DailyDesk/DailyDesk.csproj).
-    /// </summary>
-    private static string? FindRepoRoot()
+    private static string GetRepoRoot()
     {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir, "DailyDesk", "DailyDesk.csproj")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        return null;
-    }
-
-    private static string GetGuideRoot()
-    {
-        var root = FindRepoRoot();
+        var root = RefactorPressureTestHelpers.FindRepoRoot();
         Assert.NotNull(root);
         return root!;
     }
 
     private static string GetGuidePath()
         => Path.Combine(
-            GetGuideRoot(),
+            GetRepoRoot(),
             "Mockups",
             "Suite-Reboot-Storyboard",
             "architecture-tools-guide.md");
@@ -63,62 +48,27 @@ public sealed class ArchitectureToolsGuideChunk3Tests
 
     private static string ReadRefactorPressureDoc()
     {
-        var path = Path.Combine(GetGuideRoot(), "Docs", "REFACTOR-PRESSURE.md");
+        var path = Path.Combine(GetRepoRoot(), "Docs", "REFACTOR-PRESSURE.md");
         Assert.True(File.Exists(path), $"REFACTOR-PRESSURE.md not found at: {path}");
         return File.ReadAllText(path);
     }
 
     /// <summary>
-    /// Returns the text of the Refactor pressure notes section from
-    /// architecture-tools-guide.md (chunk 3).
+    /// Returns the text of the Refactor pressure notes section (chunk 3) from
+    /// architecture-tools-guide.md, bounded by the next <c>## </c> heading or
+    /// end-of-file so that content from later sections is not included.
     /// </summary>
     private static string ExtractChunk3(string guide)
     {
-        var idx = guide.IndexOf("## Refactor pressure notes", StringComparison.OrdinalIgnoreCase);
-        Assert.True(idx >= 0, "architecture-tools-guide.md must contain a '## Refactor pressure notes' section");
-        return guide[idx..];
-    }
+        const string sectionHeader = "## Refactor pressure notes";
+        var start = guide.IndexOf(sectionHeader, StringComparison.OrdinalIgnoreCase);
+        Assert.True(start >= 0, "architecture-tools-guide.md must contain a '## Refactor pressure notes' section");
 
-    /// <summary>
-    /// Returns one (number, title, body) tuple per active (non-archived) pressure
-    /// note in REFACTOR-PRESSURE.md.
-    /// </summary>
-    private static List<(int Number, string Title, string Body)> ParseActiveEntries(string document)
-    {
-        var resolvedIndex = document.IndexOf("## Resolved Pressure", StringComparison.Ordinal);
-        var activePart = resolvedIndex >= 0 ? document[..resolvedIndex] : document;
+        var searchFrom = start + sectionHeader.Length;
+        var nextSection = guide.IndexOf("\n## ", searchFrom, StringComparison.Ordinal);
+        var end = nextSection >= 0 ? nextSection + 1 : guide.Length;
 
-        var entries = new List<(int Number, string Title, string Body)>();
-        var headerPattern = new Regex(@"^### (\d+)\.\s+(.+)$", RegexOptions.Multiline);
-        var matches = headerPattern.Matches(activePart);
-
-        for (var i = 0; i < matches.Count; i++)
-        {
-            var match = matches[i];
-            var number = int.Parse(match.Groups[1].Value);
-            var title = match.Groups[2].Value.Trim();
-            var bodyStart = match.Index + match.Length;
-            var bodyEnd = i + 1 < matches.Count ? matches[i + 1].Index : activePart.Length;
-            entries.Add((number, title, activePart[bodyStart..bodyEnd]));
-        }
-
-        return entries;
-    }
-
-    /// <summary>
-    /// Extracts all backtick-wrapped file paths from a File/Files metadata row.
-    /// </summary>
-    private static List<string> ExtractFilePaths(string entryBody)
-    {
-        var paths = new List<string>();
-        var rowPattern = new Regex(@"\|\s*\*\*Files?\*\*\s*\|\s*(.+?)\s*\|", RegexOptions.IgnoreCase);
-        var backtickPattern = new Regex(@"`([^`]+)`");
-
-        foreach (Match row in rowPattern.Matches(entryBody))
-            foreach (Match bt in backtickPattern.Matches(row.Groups[1].Value))
-                paths.Add(bt.Groups[1].Value.Trim());
-
-        return paths;
+        return guide[start..end];
     }
 
     /// <summary>
@@ -227,9 +177,9 @@ public sealed class ArchitectureToolsGuideChunk3Tests
     [Fact]
     public void RefactorPressureNotes_ComplyWith_Guide_SourceFileLinkage()
     {
-        var root = GetGuideRoot();
+        var root = GetRepoRoot();
         var doc = ReadRefactorPressureDoc();
-        var entries = ParseActiveEntries(doc);
+        var entries = RefactorPressureTestHelpers.ParseActiveEntries(doc);
 
         Assert.True(entries.Count >= 1, "REFACTOR-PRESSURE.md must have at least one active pressure note.");
 
@@ -237,7 +187,7 @@ public sealed class ArchitectureToolsGuideChunk3Tests
 
         foreach (var (number, title, body) in entries)
         {
-            var paths = ExtractFilePaths(body);
+            var paths = RefactorPressureTestHelpers.ExtractFilePaths(body);
 
             if (paths.Count == 0)
             {
@@ -265,7 +215,7 @@ public sealed class ArchitectureToolsGuideChunk3Tests
         const string nextMarker = "**Refactor direction:**";
 
         var doc = ReadRefactorPressureDoc();
-        var entries = ParseActiveEntries(doc);
+        var entries = RefactorPressureTestHelpers.ParseActiveEntries(doc);
 
         var violations = new List<string>();
 
@@ -279,7 +229,7 @@ public sealed class ArchitectureToolsGuideChunk3Tests
                 continue;
             }
 
-            // Require at least one non-blank word beyond the marker line itself.
+            // Require at least 5 words of content beyond the marker.
             var words = content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (words.Length < 5)
                 violations.Add($"Entry #{number} '{title}': 'Why it is under pressure' section has too little content ({words.Length} word(s)); expected at least 5.");
@@ -297,7 +247,7 @@ public sealed class ArchitectureToolsGuideChunk3Tests
         const string prereqMarker = "**Prerequisite:**";
 
         var doc = ReadRefactorPressureDoc();
-        var entries = ParseActiveEntries(doc);
+        var entries = RefactorPressureTestHelpers.ParseActiveEntries(doc);
 
         var violations = new List<string>();
 
@@ -328,7 +278,7 @@ public sealed class ArchitectureToolsGuideChunk3Tests
         const string whyMarker = "**Why it is under pressure:**";
 
         var doc = ReadRefactorPressureDoc();
-        var entries = ParseActiveEntries(doc);
+        var entries = RefactorPressureTestHelpers.ParseActiveEntries(doc);
 
         var violations = new List<string>();
 
@@ -356,18 +306,21 @@ public sealed class ArchitectureToolsGuideChunk3Tests
     public void RefactorPressureNotes_AllSourceFilePaths_AreRelativeAndTraversalFree()
     {
         var doc = ReadRefactorPressureDoc();
-        var entries = ParseActiveEntries(doc);
+        var entries = RefactorPressureTestHelpers.ParseActiveEntries(doc);
 
         var violations = new List<string>();
 
         foreach (var (number, title, body) in entries)
         {
-            foreach (var path in ExtractFilePaths(body))
+            foreach (var path in RefactorPressureTestHelpers.ExtractFilePaths(body))
             {
                 if (Path.IsPathRooted(path))
                     violations.Add($"Entry #{number} '{title}': path '{path}' must be relative to the repo root, not absolute.");
 
-                if (path.Contains("..", StringComparison.Ordinal))
+                // Check for traversal by comparing individual path segments, not substrings,
+                // to avoid rejecting legitimate filenames that happen to contain "..".
+                var segments = path.Split('/', '\\');
+                if (segments.Any(seg => seg == ".."))
                     violations.Add($"Entry #{number} '{title}': path '{path}' must not use '..' path traversal.");
             }
         }
