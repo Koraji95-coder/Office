@@ -3997,6 +3997,360 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- Suite-Reboot-Storyboard: Rubric Defense Scoring Integration Tests ---
+
+    [Fact]
+    public void DefenseRubricItem_DisplaySummary_IncludesNameScoreAndFeedback()
+    {
+        var item = new DefenseRubricItem
+        {
+            Name = "Technical Correctness",
+            Score = 4,
+            MaxScore = 4,
+            Feedback = "Strong domain grounding throughout.",
+        };
+
+        Assert.Equal("Technical Correctness: 4/4 - Strong domain grounding throughout.", item.DisplaySummary);
+    }
+
+    [Fact]
+    public void DefenseRubricItem_DisplaySummary_ReflectsPartialScore()
+    {
+        var item = new DefenseRubricItem
+        {
+            Name = "Tradeoff Reasoning",
+            Score = 2,
+            MaxScore = 4,
+            Feedback = "Needs comparison language.",
+        };
+
+        Assert.Equal("Tradeoff Reasoning: 2/4 - Needs comparison language.", item.DisplaySummary);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_ScoreRatio_IsCalculatedCorrectly()
+    {
+        var evaluation = new DefenseEvaluation
+        {
+            TotalScore = 12,
+            MaxScore = 20,
+            Summary = "Solid answer.",
+        };
+
+        Assert.Equal(0.6, evaluation.ScoreRatio, precision: 10);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_ScoreRatio_ReturnsZero_WhenMaxScoreIsZero()
+    {
+        var evaluation = new DefenseEvaluation
+        {
+            TotalScore = 0,
+            MaxScore = 0,
+            Summary = "Empty evaluation.",
+        };
+
+        Assert.Equal(0.0, evaluation.ScoreRatio);
+    }
+
+    [Fact]
+    public void DefenseEvaluation_DisplaySummary_IncludesScoreAndSummary()
+    {
+        var evaluation = new DefenseEvaluation
+        {
+            TotalScore = 15,
+            MaxScore = 20,
+            Summary = "Good tradeoff awareness.",
+        };
+
+        Assert.Contains("15/20", evaluation.DisplaySummary);
+        Assert.Contains("Good tradeoff awareness.", evaluation.DisplaySummary);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_ScoreRatio_IsCalculatedCorrectly()
+    {
+        var record = new OralDefenseAttemptRecord
+        {
+            TotalScore = 10,
+            MaxScore = 20,
+            Topic = "relay coordination",
+        };
+
+        Assert.Equal(0.5, record.ScoreRatio, precision: 10);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_ScoreRatio_ReturnsZero_WhenMaxScoreIsZero()
+    {
+        var record = new OralDefenseAttemptRecord
+        {
+            TotalScore = 0,
+            MaxScore = 0,
+        };
+
+        Assert.Equal(0.0, record.ScoreRatio);
+    }
+
+    [Fact]
+    public void OralDefenseAttemptRecord_DisplaySummary_IncludesTopicAndScore()
+    {
+        var record = new OralDefenseAttemptRecord
+        {
+            TotalScore = 14,
+            MaxScore = 20,
+            Topic = "transient grounding",
+            CompletedAt = new DateTimeOffset(2025, 1, 10, 9, 14, 0, TimeSpan.Zero),
+        };
+
+        Assert.Contains("transient grounding", record.DisplaySummary);
+        Assert.Contains("14/20", record.DisplaySummary);
+    }
+
+    [Fact]
+    public void TrainingHistorySummary_DefenseSummary_ReturnsNone_WhenNoAttempts()
+    {
+        var summary = new TrainingHistorySummary();
+
+        Assert.Equal("No scored oral-defense history yet.", summary.DefenseSummary);
+    }
+
+    [Fact]
+    public void TrainingHistorySummary_DefenseSummary_AggregatesScoresAcrossAttempts()
+    {
+        var summary = new TrainingHistorySummary
+        {
+            RecentDefenseAttempts =
+            [
+                new OralDefenseAttemptRecord { TotalScore = 12, MaxScore = 20, Topic = "grounding" },
+                new OralDefenseAttemptRecord { TotalScore = 16, MaxScore = 20, Topic = "relay logic" },
+            ],
+        };
+
+        Assert.Contains("2 recent defense attempts", summary.DefenseSummary);
+        Assert.Contains("28/40", summary.DefenseSummary);
+    }
+
+    [Fact]
+    public void TrainingHistorySummary_DefenseSummary_IncludesPercentage()
+    {
+        var summary = new TrainingHistorySummary
+        {
+            RecentDefenseAttempts =
+            [
+                new OralDefenseAttemptRecord { TotalScore = 10, MaxScore = 20, Topic = "fault analysis" },
+            ],
+        };
+
+        // 10/20 = 50% - check numeric part independently of locale percent formatting
+        Assert.Contains("10/20", summary.DefenseSummary);
+        Assert.Contains("%", summary.DefenseSummary);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_ScoreResponseAsync_ReturnsValidEvaluation_WhenModelThrows()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "relay coordination",
+            Title = "Oral Defense: relay coordination",
+            Prompt = "Defend your understanding of relay coordination principles.",
+            WhatGoodLooksLike = "A strong answer names the governing standard and tradeoffs.",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "The operator uses voltage-based ground protection standards to validate the relay coordination logic.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        Assert.NotNull(evaluation);
+        Assert.True(evaluation.TotalScore > 0);
+        Assert.Equal(20, evaluation.MaxScore);
+        Assert.Equal(5, evaluation.RubricItems.Count);
+        Assert.True(evaluation.ScoreRatio > 0);
+    }
+
+    [Theory]
+    [InlineData("The operator applies voltage protection standards for grounding.", "Technical Correctness", 3)]
+    [InlineData("There is a tradeoff between cost and reliability here.", "Tradeoff Reasoning", 3)]
+    [InlineData("We must validate and verify the result before trusting it.", "Validation Thinking", 3)]
+    [InlineData("A fault in the system creates a downstream failure risk.", "Failure-Mode Awareness", 3)]
+    public async Task OralDefenseService_FallbackScoring_AssignsHigherScore_WhenAnswerContainsKeyword(
+        string answer, string dimensionName, int expectedScore)
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Test drill", Topic = "test topic" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            answer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var item = evaluation.RubricItems.FirstOrDefault(r => r.Name == dimensionName);
+        Assert.NotNull(item);
+        Assert.Equal(expectedScore, item!.Score);
+    }
+
+    [Theory]
+    [InlineData("Generic vague answer.", "Technical Correctness", 2)]
+    [InlineData("Generic vague answer.", "Tradeoff Reasoning", 1)]
+    [InlineData("Generic vague answer.", "Validation Thinking", 1)]
+    [InlineData("Generic vague answer.", "Failure-Mode Awareness", 1)]
+    public async Task OralDefenseService_FallbackScoring_AssignsLowerScore_WhenAnswerLacksKeyword(
+        string answer, string dimensionName, int expectedScore)
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Test drill", Topic = "test topic" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            answer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var item = evaluation.RubricItems.FirstOrDefault(r => r.Name == dimensionName);
+        Assert.NotNull(item);
+        Assert.Equal(expectedScore, item!.Score);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_TotalScore_MatchesSumOfRubricItems()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Score sum check", Topic = "grounding" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "The operator applies voltage protection standards with ground fault tradeoff, failure risk, and we validate before shipping.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var expectedTotal = evaluation.RubricItems.Sum(item => item.Score);
+        Assert.Equal(expectedTotal, evaluation.TotalScore);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_MaxScore_IsProductOfItemCount()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Max score check", Topic = "relay logic" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Short answer.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var expectedMax = evaluation.RubricItems.Sum(item => item.MaxScore);
+        Assert.Equal(expectedMax, evaluation.MaxScore);
+        Assert.Equal(20, evaluation.MaxScore);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_AllRubricDimensions_ArePresent()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Dimension check", Topic = "validation" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Answer text.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var names = evaluation.RubricItems.Select(item => item.Name).ToList();
+        Assert.Contains("Technical Correctness", names);
+        Assert.Contains("Tradeoff Reasoning", names);
+        Assert.Contains("Failure-Mode Awareness", names);
+        Assert.Contains("Validation Thinking", names);
+        Assert.Contains("Clarity", names);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_LongAnswer_ScoresClarityHigher()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Clarity check", Topic = "grounding" };
+        // Answer length >= 220 triggers Clarity score of 3
+        var longAnswer = new string('x', 220);
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            longAnswer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var clarity = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Clarity");
+        Assert.NotNull(clarity);
+        Assert.Equal(3, clarity!.Score);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_ShortAnswer_ScoresClarityLower()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario { Title = "Short answer check", Topic = "grounding" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Short.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var clarity = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Clarity");
+        Assert.NotNull(clarity);
+        Assert.Equal(2, clarity!.Score);
+    }
+
+    [Fact]
+    public async Task OralDefenseService_FallbackScoring_SummaryContainsScenarioTitle()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Title = "Relay Coordination Defense",
+            Topic = "relay coordination",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Some answer text.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        Assert.Contains("Relay Coordination Defense", evaluation.Summary);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
@@ -4049,5 +4403,26 @@ public sealed class OfficeBrokerLogicTests
             await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
         }
+    }
+
+    /// <summary>
+    /// IModelProvider stub that always throws to force fallback paths in service tests.
+    /// </summary>
+    private sealed class ThrowingModelProvider : IModelProvider
+    {
+        public string ProviderId => "throwing-stub";
+        public string ProviderLabel => "Throwing Stub";
+
+        public Task<IReadOnlyList<string>> GetInstalledModelsAsync(CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Stub provider unavailable.");
+
+        public Task<string> GenerateAsync(string model, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Stub provider unavailable.");
+
+        public Task<T?> GenerateJsonAsync<T>(string model, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Stub provider unavailable.");
+
+        public Task<bool> PingAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
     }
 }
