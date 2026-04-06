@@ -4796,6 +4796,382 @@ public sealed class OfficeBrokerLogicTests
         Assert.Contains("Relay Coordination Defense", evaluation.Summary);
     }
 
+    // ========================================================================
+    // Section 3 — Electrical QA/QC: Switchboard, Distribution Centre, and
+    // Control Centre Integration Tests
+    // (Watercare QA/QC Templates – mandatory tests per section 1.13 item 3)
+    // Mandatory checks: termination checks · protection relay settings ·
+    //                   interlocking verification · FAT/SAT records
+    // ========================================================================
+
+    [Fact]
+    public void SwitchboardQaQc_OralDefenseScenario_CanBeCreatedWithSwitchboardTopic()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Switchboard Commissioning: Mandatory QA/QC Checks",
+            Prompt =
+                "Describe the mandatory QA/QC checks required for a switchboard installation "
+                + "before it is energised, with reference to termination checks, protection relay "
+                + "settings, interlocking verification, and FAT/SAT records.",
+            WhatGoodLooksLike =
+                "A strong answer covers each of the four mandatory check categories, "
+                + "names the risk eliminated by each check, and references the QA sign-off record.",
+        };
+
+        Assert.Equal("switchboard QA/QC", scenario.Topic);
+        Assert.Contains("Switchboard", scenario.Title);
+        Assert.Contains("termination checks", scenario.Prompt);
+        Assert.Contains("protection relay", scenario.Prompt);
+        Assert.Contains("interlocking verification", scenario.Prompt);
+        Assert.Contains("FAT/SAT", scenario.Prompt);
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_ProtectionRelayAnswer_ScoresTechnicalHigher()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Protection Relay Settings Verification",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Before energising the switchboard, protection relay settings must be verified against "
+            + "the design standard to ensure correct overcurrent and earth fault pickup values.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_InterlockingVerification_ScoresValidation()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Interlocking Verification",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Interlocking circuits must be tested and verified to confirm that mechanical and "
+            + "electrical interlocks prevent simultaneous operation of incompatible switching devices.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_FatSatRecords_ScoresValidation()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "FAT/SAT Record Compliance",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Factory Acceptance Test (FAT) and Site Acceptance Test (SAT) records must be "
+            + "completed and signed off before the switchboard is handed over. These test records "
+            + "verify correct wiring, circuit breaker operation, and metering accuracy.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_TerminationChecks_ScoresValidation()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Termination Check Procedure",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "All terminations must be checked against the wiring schedule to verify correct "
+            + "cable dressing, ferrule labelling, and torque values. A check sheet is signed off "
+            + "by the site supervisor before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_ComprehensiveAnswer_AllFourChecks_ScoresHigher()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Complete Switchboard QA/QC Mandatory Checklist",
+        };
+
+        // Comprehensive answer covering all four mandatory checks
+        var fullAnswer =
+            "Before energising a switchboard, four mandatory QA/QC checks must be completed. "
+            + "First, termination checks verify that every cable is correctly landed, ferrule-labelled, "
+            + "and torqued to the standard value. Second, protection relay settings are verified "
+            + "against the approved relay co-ordination study to confirm correct pickup values and "
+            + "time delay grades. Third, interlocking circuits are tested to confirm that mechanical "
+            + "and electrical interlocks prevent simultaneous closure of incompatible devices. "
+            + "Fourth, FAT and SAT test records are completed and signed off to verify factory "
+            + "build quality and site commissioning results. Each check eliminates a specific risk "
+            + "and the signed QA record forms part of the project handover documentation. "
+            + "Failure to complete any check is a hold point that must be resolved before energisation.";
+
+        // Minimal answer with no domain-specific language
+        var minimalAnswer = "Everything should be checked before turning on the power.";
+
+        var fullEvaluation = await service.ScoreResponseAsync(
+            scenario,
+            fullAnswer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var minimalEvaluation = await service.ScoreResponseAsync(
+            scenario,
+            minimalAnswer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        Assert.True(
+            fullEvaluation.TotalScore > minimalEvaluation.TotalScore,
+            $"Comprehensive answer ({fullEvaluation.TotalScore}) should score higher than minimal answer ({minimalEvaluation.TotalScore})."
+        );
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScoring_FailureRiskAnswer_ScoresFailureModeHigher()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboard QA/QC",
+            Title = "Switchboard Failure Risk Analysis",
+        };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Skipping protection relay verification is a risk that could allow fault current to "
+            + "propagate through the distribution system, causing equipment failure and potential "
+            + "operator safety hazard. The failure mode is uncontrolled fault propagation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var failureMode = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Failure-Mode Awareness");
+        Assert.NotNull(failureMode);
+        Assert.True(failureMode!.Score >= 3, $"Expected Failure-Mode Awareness >= 3 but was {failureMode.Score}");
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScenario_PreferredTopicIsPreserved()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+
+        var scenario = await service.CreateScenarioAsync(
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            Array.Empty<StudyTrack>(),
+            preferredTopic: "switchboard QA/QC"
+        );
+
+        Assert.Equal("switchboard QA/QC", scenario.Topic);
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScenario_TitleReferencesSwitchboardTopic()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+
+        var scenario = await service.CreateScenarioAsync(
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            Array.Empty<StudyTrack>(),
+            preferredTopic: "switchboard QA/QC"
+        );
+
+        Assert.Contains("switchboard QA/QC", scenario.Title);
+    }
+
+    [Fact]
+    public async Task SwitchboardQaQc_FallbackScenario_HasFourFollowUpQuestions()
+    {
+        var provider = new ThrowingModelProvider();
+        var service = new OralDefenseService(provider, "test-model");
+
+        var scenario = await service.CreateScenarioAsync(
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            Array.Empty<StudyTrack>(),
+            preferredTopic: "switchboard QA/QC"
+        );
+
+        Assert.Equal(4, scenario.FollowUpQuestions.Count);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_KnowledgeSearch_FindsSwitchboardDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "switchboard-qaqc-checklist.md",
+                    RelativePath = "Knowledge/switchboard-qaqc-checklist.md",
+                    Summary = "Watercare QA/QC mandatory tests for switchboards, distribution centres, and control centres",
+                    Topics = ["switchboard", "QA/QC", "termination", "protection relay", "interlocking", "FAT", "SAT"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motor-drives-install.md",
+                    RelativePath = "Knowledge/motor-drives-install.md",
+                    Summary = "Motor and drives installation checklist",
+                    Topics = ["motor", "drive", "installation"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("switchboard QA/QC termination", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("switchboard-qaqc-checklist.md", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_KnowledgeSearch_RanksSwitchboardAboveMotor()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "motor-install.md",
+                    RelativePath = "Knowledge/motor-install.md",
+                    Summary = "Motor installation and rotation check procedure",
+                    Topics = ["motor", "rotation", "overload"],
+                },
+                new LearningDocument
+                {
+                    FileName = "switchboard-commissioning.md",
+                    RelativePath = "Knowledge/switchboard-commissioning.md",
+                    Summary = "Switchboard commissioning: protection relay settings, interlocking, FAT/SAT records",
+                    Topics = ["switchboard", "protection relay", "interlocking", "FAT", "SAT"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("switchboard protection relay interlocking", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("switchboard-commissioning.md", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_KnowledgeSearch_NoMatch_ReturnsEmpty()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "switchboard-commissioning.md",
+                    RelativePath = "Knowledge/switchboard-commissioning.md",
+                    Summary = "Switchboard commissioning: protection relay settings and FAT/SAT records",
+                    Topics = ["switchboard", "commissioning"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("lighting circuit RCD test", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.Empty(result.Results);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_DefenseEvaluation_AllFourRubricDimensionsPresent()
+    {
+        var evaluation = new DefenseEvaluation
+        {
+            Summary = "Switchboard QA/QC answer evaluation.",
+            TotalScore = 14,
+            MaxScore = 20,
+            RubricItems =
+            [
+                new DefenseRubricItem { Name = "Technical Correctness",  Score = 3, Feedback = "Protection relay standards referenced." },
+                new DefenseRubricItem { Name = "Tradeoff Reasoning",    Score = 2, Feedback = "Tradeoff between speed and completeness noted." },
+                new DefenseRubricItem { Name = "Failure-Mode Awareness", Score = 3, Feedback = "Fault propagation risk named." },
+                new DefenseRubricItem { Name = "Validation Thinking",   Score = 3, Feedback = "FAT/SAT sign-off process described." },
+                new DefenseRubricItem { Name = "Clarity",               Score = 3, Feedback = "Answer covers all four mandatory checks." },
+            ],
+        };
+
+        var names = evaluation.RubricItems.Select(item => item.Name).ToList();
+        Assert.Contains("Technical Correctness",  names);
+        Assert.Contains("Tradeoff Reasoning",     names);
+        Assert.Contains("Failure-Mode Awareness", names);
+        Assert.Contains("Validation Thinking",    names);
+        Assert.Contains("Clarity",                names);
+        Assert.Equal(5, evaluation.RubricItems.Count);
+        Assert.Equal(14, evaluation.TotalScore);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
