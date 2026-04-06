@@ -297,6 +297,122 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
     }
 
     // -----------------------------------------------------------------------
+    // Group 5: Exception message handling compliance per stack-trace-exposure-remediation.md.
+    // These tests verify that:
+    //   (a) The 'detail' field in 500 responses contains the static generic string.
+    //   (b) The raw exception message text is NOT present in the response body.
+    // This implements the verification checklist from Docs/stack-trace-exposure-remediation.md.
+    // -----------------------------------------------------------------------
+
+    private const string ExpectedStaticDetail =
+        "An unexpected error occurred. See server logs for details.";
+
+    [Fact]
+    public async Task GetEndpoint_OnException_DetailIsStaticGenericString_NotExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.GetAsync("/trigger-get-error");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]!.GetValue<string>();
+        Assert.Equal(ExpectedStaticDetail, detail);
+        // The raw exception message must NOT be present in the detail field.
+        Assert.DoesNotContain("Simulated GET server error", detail);
+    }
+
+    [Fact]
+    public async Task PostEndpoint_OnException_DetailIsStaticGenericString_NotExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/trigger-post-error", new { });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]!.GetValue<string>();
+        Assert.Equal(ExpectedStaticDetail, detail);
+        Assert.DoesNotContain("Simulated POST server error", detail);
+    }
+
+    [Fact]
+    public async Task DeleteEndpoint_OnException_DetailIsStaticGenericString_NotExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.DeleteAsync("/trigger-delete-error");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]!.GetValue<string>();
+        Assert.Equal(ExpectedStaticDetail, detail);
+        Assert.DoesNotContain("Simulated DELETE server error", detail);
+    }
+
+    [Fact]
+    public async Task ResponseBody_OnException_DoesNotContainExceptionMessageOrStackTrace()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.GetAsync("/trigger-get-error");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        // Raw exception text and stack trace must never appear in the response body.
+        Assert.DoesNotContain("Simulated GET server error", body);
+        Assert.DoesNotContain("at System.", body);
+        Assert.DoesNotContain("InvalidOperationException", body);
+    }
+
+    [Fact]
+    public async Task BrokerHealthEndpoint_WhenError_DetailIsStaticStringOrEndpointSucceeds()
+    {
+        var response = await _client.GetAsync("/health");
+        await AssertStaticDetailOrSuccessAsync(response, "GET /health");
+    }
+
+    [Fact]
+    public async Task BrokerApiHealthEndpoint_WhenError_DetailIsStaticStringOrEndpointSucceeds()
+    {
+        var response = await _client.GetAsync("/api/health");
+        await AssertStaticDetailOrSuccessAsync(response, "GET /api/health");
+    }
+
+    [Fact]
+    public async Task BrokerStateEndpoint_WhenError_DetailIsStaticStringOrEndpointSucceeds()
+    {
+        var response = await _client.GetAsync("/api/state");
+        await AssertStaticDetailOrSuccessAsync(response, "GET /api/state");
+    }
+
+    [Fact]
+    public async Task BrokerChatSendEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        // Send a valid-shaped request so validation passes; any server-side failure
+        // (e.g. Ollama unavailable) must produce the static generic detail string.
+        var response = await _client.PostAsJsonAsync(
+            "/api/chat/send",
+            new { Prompt = "test prompt" }
+        );
+        await AssertStaticDetailOrSuccessAsync(response, "POST /api/chat/send");
+    }
+
+    [Fact]
+    public async Task BrokerStudyStartEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/study/start", new { });
+        await AssertStaticDetailOrSuccessAsync(response, "POST /api/study/start");
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -317,7 +433,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
         // GET endpoint – mirrors broker pattern for read endpoints (e.g. /health, /api/state).
         app.MapGet(
             "/trigger-get-error",
-            () =>
+            (ILogger<BrokerProblemDetailsTests> endpointLogger) =>
             {
                 try
                 {
@@ -325,8 +441,9 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 }
                 catch (Exception ex)
                 {
+                    endpointLogger.LogError(ex, "Office broker GET endpoint failed.");
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "GET endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -337,7 +454,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
         // POST endpoint – mirrors broker pattern for write / action endpoints.
         app.MapPost(
             "/trigger-post-error",
-            () =>
+            (ILogger<BrokerProblemDetailsTests> endpointLogger) =>
             {
                 try
                 {
@@ -345,8 +462,9 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 }
                 catch (Exception ex)
                 {
+                    endpointLogger.LogError(ex, "Office broker POST endpoint failed.");
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "POST endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -357,7 +475,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
         // DELETE endpoint – mirrors broker pattern for deletion endpoints.
         app.MapDelete(
             "/trigger-delete-error",
-            () =>
+            (ILogger<BrokerProblemDetailsTests> endpointLogger) =>
             {
                 try
                 {
@@ -365,8 +483,9 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 }
                 catch (Exception ex)
                 {
+                    endpointLogger.LogError(ex, "Office broker DELETE endpoint failed.");
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: "An unexpected error occurred. See server logs for details.",
                         title: "DELETE endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -413,6 +532,60 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 $"{endpointLabel}: RFC 7807 response must contain 'detail'"
             );
             Assert.Equal(500, json["status"]!.GetValue<int>());
+        }
+        else
+        {
+            // Backing services available – endpoint succeeded normally.
+            var successCodes = new[]
+            {
+                HttpStatusCode.OK,
+                HttpStatusCode.Created,
+                HttpStatusCode.NoContent,
+            };
+            Assert.True(
+                successCodes.Contains(response.StatusCode),
+                $"{endpointLabel}: Expected 200/201/204 or 500 (RFC 7807), got {(int)response.StatusCode}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Asserts that a broker endpoint 500 response uses the static generic detail string
+    /// required by Docs/stack-trace-exposure-remediation.md, or succeeds normally (200/201/204).
+    /// In CI environments where dependencies are unavailable the 500 branch is exercised;
+    /// in local-dev environments the success branch is exercised.
+    /// </summary>
+    private static async Task AssertStaticDetailOrSuccessAsync(
+        HttpResponseMessage response,
+        string endpointLabel
+    )
+    {
+        if (response.StatusCode == HttpStatusCode.InternalServerError)
+        {
+            Assert.Equal(
+                "application/problem+json",
+                response.Content.Headers.ContentType?.MediaType
+            );
+
+            // Read body once; parse JSON and check raw text from the same string.
+            var body = await response.Content.ReadAsStringAsync();
+            var json = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(body);
+            Assert.NotNull(json);
+
+            // The detail field must be the static generic string — not exception.Message.
+            Assert.True(
+                json.ContainsKey("detail"),
+                $"{endpointLabel}: 500 RFC 7807 response must contain 'detail'"
+            );
+            var detail = json["detail"]!.GetValue<string>();
+            Assert.True(
+                detail == ExpectedStaticDetail,
+                $"{endpointLabel}: 'detail' must be the static generic string per stack-trace-exposure-remediation.md, but was: {detail}"
+            );
+
+            // The raw response body must not contain any class or stack-trace indicators.
+            Assert.DoesNotContain("at System.", body);
+            Assert.DoesNotContain("Exception:", body);
         }
         else
         {
