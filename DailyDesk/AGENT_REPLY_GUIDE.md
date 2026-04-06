@@ -391,6 +391,29 @@ Return only what matters for [decision].
 Ignore broad market commentary and generic feature lists.
 ```
 
+## Electrical Construction QA/QC Templates
+
+The electrical drawing QA/QC workflow references an official PDF template published by Watercare:
+
+**QA/QC Templates for General Electrical Construction Standards**
+- URL: [qa_templates_for_electrical_construction_standards.pdf](https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf)
+- Relevant section: **1.13 QA/QC template** — Minimum mandatory tests, including switchboards, distribution centres, and control centres.
+
+Use this template when:
+- Running an electrical drawing review against construction standards
+- Verifying that a drawing package satisfies the 1.13 QA/QC minimum mandatory test requirements
+- Generating a checklist prompt for the Engineering Desk grounded in official construction standards
+
+### Prompt Pattern For 1.13 QA/QC Review
+
+```text
+Use the Watercare QA/QC Templates for General Electrical Construction Standards (section 1.13).
+Source: https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf
+Review [drawing package or topic] against the minimum mandatory test requirements.
+Return a pass/fail checklist covering switchboards, distribution centres, and control centres.
+Flag any items that are missing or unclear.
+```
+
 ## Current Practical Rule
 
 If you want the agent to actually do work now, your best choices are usually:
