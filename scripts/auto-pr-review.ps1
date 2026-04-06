@@ -58,22 +58,25 @@ foreach ($repo in $repos) {
             $headSha = $freshPr.head.sha
             try {
                 $checkRuns = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/commits/$headSha/check-runs" -Headers $headers
-                $pending = @($checkRuns.check_runs | Where-Object { $_.status -ne "completed" })
-                $failed = @($checkRuns.check_runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -notin @("success", "neutral", "skipped") })
+                if ($checkRuns.total_count -gt 0) {
+                    $pending = @($checkRuns.check_runs | Where-Object { $_.status -ne "completed" })
+                    $failed = @($checkRuns.check_runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -notin @("success", "neutral", "skipped") })
 
-                if ($pending.Count -gt 0) {
-                    $names = ($pending | ForEach-Object { $_.name }) -join ", "
-                    Write-Host "SKIP: $repoShort#$($pr.number) - checks running: $names"
-                    continue
+                    if ($pending.Count -gt 0) {
+                        $names = ($pending | ForEach-Object { $_.name }) -join ", "
+                        Write-Host "SKIP: $repoShort#$($pr.number) - checks running: $names"
+                        continue
+                    }
+                    if ($failed.Count -gt 0) {
+                        $names = ($failed | ForEach-Object { "$($_.name)=$($_.conclusion)" }) -join ", "
+                        Write-Host "SKIP: $repoShort#$($pr.number) - checks failed: $names"
+                        continue
+                    }
                 }
-                if ($failed.Count -gt 0) {
-                    $names = ($failed | ForEach-Object { "$($_.name)=$($_.conclusion)" }) -join ", "
-                    Write-Host "SKIP: $repoShort#$($pr.number) - checks failed: $names"
-                    continue
-                }
+                # No checks or all checks passed - proceed
             } catch {
-                Write-Host "SKIP: $repoShort#$($pr.number) - checks not available yet"
-                continue
+                # No checks configured - that's fine, proceed
+                Write-Host "INFO: $repoShort#$($pr.number) - no CI checks configured, proceeding"
             }
 
             # ========== GATE 5: Check mergeability ==========
@@ -244,3 +247,4 @@ Keep it concise. No fluff.
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
