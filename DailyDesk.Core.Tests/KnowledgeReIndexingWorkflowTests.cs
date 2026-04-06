@@ -69,6 +69,13 @@ public sealed class KnowledgeReIndexingWorkflowTests
             Summary = summary,
         };
 
+    /// <summary>
+    /// Returns the effective text content of a document, mirroring the fallback
+    /// logic used by KnowledgeCoordinator: ExtractedText first, then Summary.
+    /// </summary>
+    private static string GetDocumentContent(LearningDocument doc) =>
+        string.IsNullOrEmpty(doc.ExtractedText) ? doc.Summary : doc.ExtractedText ?? string.Empty;
+
     // -------------------------------------------------------------------------
     // Group 1: Knowledge Refresh template compliance (chunk4)
     //
@@ -162,8 +169,8 @@ public sealed class KnowledgeReIndexingWorkflowTests
         var template = store.ListAll().Single(w => w.Name == "Knowledge Refresh");
 
         // The guide names these steps "Index Knowledge Documents" and "Refresh Document Embeddings"
-        Assert.Contains("Knowledge", template.Steps[0].Label, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Embeddings", template.Steps[1].Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Index Knowledge Documents", template.Steps[0].Label);
+        Assert.Equal("Refresh Document Embeddings", template.Steps[1].Label);
     }
 
     // -------------------------------------------------------------------------
@@ -501,8 +508,8 @@ public sealed class KnowledgeReIndexingWorkflowTests
 
         // Simulate that first run already indexed file A
         var docA = library.Documents.First(d => d.RelativePath.Contains(fileA, StringComparison.OrdinalIgnoreCase));
-        var contentA = string.IsNullOrEmpty(docA.ExtractedText) ? docA.Summary : docA.ExtractedText;
-        var hashA = KnowledgeIndexStore.ComputeContentHash(contentA!);
+        var contentA = GetDocumentContent(docA);
+        var hashA = KnowledgeIndexStore.ComputeContentHash(contentA);
         indexStore.MarkIndexed(docA.RelativePath, hashA, "vec-relay-001");
 
         // Modify file B on disk
