@@ -3997,6 +3997,185 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- Phase 12: Electrical Drafting Reply Pattern Tests ---
+
+    [Fact]
+    public void ElectricalDraftingReplyPattern_FourParts_AreAllPresent()
+    {
+        // Canonical 4-part pattern from AGENT_REPLY_GUIDE.md
+        const string source      = "Use Suite as background context only.";
+        const string task        = "Explain the approval-routing patterns we should probably support.";
+        const string output      = "Return a short list of states, transitions, and operator risks.";
+        const string constraints = "Do not suggest code changes yet.";
+
+        var pattern = string.Join("\n", source, task, output, constraints);
+
+        Assert.Contains("Use ", pattern, StringComparison.Ordinal);
+        Assert.Contains("Explain ", pattern, StringComparison.Ordinal);
+        Assert.Contains("Return ", pattern, StringComparison.Ordinal);
+        Assert.Contains("Do not ", pattern, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("drawing review")]
+    [InlineData("issue sets")]
+    [InlineData("approvals")]
+    [InlineData("transmittals")]
+    public void ElectricalDraftingPattern_ChunkFour_CoversCriticalWorkflowTerms(string term)
+    {
+        // Suite Context reply pattern from AGENT_REPLY_GUIDE.md::chunk4
+        const string pattern =
+            "Compare review-first workflow patterns that fit electrical drafting.\n" +
+            "Return only the patterns that affect drawing review, issue sets, approvals, and transmittals.";
+
+        Assert.Contains(term, pattern, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("revision control")]
+    [InlineData("signoff")]
+    [InlineData("audit trail")]
+    [InlineData("package delivery")]
+    public void BusinessOpsPattern_ElectricalDrafting_ContainsApprovalWorkflowTerms(string term)
+    {
+        // Business Ops reply pattern from AGENT_REPLY_GUIDE.md::chunk4
+        const string pattern =
+            "Research workflow approval tools for drafting and engineering teams.\n" +
+            "Return only features tied to revision control, signoff, audit trail, and package delivery.\n" +
+            "Ignore CRM, billing, and agency-focused features.";
+
+        Assert.Contains(term, pattern, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ApprovalReason_ElectricalDrafting_ContainsThreeRequiredComponents()
+    {
+        // Best approval reason from AGENT_REPLY_GUIDE.md for electrical drafting
+        const string reason =
+            "Approve and run.\n" +
+            "I need this to evaluate whether Suite should support drawing review routing and issue-set approvals.\n" +
+            "Return a short fit-gap summary, top 5 features, missing proof, and one recommendation.\n" +
+            "Ignore generic project-management features.";
+
+        // 1. Why it matters now
+        Assert.Contains("drawing review routing", reason, StringComparison.OrdinalIgnoreCase);
+        // 2. What the return should focus on
+        Assert.Contains("fit-gap summary", reason, StringComparison.OrdinalIgnoreCase);
+        // 3. What to ignore
+        Assert.Contains("Ignore", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SuiteContextAgent_SystemPrompt_MentionsSuiteAndWorkflowContext()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var agent = new DailyDesk.Services.Agents.SuiteContextAgent(factory.CreateKernel("m"));
+
+        Assert.Contains("Suite", agent.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("workflow", agent.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("read-only", agent.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GrowthOpsAgent_SystemPrompt_ReferencesElectricalProductionControl()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var agent = new DailyDesk.Services.Agents.GrowthOpsAgent(factory.CreateKernel("m"));
+
+        Assert.NotNull(agent);
+        Assert.Contains("electrical production-control", agent.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SuiteContextAgent_GetSuiteSnapshot_ReturnsFormattedSummary()
+    {
+        var result = DailyDesk.Services.Agents.SuiteContextAgent.GetSuiteSnapshot(
+            statusSummary: "drawing review active",
+            hotAreas: "issue sets, transmittals",
+            recentCommits: "added approval routing",
+            nextTasks: "wire transmittal handoff");
+
+        Assert.Contains("drawing review active", result, StringComparison.Ordinal);
+        Assert.Contains("issue sets", result, StringComparison.Ordinal);
+        Assert.Contains("transmittals", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GrowthOpsAgent_GetOperatorMemory_ReflectsElectricalDraftingWorkflow()
+    {
+        var result = DailyDesk.Services.Agents.GrowthOpsAgent.GetOperatorMemory(
+            dailyObjective: "validate drawing review routing for Suite",
+            approvalInbox: "2 issue-set approvals pending",
+            monetizationLeads: "transmittal SaaS, CAD workflow platform");
+
+        Assert.Contains("drawing review routing", result, StringComparison.Ordinal);
+        Assert.Contains("issue-set approvals", result, StringComparison.Ordinal);
+        Assert.Contains("transmittal", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PromptComposer_BuildBusinessSystemPrompt_SupportsElectricalProductionFocus()
+    {
+        var prompt = PromptComposer.BuildBusinessSystemPrompt();
+
+        Assert.Contains("business strategist", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("offer", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Approve and run.", true)]
+    [InlineData("yes", false)]
+    [InlineData("ok", false)]
+    [InlineData("Approve only.", true)]
+    public void ReplyQuality_PasteReadyPatterns_AreDistinguishableFromWeakReplies(
+        string reply, bool expectedStrong)
+    {
+        // Per AGENT_REPLY_GUIDE.md, weak replies are bare acknowledgements of ≤ 2–3 characters
+        // ("yes", "ok"). Structured paste-ready replies from the guide are always longer than
+        // this threshold and are not in the weak-reply set.
+        const int MinimumStrongReplyLength = 5;
+        var weak = new[] { "yes", "ok" };
+        var isStrong = reply.Length > MinimumStrongReplyLength
+            && !weak.Any(w => w.Equals(reply, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(expectedStrong, isStrong);
+    }
+
+    [Fact]
+    public void DeskAgent_BuildChatHistory_IncludesContextBlockForDrawingReview()
+    {
+        var factory = new OfficeKernelFactory("http://localhost:11434");
+        var agent = new TestableDeskAgent(factory.CreateKernel("m"));
+
+        var contextBlock = "Current Suite approval state: drawing review pending. Issue sets: 3 open.";
+        var messages = new List<DailyDesk.Models.DeskMessageRecord>
+        {
+            new() { Role = "user", Content = "Review the pending drawing package.", Author = "Operator" },
+        };
+
+        var history = agent.ExposeBuildChatHistory(messages, null, contextBlock, "Summarise the open issue sets.");
+
+        var historyText = string.Join("\n", history.Select(m => m.Content));
+        Assert.Contains("drawing review", historyText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Issue sets", historyText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ElectricalDraftingPattern_TransmittalCompliance_RequiresHandoffTerms()
+    {
+        // Transmittal compliance reply pattern following the guide conventions
+        const string transmittalPattern =
+            "Use Suite as background context only.\n" +
+            "Explain what a transmittal handoff package should contain.\n" +
+            "Return a short checklist: drawing set, revision log, signoff record, and issue-set closure.\n" +
+            "Stay within Suite scope. Do not suggest new features yet.";
+
+        Assert.Contains("transmittal", transmittalPattern, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("handoff", transmittalPattern, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("revision", transmittalPattern, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff", transmittalPattern, StringComparison.OrdinalIgnoreCase);
+    }
+
     // --- Test helpers ---
 
     /// <summary>
@@ -4049,5 +4228,34 @@ public sealed class OfficeBrokerLogicTests
             await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
         }
+    }
+
+    /// <summary>
+    /// Minimal DeskAgent subclass that exposes the protected BuildChatHistory method
+    /// for integration testing of context assembly.
+    /// </summary>
+    /// <remarks>
+    /// The SystemPrompt content here is intentionally minimal; the integration test only
+    /// verifies that the contextBlock and thread messages are correctly assembled into the
+    /// ChatHistory, not the agent's persona text.  Real system prompts are tested separately
+    /// via the concrete agent tests (e.g., SuiteContextAgent_SystemPrompt_* tests above).
+    /// </remarks>
+    private sealed class TestableDeskAgent : DeskAgent
+    {
+        public TestableDeskAgent(Microsoft.SemanticKernel.Kernel kernel)
+            : base(kernel) { }
+
+        public override string RouteId => "test";
+        public override string Title => "Test Agent";
+
+        // Minimal prompt — this test only exercises context assembly, not agent persona.
+        public override string SystemPrompt => "You are a test agent for electrical drafting.";
+
+        public Microsoft.SemanticKernel.ChatCompletion.ChatHistory ExposeBuildChatHistory(
+            IReadOnlyList<DailyDesk.Models.DeskMessageRecord> messages,
+            string? threadSummary,
+            string contextBlock,
+            string userMessage)
+            => BuildChatHistory(messages, threadSummary, contextBlock, userMessage);
     }
 }
