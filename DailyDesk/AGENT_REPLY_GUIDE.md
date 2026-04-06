@@ -95,6 +95,65 @@ Best kinds of prompts:
 - `Research drafting workflow approval tools and return only features relevant to electrical production control.`
 - `Compare these 3 competitors by approval routing, audit trail, revision control, and pricing risk.`
 
+### ML Engineer
+
+Use for:
+- understanding the ML analytics and learning pipeline status
+- diagnosing weak topic clusters or learning plateaus
+- checking document embedding and knowledge indexing health
+- interpreting forecast anomalies or readiness scores
+
+Best kinds of prompts:
+- `What is the current ML pipeline status and when did it last run?`
+- `Show me the current weak topics and what the forecast says about my learning plateau.`
+- `What is the embedding coverage for my imported knowledge documents?`
+- `Explain what the ML analytics say about my progress and what to do next.`
+
+## Understanding Agent Response Sections
+
+Each desk structures its answers using named sections. Knowing what each section means helps you evaluate the response and decide what to do next.
+
+### Chief of Staff
+
+| Section | What It Contains |
+|---------|-----------------|
+| `NEXT MOVE` | The single highest-leverage action for right now |
+| `WHY` | The reasoning that makes this the right move |
+| `HANDOFF` | Where the work should go next (study, Suite, CAD, or business) |
+
+### Engineering Desk
+
+| Section | What It Contains |
+|---------|-----------------|
+| `ANSWER` | The direct technical answer or explanation |
+| `CHECKS` | Key verification points, failure modes, or safety considerations |
+| `CAD OR SUITE LINK` | How this concept connects to CAD workflow or Suite context |
+
+### Suite Context
+
+| Section | What It Contains |
+|---------|-----------------|
+| `CONTEXT` | Current Suite state, hot areas, or relevant workflow background |
+| `TRUST` | Suite availability and runtime trust status |
+| `WHY IT MATTERS` | Why this context affects operator decisions right now |
+
+### Business Ops
+
+| Section | What It Contains |
+|---------|-----------------|
+| `MOVE` | The specific internal operating move or offer-shaping step |
+| `WHY IT WINS` | The reason this move produces real value without hype |
+| `WHAT TO PROVE` | The measurable proof point or next validation step |
+
+### ML Engineer
+
+| Section | What It Contains |
+|---------|-----------------|
+| `ML STATUS` | Current pipeline state, last run timestamp, and component health |
+| `INSIGHTS` | Key findings from analytics, forecast, or embedding results |
+| `RECOMMENDATIONS` | Specific actions to improve pipeline health or learning outcomes |
+| `SUITE INTEGRATION` | How ML results connect to Suite workflow or production context |
+
 ## Know The Difference Between Desk Chat And Inbox Work
 
 ### Desk Chat
@@ -162,6 +221,48 @@ This stages an already approved or self-serve item.
 This starts the selected item immediately.
 
 If the item is a research follow-up, this is what actually makes the app do the work.
+
+## Workflow Templates
+
+Workflow templates are named sequences of background jobs that run in order. Use them when you need the pipeline, knowledge, or analytics updated as a unit.
+
+### Built-In Templates
+
+#### Daily Run
+
+Runs the full daily pipeline: ML Pipeline, Export Suite Artifacts, and Index Knowledge Documents.
+
+Use when:
+- you are starting your work session and want everything current
+- you want all ML and knowledge state refreshed in one step
+
+Steps: ML Pipeline → Export Suite Artifacts → Index Knowledge Documents
+
+#### Exam Prep
+
+Focused workflow for study preparation: runs learning analytics, generates document embeddings, and re-indexes knowledge documents.
+
+Use when:
+- you are preparing for a practice test or oral defense
+- you want weak topics, knowledge coverage, and embeddings all current before a study session
+
+Steps: Run Learning Analytics → Generate Document Embeddings → Index Knowledge Documents
+
+#### Knowledge Refresh
+
+Re-indexes all knowledge documents and updates embeddings. Aborts if any step fails.
+
+Use when:
+- you have imported new documents and want them indexed immediately
+- knowledge search results are stale or missing recent imports
+
+Steps: Index Knowledge Documents → Refresh Document Embeddings
+
+### Running A Template
+
+Templates can be run directly from the workflow panel or via the Approve & run path in the inbox.
+If you want results immediately, use `Run now` after selecting the template.
+If you want it staged for later, use `Queue`.
 
 ## How To Write Useful Approval Reasons
 
@@ -240,6 +341,98 @@ Use my imported OneNote package on [topic].
 Create a practice test.
 Return 15 questions with mixed difficulty and an answer key with explanations at the end.
 Stay within the notebook content.
+```
+
+## Best Reply Patterns For ML Engineer
+
+Use ML Engineer when you want to understand or improve the learning pipeline.
+
+### Check Pipeline Health
+
+```text
+Show me the current ML pipeline status.
+Return when it last ran, what components are active, and any anomalies.
+```
+
+### Diagnose Weak Topics
+
+```text
+Use my current ML analytics.
+List my weak topic clusters and what the forecast says about my plateau risk.
+Return one recommended study focus.
+```
+
+### Check Knowledge Coverage
+
+```text
+What is the current embedding and indexing coverage for my imported knowledge documents?
+Return document count, embedding dimension, and any gaps.
+```
+
+### Interpret Learning Forecast
+
+```text
+Use my current ML forecast.
+Explain the progress trend and flag any plateaus or anomalies.
+Return one concrete next step.
+```
+
+## Best Reply Patterns For Electrical Drafting Workflows
+
+Use these patterns when working on drawing review, revision control, issue sets, or approval routing for electrical production work.
+
+### Drawing Review Routing
+
+```text
+Use Suite as background context only.
+Explain the approval-routing states that matter for electrical drawing review.
+Return: review states, transition triggers, signoff requirements, and operator risks.
+Do not suggest code changes yet.
+```
+
+### Revision Control and Audit Trail
+
+```text
+Research revision-control patterns for electrical drafting production workflows.
+Return: revision tracking, signoff states, audit trail requirements, and package handoff steps.
+Ignore CRM, billing, and generic PM features.
+Focus only on what affects drawing approval and transmittal.
+```
+
+### Issue Set Approval
+
+```text
+Use Suite as background context only.
+Compare issue-set approval flow patterns for electrical drafting teams.
+Return: issue states, approval gates, rejection paths, and resubmission rules.
+Keep it tied to review-first production control.
+```
+
+### Drawing QA Checklist
+
+```text
+Use my imported knowledge on electrical drawing QA.
+Create a review checklist for [drawing type].
+Return: standard checks, failure modes, code references, and sign-off criteria.
+Stay grounded in the imported knowledge only.
+```
+
+### Production Transmittal Workflow
+
+```text
+Use Suite as background context only.
+Explain the transmittal and package handoff workflow for electrical drawing sets.
+Return: package states, required approvals, delivery triggers, and what can fail silently.
+Do not propose implementation yet.
+```
+
+### Competitor Fit-Gap For Drafting Control
+
+```text
+Research [tool name] for electrical drafting production control.
+Return: approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.
+Return a short fit-gap summary and one recommendation.
+Ignore CRM, invoicing, and general PM features.
 ```
 
 ## Best Reply Patterns For Research
