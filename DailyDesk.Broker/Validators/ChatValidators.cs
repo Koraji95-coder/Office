@@ -14,7 +14,7 @@ internal sealed class ChatRouteRequestValidator : AbstractValidator<ChatRouteReq
             {
                 var trimmed = route?.Trim().ToLowerInvariant();
                 return !string.IsNullOrWhiteSpace(trimmed)
-                    && OfficeRouteCatalog.KnownRoutes.Contains(trimmed);
+                    && OfficeRouteCatalog.KnownRoutes.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
             })
             .WithMessage($"Route must be one of: {string.Join(", ", OfficeRouteCatalog.KnownRoutes)}.");
     }
