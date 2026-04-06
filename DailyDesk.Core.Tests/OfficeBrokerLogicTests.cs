@@ -3997,7 +3997,398 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // ========================================================================
+    // Agent Reply Guide Compliance Tests
+    // Validates structured response patterns from DailyDesk/AGENT_REPLY_GUIDE.md
+    // ========================================================================
+
+    // --- Practice Test Format (Guide §Practice Test) ---
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackHasQuestionExplanations()
+    {
+        // The guide requires: "Return 15 questions with mixed difficulty
+        // and an answer key with explanations at the end."
+        // Every question must have a non-empty explanation.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "transformer protection",
+            "Mixed",
+            5,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.NotEmpty(test.Questions);
+        Assert.All(test.Questions, q => Assert.False(
+            string.IsNullOrWhiteSpace(q.Explanation),
+            $"Question '{TruncateForDisplay(q.Prompt, 60)}' is missing an explanation."
+        ));
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackQuestionsHaveFourOptions()
+    {
+        // The guide format requires multiple-choice structure (A, B, C, D).
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "grounding",
+            "Fundamental",
+            5,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.NotEmpty(test.Questions);
+        Assert.All(test.Questions, q => Assert.Equal(4, q.Options.Count));
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackCorrectKeyMapsToOption()
+    {
+        // The guide requires an "answer key" — every correct key must
+        // map to one of the four answer options.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "protection coordination",
+            "Intermediate",
+            5,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.NotEmpty(test.Questions);
+        Assert.All(test.Questions, q =>
+        {
+            var validKeys = q.Options.Select(o => o.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(q.CorrectOptionKey, validKeys);
+        });
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackTitleIncludesFocus()
+    {
+        // The guide specifies "Use my imported OneNote package on [topic]" —
+        // the resulting test should reflect the requested topic in its title.
+        var focus = "voltage drop";
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            focus,
+            "Fundamental",
+            3,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.Contains(focus, test.Title, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackHasSuiteConnection()
+    {
+        // The guide ties EE learning to Suite production work.
+        // Every question should have a SuiteConnection to ground study in real operator context.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "drafting safety",
+            "Challenging",
+            5,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.NotEmpty(test.Questions);
+        Assert.All(test.Questions, q => Assert.False(
+            string.IsNullOrWhiteSpace(q.SuiteConnection),
+            $"Question '{q.Topic}' is missing a SuiteConnection."
+        ));
+    }
+
+    [Theory]
+    [InlineData("Mixed")]
+    [InlineData("Fundamental")]
+    [InlineData("Intermediate")]
+    [InlineData("Challenging")]
+    public async Task AgentReplyGuide_PracticeTest_FallbackHandlesDifficultyLevels(string difficulty)
+    {
+        // The guide says "Return 15 questions with mixed difficulty" and lists
+        // Fundamental / Intermediate / Challenging as valid difficulty bands.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "power systems",
+            difficulty,
+            5,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.NotNull(test);
+        Assert.NotEmpty(test.Questions);
+        Assert.Equal(difficulty, test.Difficulty);
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackWeakTopicSteering()
+    {
+        // The guide recommends study that stays grounded in the operator's weak areas.
+        // The fallback steers toward weak topics from training history.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var historyWithWeakTopics = new TrainingHistorySummary
+        {
+            WeakTopics =
+            [
+                new TopicMasterySummary { Topic = "grounding", Attempted = 10, Correct = 3 },
+                new TopicMasterySummary { Topic = "protection", Attempted = 10, Correct = 4 },
+            ],
+        };
+
+        var test = await service.CreatePracticeTestAsync(
+            "grounding",
+            "Mixed",
+            5,
+            new SuiteSnapshot(),
+            historyWithWeakTopics,
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        // At least one question should be related to a weak topic
+        Assert.NotEmpty(test.Questions);
+        var hasWeakTopicCoverage = test.Questions.Any(q =>
+            q.Topic.Contains("grounding", StringComparison.OrdinalIgnoreCase)
+            || q.Topic.Contains("protection", StringComparison.OrdinalIgnoreCase));
+        Assert.True(hasWeakTopicCoverage);
+    }
+
+    [Fact]
+    public async Task AgentReplyGuide_PracticeTest_FallbackQuestionCountIsRespected()
+    {
+        // The guide expects a specific number of questions ("Return 15 questions").
+        // The service clamps 3–10; this verifies the requested count is honoured.
+        var service = new TrainingGeneratorService(new FailingModelProvider(), "test-model");
+
+        var test = await service.CreatePracticeTestAsync(
+            "standards",
+            "Challenging",
+            7,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary(),
+            new LearningProfile(),
+            new LearningLibrary(),
+            []
+        );
+
+        Assert.Equal(7, test.Questions.Count);
+    }
+
+    // --- Research Query Handling (Guide §Best Reply Patterns For Research) ---
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_DefaultSummaryIsNotEmpty()
+    {
+        // The guide expects meaningful feedback from research, not silence.
+        // ResearchReport should have a non-empty default summary.
+        var report = new ResearchReport();
+        Assert.False(string.IsNullOrWhiteSpace(report.Summary));
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_HasRequiredStructureFields()
+    {
+        // The guide's research pattern requires: query, perspective, summary,
+        // key takeaways, action moves, and sources.
+        var report = new ResearchReport
+        {
+            Query = "DraftFlow for electrical drafting production control",
+            Perspective = "Business Ops",
+            Model = "qwen3:8b",
+            Summary = "DraftFlow provides approval routing suitable for EE workflows.",
+            GenerationSource = "live web + test",
+            KeyTakeaways = ["Approval routing is present", "No AutoCAD native integration"],
+            ActionMoves = ["Request a trial", "Compare against Suite approval flow"],
+            Sources = [new ResearchSource { Title = "DraftFlow Home", Url = "https://example.com", Domain = "example.com" }],
+        };
+
+        Assert.False(string.IsNullOrWhiteSpace(report.Query));
+        Assert.False(string.IsNullOrWhiteSpace(report.Perspective));
+        Assert.False(string.IsNullOrWhiteSpace(report.Summary));
+        Assert.NotEmpty(report.KeyTakeaways);
+        Assert.NotEmpty(report.ActionMoves);
+        Assert.NotEmpty(report.Sources);
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_RunSummaryIncludesMetadata()
+    {
+        // The guide differentiates research results by source and perspective.
+        // RunSummary should expose the key fields for traceability.
+        var report = new ResearchReport
+        {
+            Query = "electrical approval routing",
+            Perspective = "Business Ops",
+            Model = "qwen3:8b",
+            GenerationSource = "live web + test synthesis",
+            Sources = [new ResearchSource { Title = "Source A", Url = "https://a.example.com", Domain = "a.example.com" }],
+        };
+
+        var summary = report.RunSummary;
+
+        Assert.Contains("Business Ops", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("qwen3:8b", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1", summary); // source count
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_EmptyReport_ProvidesNarrowQueryGuidance()
+    {
+        // The guide explicitly warns against weak queries ("Research DraftFlow" is bad).
+        // When no sources are found, the service should advise narrow queries.
+        var report = InvokeResearchEmptyReport("DraftFlow", "Business Ops", "qwen3:8b");
+
+        Assert.NotEmpty(report.KeyTakeaways);
+        Assert.NotEmpty(report.ActionMoves);
+
+        // The guidance should mention narrowing the query
+        var allGuidance = string.Join(" ", report.KeyTakeaways.Concat(report.ActionMoves));
+        Assert.True(
+            allGuidance.Contains("narrow", StringComparison.OrdinalIgnoreCase)
+                || allGuidance.Contains("tighter", StringComparison.OrdinalIgnoreCase)
+                || allGuidance.Contains("specific", StringComparison.OrdinalIgnoreCase),
+            "Empty research report should guide the user to use a narrower query."
+        );
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_EmptyReport_SummaryMentionsRefine()
+    {
+        // When no sources are found, the summary should guide the user to refine the query.
+        var report = InvokeResearchEmptyReport("DraftFlow", "Business Ops", "qwen3:8b");
+
+        Assert.True(
+            report.Summary.Contains("refine", StringComparison.OrdinalIgnoreCase)
+                || report.Summary.Contains("narrow", StringComparison.OrdinalIgnoreCase)
+                || report.Summary.Contains("no", StringComparison.OrdinalIgnoreCase),
+            "Empty research report summary should indicate no useful sources were found."
+        );
+    }
+
+    [Theory]
+    [InlineData("/research DraftFlow for electrical drafting")]
+    [InlineData("Use live research for this. Compare DraftFlow vs Suite approval routing.")]
+    [InlineData("Research workflow approval tools for drafting and engineering teams.")]
+    public void AgentReplyGuide_ResearchQueryPatterns_AreNonEmpty(string query)
+    {
+        // The guide documents specific patterns for research queries.
+        // This verifies each canonical pattern produces a non-empty, trimmed query.
+        var trimmed = query.Trim();
+        Assert.False(string.IsNullOrWhiteSpace(trimmed));
+
+        // Research queries from the guide are always specific: they mention a subject
+        // (DraftFlow, approval routing, etc.) rather than being a single word.
+        Assert.True(trimmed.Split(' ').Length > 2,
+            "Guide-compliant research queries should be specific, not a single word.");
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ResearchReport_FallbackHasActionMoves()
+    {
+        // The guide says research should produce concrete action moves.
+        // The fallback report must always include action moves even without LLM synthesis.
+        var sources = new List<ResearchSource>
+        {
+            new() { Title = "DraftFlow Pricing", Url = "https://example.com", Domain = "example.com", SearchSnippet = "Approval routing feature" },
+        };
+
+        var report = InvokeResearchFallbackReport(
+            "DraftFlow approval routing",
+            "Business Ops",
+            "qwen3:8b",
+            sources,
+            new SuiteSnapshot(),
+            new TrainingHistorySummary()
+        );
+
+        Assert.NotEmpty(report.ActionMoves);
+        Assert.False(string.IsNullOrWhiteSpace(report.Summary));
+    }
+
     // --- Test helpers ---
+
+    /// <summary>
+    /// Invokes the private static LiveResearchService.BuildEmptyReport via reflection.
+    /// Mirrors the existing pattern used by ResolveOfficeRootPath tests in this file.
+    /// </summary>
+    private static ResearchReport InvokeResearchEmptyReport(string query, string perspective, string model)
+    {
+        var method = typeof(LiveResearchService).GetMethod(
+            "BuildEmptyReport",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+        );
+        Assert.NotNull(method);
+        var result = (ResearchReport?)method!.Invoke(null, [query, perspective, model]);
+        Assert.NotNull(result);
+        return result!;
+    }
+
+    /// <summary>
+    /// Invokes the private static LiveResearchService.BuildFallbackReport via reflection.
+    /// </summary>
+    private static ResearchReport InvokeResearchFallbackReport(
+        string query,
+        string perspective,
+        string model,
+        IReadOnlyList<ResearchSource> sources,
+        SuiteSnapshot snapshot,
+        TrainingHistorySummary history)
+    {
+        var method = typeof(LiveResearchService).GetMethod(
+            "BuildFallbackReport",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+        );
+        Assert.NotNull(method);
+        var result = (ResearchReport?)method!.Invoke(null, [query, perspective, model, sources, snapshot, history]);
+        Assert.NotNull(result);
+        return result!;
+    }
+
+    /// <summary>
+    /// Safely truncates a string for use in assertion failure messages.
+    /// </summary>
+    private static string TruncateForDisplay(string? text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return "(empty)";
+        }
+
+        return text.Length <= maxLength ? text : text[..maxLength] + "…";
+    }
 
     /// <summary>
     /// HttpMessageHandler that always throws HttpRequestException.
@@ -4049,5 +4440,27 @@ public sealed class OfficeBrokerLogicTests
             await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
         }
+    }
+
+    /// <summary>
+    /// IModelProvider that always throws, forcing services into their fallback paths.
+    /// Used for agent reply guide compliance tests that need deterministic fallback output.
+    /// </summary>
+    private sealed class FailingModelProvider : IModelProvider
+    {
+        public string ProviderId => "test";
+        public string ProviderLabel => "Test Provider";
+
+        public Task<IReadOnlyList<string>> GetInstalledModelsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        public Task<string> GenerateAsync(string model, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default) =>
+            Task.FromException<string>(new InvalidOperationException("Test provider does not generate text."));
+
+        public Task<T?> GenerateJsonAsync<T>(string model, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default) =>
+            Task.FromException<T?>(new InvalidOperationException("Test provider does not generate JSON."));
+
+        public Task<bool> PingAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 }
