@@ -63,11 +63,14 @@ foreach ($repo in $repos) {
 
             # ========== GATE 1: Still a draft ==========
             if ($pr.draft -eq $true) {
-                $createdAt = [DateTime]::Parse($pr.created_at).ToUniversalTime()
-                $age = (Get-Date).ToUniversalTime() - $createdAt
                 # Fetch full PR to get accurate additions count (list endpoint returns 0)
                 $draftDetail = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
-                if ($draftDetail.additions -gt 0 -and $age.TotalMinutes -gt 10) {
+                # Use updated_at vs created_at difference from GitHub (avoids local clock skew)
+                $createdAt = [DateTime]::Parse($draftDetail.created_at)
+                $updatedAt = [DateTime]::Parse($draftDetail.updated_at)
+                $ageMinutes = ($updatedAt - $createdAt).TotalMinutes
+                # If has code and either 10+ min old OR commits > 1 (Copilot pushed final code)
+                if ($draftDetail.additions -gt 0 -and ($ageMinutes -gt 10 -or $draftDetail.commits -gt 1)) {
                     Write-Host "PROMOTE: $repoShort#$($pr.number) - draft with code, $([int]$age.TotalMinutes)m old, marking ready..."
                     try {
                         $nodeId = $draftDetail.node_id
@@ -427,4 +430,5 @@ Provide your review:
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
