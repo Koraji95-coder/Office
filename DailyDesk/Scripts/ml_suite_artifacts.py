@@ -19,6 +19,7 @@ All artifacts are deterministic and review-first (matching Suite's design philos
 
 import json
 import sys
+import traceback
 from datetime import datetime, timezone
 from typing import Any
 
@@ -217,22 +218,33 @@ def main() -> None:
         print(json.dumps({"ok": False, "error": "Invalid JSON input."}))
         return
 
-    analytics = payload.get("analytics", {})
-    embeddings = payload.get("embeddings", {})
-    forecast = payload.get("forecast", {})
+    try:
+        analytics = payload.get("analytics", {})
+        embeddings = payload.get("embeddings", {})
+        forecast = payload.get("forecast", {})
 
-    artifacts = {
-        "ok": True,
-        "generatedAt": _now_iso(),
-        "artifacts": [
-            _build_operator_readiness(analytics, forecast),
-            _build_knowledge_index(embeddings),
-            _build_study_schedule(analytics, forecast),
-            _build_watchdog_baseline(analytics, forecast),
-        ],
-    }
+        artifacts = {
+            "ok": True,
+            "generatedAt": _now_iso(),
+            "artifacts": [
+                _build_operator_readiness(analytics, forecast),
+                _build_knowledge_index(embeddings),
+                _build_study_schedule(analytics, forecast),
+                _build_watchdog_baseline(analytics, forecast),
+            ],
+        }
 
-    print(json.dumps(artifacts, ensure_ascii=False))
+        print(json.dumps(artifacts, ensure_ascii=False))
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "An unexpected error occurred. See server logs for details.",
+                }
+            )
+        )
 
 
 def _read_input() -> str:
