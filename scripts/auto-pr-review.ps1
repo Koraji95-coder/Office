@@ -27,13 +27,22 @@ $repos = @("Koraji95-coder/Office", "Koraji95-coder/Suite")
 
 foreach ($repo in $repos) {
     try {
-        $prs = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls?state=open&per_page=10" -Headers $headers
+        # Grab up to 100 open PRs
+        $prs = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls?state=open&per_page=100" -Headers $headers
 
         foreach ($pr in $prs) {
             if ($pr.user.login -ne "copilot-swe-agent[bot]" -and $pr.user.login -ne "Copilot") { continue }
 
+            # Skip PRs with no actual code changes yet (Copilot still working)
+            if ($pr.changed_files -eq 0 -or ($pr.additions -eq 0 -and $pr.deletions -eq 0)) {
+                Write-Host "SKIPPING: $repo#$($pr.number) — no code changes yet (Copilot still working)"
+                continue
+            }
+
             $prKey = "$repo#$($pr.number)@$($pr.updated_at)"
             if ($reviewed -contains $prKey) { continue }
+
+            Write-Host "`n--- Reviewing $repo#$($pr.number): $($pr.title) ---"
 
             $diffHeaders = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3.diff" }
             $diff = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $diffHeaders
@@ -81,34 +90,37 @@ Keep it concise. No fluff.
             $response = Invoke-RestMethod -Uri "http://localhost:11434/api/chat" -Method POST -ContentType "application/json" -Body $chatBody
             $review = $response.message.content
 
-            $color = 8421504
-            if ($review -match "APPROVE") { $color = 5793266 }
-            if ($review -match "REQUEST_CHANGES") { $color = 16744256 }
-            if ($review -match "NEEDS_DISCUSSION") { $color = 16776960 }
-
             $repoShort = $repo.Split("/")[1]
 
-            # Post Discord notification
-            $payload = @{
-                content = "<@$userId>"
-                embeds = @(@{
-                    title       = "PR Review: $($pr.title)"
-                    description = "$review`n`n[View PR]($($pr.html_url))"
-                    color       = $color
-                    footer      = @{ text = "$repoShort | PR #$($pr.number) | Auto-Review" }
-                    timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-                })
+            # Determine verdict and set Discord colors
+            # Green = APPROVE, Red = REQUEST_CHANGES, Yellow = NEEDS_DISCUSSION, Gray = unknown
+            $verdict = "UNKNOWN"
+            $color = 9807270        # Gray
+            $statusEmoji = "⚪"
+            if ($review -match "REQUEST_CHANGES") {
+                $verdict = "REQUEST_CHANGES"
+                $color = 15548997   # Red
+                $statusEmoji = "🔴"
+            } elseif ($review -match "NEEDS_DISCUSSION") {
+                $verdict = "NEEDS_DISCUSSION"
+                $color = 16776960   # Yellow
+                $statusEmoji = "🟡"
+            } elseif ($review -match "APPROVE") {
+                $verdict = "APPROVE"
+                $color = 5763719    # Green
+                $statusEmoji = "🟢"
             }
-            $jsonPayload = $payload | ConvertTo-Json -Depth 5 -Compress
-            Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($jsonPayload))
 
-            # Submit actual GitHub PR review (APPROVE/REQUEST_CHANGES), not just a comment
-            $ghReviewEvent = "COMMENT"
-            if ($review -match "APPROVE" -and $review -notmatch "REQUEST_CHANGES") {
-                $ghReviewEvent = "APPROVE"
-            } elseif ($review -match "REQUEST_CHANGES") {
-                $ghReviewEvent = "REQUEST_CHANGES"
+            # Extract score
+            $score = 0
+            if ($review -match "(\d+)\s*/\s*10") {
+                $score = [int]$Matches[1]
             }
+
+            # Submit GitHub PR review
+            $ghReviewEvent = "COMMENT"
+            if ($verdict -eq "APPROVE") { $ghReviewEvent = "APPROVE" }
+            elseif ($verdict -eq "REQUEST_CHANGES") { $ghReviewEvent = "REQUEST_CHANGES" }
 
             try {
                 $reviewBody = @{
@@ -117,100 +129,87 @@ Keep it concise. No fluff.
                 } | ConvertTo-Json -Compress
                 Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" `
                     -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" `
-                    -Body ([System.Text.Encoding]::UTF8.GetBytes($reviewBody))
+                    -Body ([System.Text.Encoding]::UTF8.GetBytes($reviewBody)) | Out-Null
                 Write-Host "Submitted $ghReviewEvent review on $repo#$($pr.number)"
             } catch {
                 Write-Host "Failed to submit review on $repo#$($pr.number): $($_.Exception.Message)"
-                # Fallback to comment
-                try {
-                    $commentBody = @{
-                        body = "## Auto-Review (Ollama)`n`n$review`n`n---`n*Automated review powered by qwen3:14b + RAG context*"
-                    } | ConvertTo-Json -Compress
-                    Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/issues/$($pr.number)/comments" `
-                        -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" `
-                        -Body ([System.Text.Encoding]::UTF8.GetBytes($commentBody))
-                } catch {}
             }
 
-            # Auto-merge if APPROVE and quality >= 9
-            $shouldMerge = $false
-            if ($review -match "APPROVE" -and $review -notmatch "REQUEST_CHANGES" -and $review -notmatch "NEEDS_DISCUSSION") {
-                if ($review -match "(\d+)\s*/\s*10") {
-                    $score = [int]$Matches[1]
-                    if ($score -ge 9) { $shouldMerge = $true }
+            # Determine merge eligibility
+            $shouldMerge = ($verdict -eq "APPROVE" -and $score -ge 9)
+            $mergeStatus = ""
+
+            if ($shouldMerge) {
+                # Step 1: Mark draft as ready
+                if ($pr.draft -eq $true) {
+                    Write-Host "Marking $repo#$($pr.number) as ready for review..."
+                    try {
+                        $readyBody = @{
+                            query = "mutation { markPullRequestReadyForReview(input: { pullRequestId: `"$($pr.node_id)`" }) { pullRequest { isDraft } } }"
+                        } | ConvertTo-Json -Compress
+                        Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers @{
+                            Authorization = "Bearer $ghToken"
+                        } -ContentType "application/json" -Body $readyBody | Out-Null
+                        Write-Host "Marked $repo#$($pr.number) as ready."
+                        Start-Sleep -Seconds 3
+                    } catch {
+                        Write-Host "Failed to mark ready — skipping merge."
+                        $mergeStatus = "⚠️ Could not mark ready for review"
+                        $shouldMerge = $false
+                    }
                 }
             }
 
             if ($shouldMerge) {
-                try {
-                    # Step 1: Mark draft PR as ready for review
-                    if ($pr.draft -eq $true) {
-                        Write-Host "Marking $repo#$($pr.number) as ready for review..."
-                        $readyBody = @{
-                            query = "mutation { markPullRequestReadyForReview(input: { pullRequestId: `"$($pr.node_id)`" }) { pullRequest { isDraft } } }"
-                        } | ConvertTo-Json -Compress
-                        $readyResult = Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers @{
-                            Authorization = "Bearer $ghToken"
-                        } -ContentType "application/json" -Body $readyBody
+                # Step 2: Check CI checks
+                $checkRuns = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/commits/$($pr.head.sha)/check-runs" -Headers $headers
+                $pendingChecks = @($checkRuns.check_runs | Where-Object { $_.status -ne "completed" })
+                $failedChecks = @($checkRuns.check_runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -notin @("success", "neutral", "skipped") })
 
-                        if ($readyResult.data.markPullRequestReadyForReview.pullRequest.isDraft -eq $true) {
-                            Write-Host "Failed to mark $repo#$($pr.number) as ready — skipping merge."
-                            $reviewed += $prKey
-                            continue
-                        }
-                        Write-Host "Marked $repo#$($pr.number) as ready."
-                        Start-Sleep -Seconds 3
-                    }
+                if ($pendingChecks.Count -gt 0) {
+                    $pendingNames = ($pendingChecks | ForEach-Object { $_.name }) -join ", "
+                    Write-Host "WAITING: $repo#$($pr.number) — checks still running: $pendingNames"
+                    $mergeStatus = "⏳ Waiting on checks: $pendingNames"
+                    $shouldMerge = $false
+                } elseif ($failedChecks.Count -gt 0) {
+                    $failedNames = ($failedChecks | ForEach-Object { "$($_.name)=$($_.conclusion)" }) -join ", "
+                    Write-Host "FAILED CHECKS: $repo#$($pr.number) — $failedNames"
+                    $mergeStatus = "❌ Failed checks: $failedNames"
+                    $shouldMerge = $false
+                }
+            }
 
-                    # Step 2: Check mergeability, then merge
-                    $mergeSucceeded = $false
-
-                    # Re-fetch PR to get fresh mergeable state
-                    $freshPr = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
-                    if ($freshPr.mergeable -eq $false) {
-                        Write-Host "CONFLICT: $repo#$($pr.number) has merge conflicts — skipping. Needs manual resolution."
-                        $reviewed += $prKey
-                        continue
-                    }
-
-                    $mergeBody = @{
-                        commit_title = "auto-merge: $($pr.title) [score $score/10]"
-                        merge_method = "squash"
-                    } | ConvertTo-Json -Compress
+            if ($shouldMerge) {
+                # Step 3: Check mergeability
+                $freshPr = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
+                if ($freshPr.mergeable -eq $false) {
+                    Write-Host "CONFLICT: $repo#$($pr.number) — attempting branch update..."
                     try {
-                        Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" `
-                            -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
-                        Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
-                        $mergeSucceeded = $true
+                        Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/update-branch" `
+                            -Method PUT -Headers $headers -ContentType "application/json" `
+                            -Body ('{"expected_head_sha":"' + $pr.head.sha + '"}') | Out-Null
+                        Write-Host "Branch updated for $repo#$($pr.number) — will merge next cycle."
+                        $mergeStatus = "🔄 Branch updated — will merge next cycle"
                     } catch {
-                        $statusCode = $_.Exception.Response.StatusCode
-                        if ($statusCode -eq 409) {
-                            Write-Host "CONFLICT: $repo#$($pr.number) — merge conflict detected. Skipping."
-                        } elseif ($statusCode -eq 405) {
-                            Write-Host "BLOCKED: $repo#$($pr.number) — PR not mergeable (checks pending or draft). Will retry next cycle."
-                        } else {
-                            Write-Host "MERGE FAILED: $repo#$($pr.number) — HTTP $statusCode. $($_.ErrorDetails.Message)"
-                        }
+                        Write-Host "MANUAL REVIEW NEEDED: $repo#$($pr.number) — branch update failed."
+                        $mergeStatus = "🛑 Merge conflict — needs manual resolution"
                     }
+                    $shouldMerge = $false
+                }
+            }
 
-                    if (-not $mergeSucceeded) {
-                        $reviewed += $prKey
-                        continue
-                    }
-
-                    # Notify Discord (only on actual successful merge)
-                    $mergePayload = @{
-                        content = "<@$userId>"
-                        embeds = @(@{
-                            title       = "Auto-Merged: $($pr.title)"
-                            description = "PR #$($pr.number) scored **$score/10** and was auto-merged.`n`n[View PR]($($pr.html_url))"
-                            color       = 3066993
-                            footer      = @{ text = "$repoShort | Auto-Merge" }
-                            timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-                        })
-                    } | ConvertTo-Json -Depth 5 -Compress
-                    Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" `
-                        -Body ([System.Text.Encoding]::UTF8.GetBytes($mergePayload))
+            if ($shouldMerge) {
+                # Step 4: Merge
+                $mergeBody = @{
+                    commit_title = "auto-merge: $($pr.title) [score $score/10]"
+                    merge_method = "squash"
+                } | ConvertTo-Json -Compress
+                try {
+                    Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" `
+                        -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody | Out-Null
+                    Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
+                    $mergeStatus = "✅ Auto-merged"
+                    $color = 3066993  # Teal for merged
 
                     # Log to decision memory
                     $memoryFile = "$HOME\.office-rag-db\decision-memory.json"
@@ -229,8 +228,50 @@ Keep it concise. No fluff.
                     }
                     $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
                 } catch {
-                    Write-Host "Auto-merge failed for $repo#$($pr.number): $($_.Exception.Message)"
+                    $statusCode = $_.Exception.Response.StatusCode
+                    if ($statusCode -eq 409) {
+                        $mergeStatus = "🔄 Merge conflict — will retry next cycle"
+                    } elseif ($statusCode -eq 405) {
+                        $mergeStatus = "⏳ Blocked — checks pending or ruleset"
+                    } else {
+                        $mergeStatus = "❌ Merge failed — HTTP $statusCode"
+                    }
+                    Write-Host "$mergeStatus on $repo#$($pr.number)"
                 }
+            }
+
+            # Build Discord embed description
+            $mergeInfo = ""
+            if ($mergeStatus -ne "") {
+                $mergeInfo = "`n`n**Merge Status:** $mergeStatus"
+            } elseif ($verdict -eq "APPROVE" -and $score -lt 9) {
+                $mergeInfo = "`n`n**Merge Status:** 🟡 Approved but score $score/10 < 9 — needs manual merge"
+            }
+
+            $embedTitle = "$statusEmoji PR Review: $($pr.title)"
+            $embedDesc = "$review$mergeInfo`n`n[View PR]($($pr.html_url))"
+
+            # Truncate if too long for Discord (6000 char limit)
+            if ($embedDesc.Length -gt 4000) {
+                $embedDesc = $embedDesc.Substring(0, 3950) + "`n... (truncated)`n`n[View PR]($($pr.html_url))"
+            }
+
+            $payload = @{
+                content = "<@$userId>"
+                embeds = @(@{
+                    title       = $embedTitle
+                    description = $embedDesc
+                    color       = $color
+                    footer      = @{ text = "$repoShort | PR #$($pr.number) | Score: $score/10 | $verdict" }
+                    timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+                })
+            }
+            $jsonPayload = $payload | ConvertTo-Json -Depth 5 -Compress
+            try {
+                Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" `
+                    -Body ([System.Text.Encoding]::UTF8.GetBytes($jsonPayload)) | Out-Null
+            } catch {
+                Write-Host "Discord notification failed for $repo#$($pr.number): $($_.Exception.Message)"
             }
 
             $reviewed += $prKey
@@ -242,6 +283,5 @@ Keep it concise. No fluff.
 }
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
-
-
+Write-Host "`n=== Review cycle complete ==="
 
