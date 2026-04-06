@@ -88,6 +88,7 @@ Keep it concise. No fluff.
 
             $repoShort = $repo.Split("/")[1]
 
+            # Post Discord notification
             $payload = @{
                 content = "<@$userId>"
                 embeds = @(@{
@@ -98,18 +99,37 @@ Keep it concise. No fluff.
                     timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
                 })
             }
-
             $jsonPayload = $payload | ConvertTo-Json -Depth 5 -Compress
             Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($jsonPayload))
 
-            # Post review as GitHub PR comment
+            # Submit actual GitHub PR review (APPROVE/REQUEST_CHANGES), not just a comment
+            $ghReviewEvent = "COMMENT"
+            if ($review -match "APPROVE" -and $review -notmatch "REQUEST_CHANGES") {
+                $ghReviewEvent = "APPROVE"
+            } elseif ($review -match "REQUEST_CHANGES") {
+                $ghReviewEvent = "REQUEST_CHANGES"
+            }
+
             try {
-                $commentBody = @{
-                    body = "## Auto-Review (Ollama)`n`n$review`n`n---`n*Automated review powered by qwen3:14b + RAG context*"
+                $reviewBody = @{
+                    body  = "## Auto-Review (Ollama)`n`n$review`n`n---`n*Automated review powered by qwen3:14b + RAG context*"
+                    event = $ghReviewEvent
                 } | ConvertTo-Json -Compress
-                Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/issues/$($pr.number)/comments" -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($commentBody))
+                Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" `
+                    -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" `
+                    -Body ([System.Text.Encoding]::UTF8.GetBytes($reviewBody))
+                Write-Host "Submitted $ghReviewEvent review on $repo#$($pr.number)"
             } catch {
-                Write-Host "Failed to post GitHub comment on $repo#$($pr.number): $($_.Exception.Message)"
+                Write-Host "Failed to submit review on $repo#$($pr.number): $($_.Exception.Message)"
+                # Fallback to comment
+                try {
+                    $commentBody = @{
+                        body = "## Auto-Review (Ollama)`n`n$review`n`n---`n*Automated review powered by qwen3:14b + RAG context*"
+                    } | ConvertTo-Json -Compress
+                    Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/issues/$($pr.number)/comments" `
+                        -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" `
+                        -Body ([System.Text.Encoding]::UTF8.GetBytes($commentBody))
+                } catch {}
             }
 
             # Auto-merge if APPROVE and quality >= 9
@@ -123,19 +143,41 @@ Keep it concise. No fluff.
 
             if ($shouldMerge) {
                 try {
+                    # Step 1: Mark draft PR as ready for review
+                    if ($pr.draft -eq $true) {
+                        Write-Host "Marking $repo#$($pr.number) as ready for review..."
+                        $readyBody = @{
+                            query = "mutation { markPullRequestReadyForReview(input: { pullRequestId: `"$($pr.node_id)`" }) { pullRequest { isDraft } } }"
+                        } | ConvertTo-Json -Compress
+                        $readyResult = Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers @{
+                            Authorization = "Bearer $ghToken"
+                        } -ContentType "application/json" -Body $readyBody
+
+                        if ($readyResult.data.markPullRequestReadyForReview.pullRequest.isDraft -eq $true) {
+                            Write-Host "Failed to mark $repo#$($pr.number) as ready — skipping merge."
+                            $reviewed += $prKey
+                            continue
+                        }
+                        Write-Host "Marked $repo#$($pr.number) as ready."
+                        Start-Sleep -Seconds 3
+                    }
+
+                    # Step 2: Merge
                     $mergeBody = @{
                         commit_title = "auto-merge: $($pr.title) [score $score/10]"
                         merge_method = "squash"
                     } | ConvertTo-Json -Compress
                     try {
-                        Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
+                        Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/merge" `
+                            -Method PUT -Headers $headers -ContentType "application/json" -Body $mergeBody
                         Write-Host "AUTO-MERGED: $repo#$($pr.number) — score $score/10"
                     } catch {
                         if ($_.Exception.Response.StatusCode -eq 405 -or $_.Exception.Response.StatusCode -eq 409) {
-                            Write-Host "Merge conflict on $repo#$($pr.number) — attempting branch update..."
+                            Write-Host "Merge blocked on $repo#$($pr.number) — attempting branch update..."
                             try {
                                 Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/update-branch" `
-                                    -Method PUT -Headers $headers -ContentType "application/json" -Body ('{"expected_head_sha":"' + $pr.head.sha + '"}')
+                                    -Method PUT -Headers $headers -ContentType "application/json" `
+                                    -Body ('{"expected_head_sha":"' + $pr.head.sha + '"}')
                                 Write-Host "Branch updated for $repo#$($pr.number) — will retry merge next cycle."
                             } catch {
                                 Write-Host "Branch update failed for $repo#$($pr.number) — needs manual resolution."
@@ -156,7 +198,8 @@ Keep it concise. No fluff.
                             timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
                         })
                     } | ConvertTo-Json -Depth 5 -Compress
-                    Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($mergePayload))
+                    Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" `
+                        -Body ([System.Text.Encoding]::UTF8.GetBytes($mergePayload))
 
                     # Log to decision memory
                     $memoryFile = "$HOME\.office-rag-db\decision-memory.json"
