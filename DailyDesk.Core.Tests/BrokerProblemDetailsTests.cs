@@ -443,7 +443,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated GET server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker GET endpoint failed.");
                     return Results.Problem(
@@ -464,7 +464,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated POST server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker POST endpoint failed.");
                     return Results.Problem(
@@ -485,7 +485,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated DELETE server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker DELETE endpoint failed.");
                     return Results.Problem(
