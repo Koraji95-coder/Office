@@ -68,7 +68,6 @@ app.MapGet("/health", async (OfficeBrokerOrchestrator orchestrator, Cancellation
     {
         logger.LogError(exception, "Office broker health endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Office broker health check failed",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -87,7 +86,6 @@ app.MapGet("/api/health", async (OfficeBrokerOrchestrator orchestrator, Cancella
     {
         logger.LogError(exception, "Detailed health check failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Detailed health check failed",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -104,7 +102,6 @@ app.MapGet("/api/state", async (OfficeBrokerOrchestrator orchestrator, Cancellat
     {
         logger.LogError(exception, "Office broker state endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to build office state",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -122,7 +119,6 @@ app.MapGet("/api/chat/threads", async (OfficeBrokerOrchestrator orchestrator, Ca
     {
         logger.LogError(exception, "Office broker chat threads endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to load chat threads",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -143,15 +139,14 @@ app.MapPost("/api/chat/route", async (ChatRouteRequest request, OfficeBrokerOrch
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { route, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker chat route endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to set chat route",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -172,15 +167,14 @@ app.MapPost("/api/chat/send", async (ChatSendRequest request, OfficeBrokerOrches
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { message, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker chat send endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to send chat message",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -195,15 +189,14 @@ app.MapPost("/api/study/start", async (StudyStartRequest request, OfficeBrokerOr
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { session, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker study start endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to start study session",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -218,15 +211,14 @@ app.MapPost("/api/study/generate-practice", async (StudyStartRequest request, Of
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { practice, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker practice generation endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to generate practice",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -241,19 +233,18 @@ app.MapPost("/api/study/score-practice", async (StudyScorePracticeRequest reques
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { attempt, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker practice scoring endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to score practice",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -268,15 +259,14 @@ app.MapPost("/api/study/generate-defense", async (StudyGenerateDefenseRequest re
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { scenario, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker defense generation endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to generate defense",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -297,19 +287,18 @@ app.MapPost("/api/study/score-defense", async (StudyScoreDefenseRequest request,
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { attempt, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker defense scoring endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to score defense",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -330,19 +319,18 @@ app.MapPost("/api/study/save-reflection", async (StudySaveReflectionRequest requ
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { reflection, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker reflection save endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to save reflection",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -363,19 +351,18 @@ app.MapPost("/api/research/run", async (ResearchRunRequest request, OfficeBroker
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { report, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker research run endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run research",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -390,19 +377,18 @@ app.MapPost("/api/research/save", async (ResearchSaveRequest request, OfficeBrok
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { filePath, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker research save endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to save research",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -427,19 +413,18 @@ app.MapPost("/api/watchlists/run", async (WatchlistRunRequest request, OfficeBro
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { report, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker watchlist run endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run watchlist",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -456,7 +441,6 @@ app.MapGet("/api/inbox", async (OfficeBrokerOrchestrator orchestrator, Cancellat
     {
         logger.LogError(exception, "Office broker inbox endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to load inbox",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -483,19 +467,18 @@ app.MapPost("/api/inbox/resolve", async (InboxResolveRequest request, OfficeBrok
         var inbox = await orchestrator.GetInboxAsync(ct);
         return Results.Ok(new { suggestion, inbox });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker inbox resolve endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to resolve inbox suggestion",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -514,19 +497,18 @@ app.MapPost("/api/inbox/queue", async (InboxQueueRequest request, OfficeBrokerOr
         var inbox = await orchestrator.GetInboxAsync(ct);
         return Results.Ok(new { suggestion, inbox });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker inbox queue endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to queue inbox suggestion",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -541,19 +523,18 @@ app.MapPost("/api/library/import", async (LibraryImportRequest request, OfficeBr
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { result, state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker library import endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to import library files",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -570,19 +551,18 @@ app.MapPost("/api/history/reset", async (OfficeHistoryResetRequest request, Offi
         );
         return Results.Ok(new { state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker history reset endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to reset Office local history",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -596,19 +576,18 @@ app.MapPost("/api/workspace/reset", async (OfficeBrokerOrchestrator orchestrator
         var state = await orchestrator.ResetWorkspaceAsync(ct);
         return Results.Ok(new { state });
     }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "Invalid request." });
     }
-    catch (InvalidOperationException exception)
+    catch (InvalidOperationException)
     {
-        return Results.BadRequest(new { error = exception.Message });
+        return Results.BadRequest(new { error = "The operation could not be completed." });
     }
     catch (Exception exception)
     {
         logger.LogError(exception, "Office broker workspace reset endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to reset Office workspace",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -635,7 +614,6 @@ app.MapPost("/api/ml/analytics", async (HttpContext httpContext, OfficeBrokerOrc
     {
         logger.LogError(exception, "Office broker ML analytics endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run ML analytics",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -662,7 +640,6 @@ app.MapPost("/api/ml/forecast", async (HttpContext httpContext, OfficeBrokerOrch
     {
         logger.LogError(exception, "Office broker ML forecast endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run ML forecast",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -690,7 +667,6 @@ app.MapPost("/api/ml/embeddings", async (HttpContext httpContext, MLEmbeddingsRe
     {
         logger.LogError(exception, "Office broker ML embeddings endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run ML embeddings",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -717,7 +693,6 @@ app.MapPost("/api/ml/pipeline", async (HttpContext httpContext, OfficeBrokerOrch
     {
         logger.LogError(exception, "Office broker full ML pipeline endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to run full ML pipeline",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -744,7 +719,6 @@ app.MapPost("/api/ml/export-artifacts", async (HttpContext httpContext, OfficeBr
     {
         logger.LogError(exception, "Office broker ML artifact export endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to export ML artifacts",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -772,7 +746,6 @@ app.MapPost("/api/ml/index-knowledge", async (HttpContext httpContext, OfficeBro
     {
         logger.LogError(exception, "Knowledge indexing endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to index knowledge documents",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -790,7 +763,6 @@ app.MapGet("/api/knowledge/index-status", async (OfficeBrokerOrchestrator orches
     {
         logger.LogError(exception, "Knowledge index status endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Failed to get index status",
             statusCode: StatusCodes.Status500InternalServerError
         );
@@ -816,7 +788,6 @@ app.MapPost("/api/knowledge/search", async (KnowledgeSearchRequest request, Offi
     {
         logger.LogError(exception, "Knowledge search endpoint failed.");
         return Results.Problem(
-            detail: exception.Message,
             title: "Knowledge search failed",
             statusCode: StatusCodes.Status500InternalServerError
         );
