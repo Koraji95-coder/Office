@@ -4,7 +4,6 @@ $ghToken = $env:GITHUB_TOKEN
 $headers = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3+json" }
 $reviewedFile = "$HOME\.office-rag-db\reviewed-prs.json"
 
-# Load already-reviewed PRs
 if (Test-Path $reviewedFile) {
     $reviewed = Get-Content $reviewedFile | ConvertFrom-Json
 } else {
@@ -18,32 +17,27 @@ foreach ($repo in $repos) {
         $prs = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls?state=open&per_page=10" -Headers $headers
 
         foreach ($pr in $prs) {
-            # Skip if not from Copilot
             if ($pr.user.login -ne "copilot-swe-agent[bot]" -and $pr.user.login -ne "Copilot") { continue }
 
-            # Skip if already reviewed
             $prKey = "$repo#$($pr.number)@$($pr.updated_at)"
             if ($reviewed -contains $prKey) { continue }
 
-            # Get the diff
             $diffHeaders = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3.diff" }
             $diff = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $diffHeaders
 
-            # Truncate diff if huge
             if ($diff.Length -gt 6000) {
                 $diff = $diff.Substring(0, 6000) + "`n... (truncated)"
             }
 
-            # RAG: find related code for context
             $ragContext = ""
             try {
-                $ragContext = python "C:\Users\koraj\OneDrive\Documents\GitHub\Office\scripts\rag\query.py" $pr.title 2>$null | Out-String
+                $ragOutput = python "C:\Users\koraj\OneDrive\Documents\GitHub\Office\scripts\rag\query.py" $pr.title 2>$null
+                $ragContext = $ragOutput | Out-String
                 if ($ragContext.Length -gt 2000) {
                     $ragContext = $ragContext.Substring(0, 2000)
                 }
             } catch {}
 
-            # Ask Ollama to review
             $reviewPrompt = @"
 You are a senior code reviewer. Review this pull request and provide a brief assessment.
 
@@ -74,15 +68,13 @@ Keep it concise. No fluff.
             $response = Invoke-RestMethod -Uri "http://localhost:11434/api/chat" -Method POST -ContentType "application/json" -Body $chatBody
             $review = $response.message.content
 
-            # Color based on verdict
-            $color = 8421504  # gray default
-            if ($review -match "APPROVE") { $color = 5793266 }       # green
-            if ($review -match "REQUEST_CHANGES") { $color = 16744256 }  # orange
-            if ($review -match "NEEDS_DISCUSSION") { $color = 16776960 }  # yellow
+            $color = 8421504
+            if ($review -match "APPROVE") { $color = 5793266 }
+            if ($review -match "REQUEST_CHANGES") { $color = 16744256 }
+            if ($review -match "NEEDS_DISCUSSION") { $color = 16776960 }
 
             $repoShort = $repo.Split("/")[1]
 
-            # Post to Discord
             $payload = @{
                 content = "<@$userId>"
                 embeds = @(@{
@@ -97,10 +89,17 @@ Keep it concise. No fluff.
             $jsonPayload = $payload | ConvertTo-Json -Depth 5 -Compress
             Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($jsonPayload))
 
-            # Mark as reviewed
-            $reviewed += $prKey
+            # Post review as GitHub PR comment
+            try {
+                $commentBody = @{
+                    body = "## Auto-Review (Ollama)`n`n$review`n`n---`n*Automated review powered by qwen3:14b + RAG context*"
+                } | ConvertTo-Json -Compress
+                Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/issues/$($pr.number)/comments" -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($commentBody))
+            } catch {
+                Write-Host "Failed to post GitHub comment on $repo#$($pr.number): $($_.Exception.Message)"
+            }
 
-            # Small delay between reviews so Ollama doesn't choke
+            $reviewed += $prKey
             Start-Sleep -Seconds 5
         }
     } catch {
@@ -108,5 +107,4 @@ Keep it concise. No fluff.
     }
 }
 
-# Save reviewed list
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
