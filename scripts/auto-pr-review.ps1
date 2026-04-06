@@ -42,6 +42,23 @@ foreach ($repo in $repos) {
 
             # ========== GATE 2: Still a draft ==========
             if ($pr.draft -eq $true) {
+                # Check if Copilot is actually done (has code, created > 10 min ago)
+                $createdAt = [DateTime]::Parse($pr.created_at).ToUniversalTime()
+                $age = (Get-Date).ToUniversalTime() - $createdAt
+                if ($pr.additions -gt 0 -and $age.TotalMinutes -gt 10) {
+                    Write-Host "PROMOTE: $repoShort#$($pr.number) - draft with code, $([int]$age.TotalMinutes)m old, marking ready..."
+                    try {
+                        $prDetail = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
+                        $nodeId = $prDetail.node_id
+                        $gqlHeaders = @{ Authorization = "Bearer $ghToken"; "Content-Type" = "application/json" }
+                        $gqlBody = @{ query = "mutation { markPullRequestReadyForReview(input: {pullRequestId: `"$nodeId`"}) { pullRequest { number } } }" } | ConvertTo-Json -Compress
+                        Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers $gqlHeaders -Body $gqlBody | Out-Null
+                        Write-Host "  -> Marked ready, will review next cycle"
+                    } catch {
+                        Write-Host "  -> Failed to mark ready, skipping"
+                    }
+                    continue
+                }
                 Write-Host "SKIP: $repoShort#$($pr.number) - draft (Copilot still working)"
                 continue
             }
@@ -247,6 +264,7 @@ Keep it concise. No fluff.
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
 
 
