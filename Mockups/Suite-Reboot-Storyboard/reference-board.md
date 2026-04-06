@@ -49,6 +49,77 @@ Density and tone
 - Calm enough to teach
 - Warm-metal accents only where action matters
 
+### Session view components
+
+The Active Session view (daily-desk:session) exposes two focused panels that drive the scoring and prioritization loop: Rubric and Review queue.
+
+### Rubric
+
+The Rubric panel renders the defense scoring breakdown for the current session topic. It is a rows-style panel occupying a span-4 column alongside the Review queue and Career proof panels.
+
+Purpose: Score a typed oral defense answer across multiple dimensions so the operator knows exactly where thinking is weak before the next study move.
+
+Scoring dimensions:
+- Correctness — Whether the core answer is technically accurate
+- Tradeoffs — Whether the answer compares options, constraints, or failure modes
+- Validation — Whether the answer describes how the claim would be tested or verified
+
+Each dimension carries a score out of 5 and a short annotation (e.g. "strong fundamentals", "needs comparison language", "more test thinking needed"). The annotation is the actionable signal, not the number alone.
+
+Scoring logic:
+- Scores are generated locally after each defense run
+- Weak scores (2 or below) flag the dimension as a recurrence candidate
+- The dimension annotations feed directly into the Review queue prioritization
+- A complete session requires all three dimensions to be evaluated and saved to training history
+
+What to show:
+- All three dimensions with score and annotation in every session
+- Weak scores in a visually distinct state so they stand out on re-read
+- A clear path from rubric annotation to the next review item
+
+What to reject:
+- Hiding rubric output behind a toggle or secondary state
+- Aggregating all dimensions into a single composite score that loses specificity
+- Showing rubric results without a visible connection to the Review queue
+
+### Review queue
+
+The Review queue panel shows the next recommended review items for the session. It is a list-style panel occupying a span-4 column in the Active Session view.
+
+Purpose: Surface the most important follow-up actions after practice and defense scoring so the operator's next study move is always explicit rather than implied.
+
+Prioritization logic:
+- Items are generated from weak-topic recurrence — topics that score low in defense or appear repeatedly across practice attempts
+- Rubric dimension annotations (especially Tradeoffs and Validation) are the primary signals that promote a topic into the queue
+- The queue is ordered by urgency: same-session follow-ups appear first, then deferred items from prior sessions
+- Promoting a reflection note into a study note is always surfaced as a low-cost queue item after a completed session
+
+Queue item format:
+- Each item is an actionable instruction, not a passive label (e.g. "Revisit relay timing after lunch", not "Relay timing")
+- Items reference the topic, the expected action, and optionally a time anchor or context tie-in
+
+What to show:
+- The queue immediately after a defense is scored, never hidden
+- At least one item that connects a rubric annotation to a concrete follow-up
+- A "promote to study note" item whenever a reflection is saved
+
+What to reject:
+- A queue that grows unbounded — cap visible items at five and rotate stale entries out
+- Generic items with no tie to the session topic or rubric output
+- Splitting the queue across the session timeline and a separate review surface
+
+### How Rubric and Review queue work together
+
+The two panels form a closed feedback loop inside the Active Session view:
+
+1. Practice scores weaknesses
+2. Rubric scores the defense answer across Correctness, Tradeoffs, and Validation
+3. Dimension annotations from the Rubric populate the Review queue with specific next-run items
+4. The Review queue drives the next session plan (topic selection, priority order, time anchors)
+5. Completed sessions write the loop outcome to training history so future sessions inherit the recurrence signal
+
+Neither panel should appear in isolation. If the Rubric is present, the Review queue must be adjacent. If the Review queue is populated, at least one item must trace back to a Rubric annotation or a saved reflection.
+
 ## Runtime Control
 
 Official references
