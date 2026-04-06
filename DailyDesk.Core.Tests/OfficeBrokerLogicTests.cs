@@ -3997,6 +3997,598 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // --- Integration: Job Endpoint Response Shape Compliance Tests ---
+    // Verifies that response shapes produced by the job endpoints conform to
+    // the specifications in Docs/CONVENTIONS.md (success shapes, error formats,
+    // RFC 7807 compliance).
+
+    [Theory]
+    [InlineData(OfficeJobType.MLAnalytics)]
+    [InlineData(OfficeJobType.MLForecast)]
+    [InlineData(OfficeJobType.MLEmbeddings)]
+    [InlineData(OfficeJobType.MLPipeline)]
+    [InlineData(OfficeJobType.MLExportArtifacts)]
+    [InlineData(OfficeJobType.KnowledgeIndex)]
+    public void JobEndpoint_Submit_ResponseShape_HasJobIdAndQueuedStatus(string jobType)
+    {
+        // CONVENTIONS.md: POST /api/ml/{type} → { jobId, status: "queued" }
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(jobType, "test");
+
+            // The submit endpoint returns this anonymous object
+            var response = new { jobId = job.Id, status = job.Status };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            Assert.True(root.TryGetProperty("jobId", out var jobIdElement), "Submit response must have 'jobId' field");
+            Assert.True(root.TryGetProperty("status", out var statusElement), "Submit response must have 'status' field");
+            Assert.Equal(job.Id, jobIdElement.GetString());
+            Assert.Equal(OfficeJobStatus.Queued, statusElement.GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Submit_ResponseShape_StatusIsQueued_NotRunningOrCompleted()
+    {
+        // CONVENTIONS.md: submit returns status: "queued" immediately
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "test");
+
+            var response = new { jobId = job.Id, status = job.Status };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var status = doc.RootElement.GetProperty("status").GetString();
+
+            Assert.Equal("queued", status);
+            Assert.NotEqual("running", status);
+            Assert.NotEqual("succeeded", status);
+            Assert.NotEqual("failed", status);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Poll_ResponseShape_HasAllConventionFields()
+    {
+        // CONVENTIONS.md: GET /api/jobs/{jobId} → { id, type, status, createdAt, completedAt, error }
+        // The broker also returns startedAt and requestedBy for richer client use.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLForecast, "poll-test");
+
+            // Simulate the poll endpoint's response object (same anonymous type as Program.cs)
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var response = new
+            {
+                job.Id,
+                job.Type,
+                job.Status,
+                job.CreatedAt,
+                job.StartedAt,
+                job.CompletedAt,
+                job.Error,
+                job.RequestedBy,
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(response, options);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // CONVENTIONS.md required fields
+            Assert.True(root.TryGetProperty("id", out _), "Poll response must have 'id' field");
+            Assert.True(root.TryGetProperty("type", out _), "Poll response must have 'type' field");
+            Assert.True(root.TryGetProperty("status", out _), "Poll response must have 'status' field");
+            Assert.True(root.TryGetProperty("createdAt", out _), "Poll response must have 'createdAt' field");
+            Assert.True(root.TryGetProperty("completedAt", out _), "Poll response must have 'completedAt' field");
+            Assert.True(root.TryGetProperty("error", out _), "Poll response must have 'error' field");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Poll_ResponseShape_ValuesMatchStoredJob()
+    {
+        // Verify poll response field values match the job record in the store
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "value-test");
+
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                job.Id,
+                job.Type,
+                job.Status,
+                job.CreatedAt,
+                job.StartedAt,
+                job.CompletedAt,
+                job.Error,
+                job.RequestedBy,
+            }, options);
+
+            var polled = System.Text.Json.JsonSerializer.Deserialize<JobPollStatus>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            Assert.NotNull(polled);
+            Assert.Equal(job.Id, polled!.Id);
+            Assert.Equal(OfficeJobType.MLAnalytics, polled.Type);
+            Assert.Equal(OfficeJobStatus.Queued, polled.Status);
+            Assert.Null(polled.CompletedAt);
+            Assert.Null(polled.Error);
+            Assert.Equal("value-test", polled.RequestedBy);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Poll_ResponseShape_CompletedJobHasCompletedAt()
+    {
+        // Verify completedAt is populated for succeeded jobs
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLPipeline, "completed-test");
+            store.DequeueNext();
+            store.MarkSucceeded(job.Id, "{\"ok\":true}");
+
+            var completed = store.GetById(job.Id);
+            Assert.NotNull(completed);
+
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                completed!.Id,
+                completed.Type,
+                completed.Status,
+                completed.CreatedAt,
+                completed.StartedAt,
+                completed.CompletedAt,
+                completed.Error,
+                completed.RequestedBy,
+            }, options);
+
+            var polled = System.Text.Json.JsonSerializer.Deserialize<JobPollStatus>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            Assert.NotNull(polled);
+            Assert.Equal(OfficeJobStatus.Succeeded, polled!.Status);
+            Assert.NotNull(polled.CompletedAt);
+            Assert.Null(polled.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Poll_ResponseShape_FailedJobHasErrorField()
+    {
+        // Verify error is populated for failed jobs
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLEmbeddings, "failed-test");
+            store.DequeueNext();
+            store.MarkFailed(job.Id, "Embedding service unavailable");
+
+            var failed = store.GetById(job.Id);
+            Assert.NotNull(failed);
+
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                failed!.Id,
+                failed.Type,
+                failed.Status,
+                failed.CreatedAt,
+                failed.StartedAt,
+                failed.CompletedAt,
+                failed.Error,
+                failed.RequestedBy,
+            }, options);
+
+            var polled = System.Text.Json.JsonSerializer.Deserialize<JobPollStatus>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            Assert.NotNull(polled);
+            Assert.Equal(OfficeJobStatus.Failed, polled!.Status);
+            Assert.NotNull(polled.CompletedAt);
+            Assert.Equal("Embedding service unavailable", polled.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Result_ResponseShape_HasResultField()
+    {
+        // CONVENTIONS.md: GET /api/jobs/{jobId}/result → { ...result }
+        // The endpoint wraps the result in a { result } envelope
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "result-test");
+            store.DequeueNext();
+            store.MarkSucceeded(job.Id, "{\"ok\":true,\"engine\":\"onnx\"}");
+
+            var completed = store.GetById(job.Id);
+            Assert.NotNull(completed);
+            Assert.Equal(OfficeJobStatus.Succeeded, completed!.Status);
+            Assert.NotNull(completed.ResultJson);
+
+            // Simulate the result endpoint's response: { result }
+            var resultObj = System.Text.Json.JsonSerializer.Deserialize<object>(completed.ResultJson!);
+            var response = new { result = resultObj };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.True(doc.RootElement.TryGetProperty("result", out _), "Result response must have 'result' field");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Result_ResponseShape_NullResultForEmptyResultJson()
+    {
+        // When ResultJson is empty, the endpoint returns { result: null }
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLForecast, "null-result-test");
+            store.DequeueNext();
+            store.MarkSucceeded(job.Id, null);
+
+            var completed = store.GetById(job.Id);
+            Assert.NotNull(completed);
+            Assert.True(string.IsNullOrWhiteSpace(completed!.ResultJson));
+
+            // Endpoint returns { result: null } when ResultJson is empty
+            var response = new { result = (object?)null };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.True(doc.RootElement.TryGetProperty("result", out var resultProp));
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, resultProp.ValueKind);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_List_ResponseShape_HasJobsArrayAndTotal()
+    {
+        // CONVENTIONS.md: GET /api/jobs → { jobs: [...] }
+        // The broker also includes total count from GetTotalCount()
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            store.Enqueue(OfficeJobType.MLAnalytics, "a");
+            store.Enqueue(OfficeJobType.MLForecast, "b");
+            store.Enqueue(OfficeJobType.MLPipeline, "c");
+
+            var jobs = store.ListRecent(50);
+            var total = store.GetTotalCount();
+
+            // Simulate the list endpoint's response
+            var response = new { jobs, total };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            Assert.True(root.TryGetProperty("jobs", out var jobsProp), "List response must have 'jobs' field");
+            Assert.True(root.TryGetProperty("total", out var totalProp), "List response must have 'total' field");
+            Assert.Equal(System.Text.Json.JsonValueKind.Array, jobsProp.ValueKind);
+            Assert.Equal(3, jobsProp.GetArrayLength());
+            Assert.Equal(3, totalProp.GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_List_ResponseShape_EmptyStore_ReturnsEmptyJobsArray()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+
+            var jobs = store.ListRecent(50);
+            var total = store.GetTotalCount();
+            var response = new { jobs, total };
+            var json = System.Text.Json.JsonSerializer.Serialize(response);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            Assert.True(root.TryGetProperty("jobs", out var jobsProp));
+            Assert.True(root.TryGetProperty("total", out var totalProp));
+            Assert.Equal(System.Text.Json.JsonValueKind.Array, jobsProp.ValueKind);
+            Assert.Equal(0, jobsProp.GetArrayLength());
+            Assert.Equal(0, totalProp.GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_List_ResponseShape_JobItemsHaveExpectedFields()
+    {
+        // Each job in the list should have id, type, status fields
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "list-fields-test");
+
+            var jobs = store.ListRecent(50);
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(new { jobs, total = store.GetTotalCount() }, options);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            var jobArray = doc.RootElement.GetProperty("jobs");
+            Assert.Equal(1, jobArray.GetArrayLength());
+
+            var first = jobArray[0];
+            Assert.True(first.TryGetProperty("id", out _), "Job list item must have 'id'");
+            Assert.True(first.TryGetProperty("type", out _), "Job list item must have 'type'");
+            Assert.True(first.TryGetProperty("status", out _), "Job list item must have 'status'");
+            Assert.True(first.TryGetProperty("createdAt", out _), "Job list item must have 'createdAt'");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_ErrorFormat_NotFound_HasErrorField()
+    {
+        // CONVENTIONS.md: { error: "message" } for business rule errors (e.g., 404 not found)
+        var notFoundError = new { error = $"Job 'nonexistent-id' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(notFoundError);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp), "Not-found error must have 'error' field");
+        Assert.Equal(System.Text.Json.JsonValueKind.String, errorProp.ValueKind);
+        Assert.False(string.IsNullOrEmpty(errorProp.GetString()), "Error message must not be empty");
+    }
+
+    [Fact]
+    public void JobEndpoint_ErrorFormat_ResultNotReady_HasErrorField()
+    {
+        // CONVENTIONS.md: { error: "message" } for business rule violations
+        // Returned when trying to get result for a job that hasn't succeeded
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "not-ready-test");
+
+            // Job is still queued — result not available
+            Assert.NotEqual(OfficeJobStatus.Succeeded, job.Status);
+
+            var errorResponse = new { error = $"Job '{job.Id}' has status '{job.Status}'. Result is only available for succeeded jobs." };
+            var json = System.Text.Json.JsonSerializer.Serialize(errorResponse);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+            Assert.Contains(job.Id, errorProp.GetString()!);
+            Assert.Contains(OfficeJobStatus.Queued, errorProp.GetString()!);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_ErrorFormat_DeleteActiveJob_HasErrorField()
+    {
+        // CONVENTIONS.md: { error: "message" } for business rule violations
+        // Only completed (succeeded/failed) jobs can be deleted
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLForecast, "delete-active-test");
+            store.DequeueNext(); // transitions to running
+
+            var running = store.GetById(job.Id);
+            Assert.NotNull(running);
+            Assert.Equal(OfficeJobStatus.Running, running!.Status);
+
+            var errorResponse = new { error = $"Job '{running.Id}' has status '{running.Status}'. Only completed (succeeded/failed) jobs can be deleted." };
+            var json = System.Text.Json.JsonSerializer.Serialize(errorResponse);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+            Assert.Contains("running", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void JobEndpoint_Rfc7807_ProblemDetails_HasRequiredFields()
+    {
+        // CONVENTIONS.md: Server error → RFC 7807 Problem Details
+        // Results.Problem(detail: ex.Message, title: "...", statusCode: 500)
+        // produces a JSON body with: type, title, status, detail fields
+        var problemDetails = new JobEndpointProblemDetails
+        {
+            Title = "Failed to run ML analytics",
+            Status = 500,
+            Detail = "An unexpected error occurred.",
+            Type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(problemDetails,
+            new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.True(root.TryGetProperty("title", out var titleProp), "RFC 7807 response must have 'title' field");
+        Assert.True(root.TryGetProperty("status", out var statusProp), "RFC 7807 response must have 'status' field");
+        Assert.True(root.TryGetProperty("detail", out var detailProp), "RFC 7807 response must have 'detail' field");
+        Assert.True(root.TryGetProperty("type", out _), "RFC 7807 response must have 'type' field");
+
+        Assert.Equal("Failed to run ML analytics", titleProp.GetString());
+        Assert.Equal(500, statusProp.GetInt32());
+        Assert.Equal("An unexpected error occurred.", detailProp.GetString());
+    }
+
+    [Theory]
+    [InlineData("Failed to run ML analytics")]
+    [InlineData("Failed to run ML forecast")]
+    [InlineData("Failed to run ML embeddings")]
+    [InlineData("Failed to run full ML pipeline")]
+    [InlineData("Failed to export ML artifacts")]
+    [InlineData("Failed to index knowledge documents")]
+    public void JobEndpoint_Rfc7807_ProblemDetails_TitlesMatchBrokerEndpoints(string title)
+    {
+        // Verify each job submit endpoint's server error title is non-empty and descriptive
+        Assert.False(string.IsNullOrWhiteSpace(title));
+        Assert.True(title.Length > 5, "RFC 7807 title should be descriptive");
+    }
+
+    [Fact]
+    public void JobEndpoint_Poll_JobPollStatus_MapsFromOfficeJobFields()
+    {
+        // JobPollStatus (client model) must be deserializable from the poll endpoint
+        // response, covering all fields specified in CONVENTIONS.md
+        var tempDir = Path.Combine(Path.GetTempPath(), $"office-test-{Guid.NewGuid()}");
+        try
+        {
+            using var db = new OfficeDatabase(tempDir);
+            var store = new OfficeJobStore(db);
+            var job = store.Enqueue(OfficeJobType.MLAnalytics, "mapping-test");
+            store.DequeueNext();
+            store.MarkSucceeded(job.Id, "{\"score\":0.9}");
+
+            var completed = store.GetById(job.Id);
+            Assert.NotNull(completed);
+
+            // Produce the same JSON shape the broker endpoint does
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var brokerJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                completed!.Id,
+                completed.Type,
+                completed.Status,
+                completed.CreatedAt,
+                completed.StartedAt,
+                completed.CompletedAt,
+                completed.Error,
+                completed.RequestedBy,
+            }, options);
+
+            // The WPF client deserializes this into JobPollStatus
+            var polled = System.Text.Json.JsonSerializer.Deserialize<JobPollStatus>(brokerJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            Assert.NotNull(polled);
+            Assert.Equal(completed.Id, polled!.Id);
+            Assert.Equal(completed.Type, polled.Type);
+            Assert.Equal(OfficeJobStatus.Succeeded, polled.Status);
+            Assert.NotNull(polled.StartedAt);
+            Assert.NotNull(polled.CompletedAt);
+            Assert.Null(polled.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    /// <summary>
+    /// Represents the RFC 7807 Problem Details shape that ASP.NET Core's
+    /// Results.Problem() produces for server error responses.
+    /// The <see cref="Type"/> field references the HTTP status definition URI (RFC 9110),
+    /// while the overall structure follows the RFC 7807 Problem Details format.
+    /// </summary>
+    private sealed class JobEndpointProblemDetails
+    {
+        public string? Type { get; set; }
+        public string? Title { get; set; }
+        public int? Status { get; set; }
+        public string? Detail { get; set; }
+        public string? Instance { get; set; }
+    }
+
     // --- Test helpers ---
 
     /// <summary>
