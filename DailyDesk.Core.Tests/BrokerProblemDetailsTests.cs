@@ -417,6 +417,210 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
     }
 
     // -----------------------------------------------------------------------
+    // Group 5 (continued): Remaining endpoints with Results.Problem() catch blocks.
+    // Uses AssertStaticDetailOrNon500Async which verifies the static detail string on
+    // 500 responses and accepts any other status code as a valid non-error outcome.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task BrokerChatThreadsEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.GetAsync("/api/chat/threads");
+        await AssertStaticDetailOrNon500Async(response, "GET /api/chat/threads");
+    }
+
+    [Fact]
+    public async Task BrokerChatRouteEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/chat/route",
+            new { Route = "ollama" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/chat/route");
+    }
+
+    [Fact]
+    public async Task BrokerStudyGeneratePracticeEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/study/generate-practice", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/study/generate-practice");
+    }
+
+    [Fact]
+    public async Task BrokerStudyScorePracticeEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/study/score-practice", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/study/score-practice");
+    }
+
+    [Fact]
+    public async Task BrokerStudyGenerateDefenseEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/study/generate-defense", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/study/generate-defense");
+    }
+
+    [Fact]
+    public async Task BrokerStudyScoreDefenseEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/study/score-defense",
+            new { Answer = "test answer for compliance verification" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/study/score-defense");
+    }
+
+    [Fact]
+    public async Task BrokerStudySaveReflectionEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/study/save-reflection",
+            new { Reflection = "test reflection for compliance verification" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/study/save-reflection");
+    }
+
+    [Fact]
+    public async Task BrokerResearchRunEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/research/run",
+            new { Query = "test research query" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/research/run");
+    }
+
+    [Fact]
+    public async Task BrokerResearchSaveEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/research/save", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/research/save");
+    }
+
+    [Fact]
+    public async Task BrokerWatchlistsRunEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/watchlists/run",
+            new { WatchlistId = "nonexistent-watchlist-id" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/watchlists/run");
+    }
+
+    [Fact]
+    public async Task BrokerInboxEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.GetAsync("/api/inbox");
+        await AssertStaticDetailOrNon500Async(response, "GET /api/inbox");
+    }
+
+    [Fact]
+    public async Task BrokerInboxResolveEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/inbox/resolve",
+            new { SuggestionId = "nonexistent-suggestion-id", Status = "accepted" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/inbox/resolve");
+    }
+
+    [Fact]
+    public async Task BrokerInboxQueueEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/inbox/queue",
+            new { SuggestionId = "nonexistent-suggestion-id" }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/inbox/queue");
+    }
+
+    [Fact]
+    public async Task BrokerLibraryImportEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/library/import", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/library/import");
+    }
+
+    [Fact]
+    public async Task BrokerHistoryResetEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/history/reset", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/history/reset");
+    }
+
+    [Fact]
+    public async Task BrokerWorkspaceResetEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/workspace/reset", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/workspace/reset");
+    }
+
+    [Fact]
+    public async Task BrokerMlAnalyticsSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/ml/analytics?sync=true", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/analytics?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerMlForecastSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/ml/forecast?sync=true", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/forecast?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerMlEmbeddingsSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/ml/embeddings?sync=true", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/embeddings?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerMlPipelineSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync("/api/ml/pipeline?sync=true", new { });
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/pipeline?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerMlExportArtifactsSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/ml/export-artifacts?sync=true",
+            new { }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/export-artifacts?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerMlIndexKnowledgeSyncEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/ml/index-knowledge?sync=true",
+            new { }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/ml/index-knowledge?sync=true");
+    }
+
+    [Fact]
+    public async Task BrokerKnowledgeIndexStatusEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.GetAsync("/api/knowledge/index-status");
+        await AssertStaticDetailOrNon500Async(response, "GET /api/knowledge/index-status");
+    }
+
+    [Fact]
+    public async Task BrokerKnowledgeSearchEndpoint_WhenServerError_DetailIsStaticString()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/knowledge/search",
+            new { Query = "test search query", TopK = 5 }
+        );
+        await AssertStaticDetailOrNon500Async(response, "POST /api/knowledge/search");
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -443,7 +647,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated GET server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker GET endpoint failed.");
                     return Results.Problem(
@@ -464,7 +668,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated POST server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker POST endpoint failed.");
                     return Results.Problem(
@@ -485,7 +689,7 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated DELETE server error");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     endpointLogger.LogError(ex, "Office broker DELETE endpoint failed.");
                     return Results.Problem(
@@ -605,6 +809,48 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 $"{endpointLabel}: Expected 200/201/204 or 500 (RFC 7807), got {(int)response.StatusCode}"
             );
         }
+    }
+    /// <summary>
+    /// Asserts that a broker endpoint 500 response uses the static generic detail string
+    /// required by Docs/stack-trace-exposure-remediation.md, or accepts any non-500 response
+    /// as valid (200 success, 400 user-facing business error, 404 not-found, etc.).
+    /// Use this helper for endpoints where business logic may return 400 before reaching
+    /// async external services, e.g. when required state (session, suggestion) does not exist.
+    /// </summary>
+    private static async Task AssertStaticDetailOrNon500Async(
+        HttpResponseMessage response,
+        string endpointLabel
+    )
+    {
+        if (response.StatusCode != HttpStatusCode.InternalServerError)
+        {
+            // Non-500 responses are acceptable: 200 means success; 400/404 means a
+            // user-authored error message was returned per CONVENTIONS.md Pattern 2/3.
+            return;
+        }
+
+        // 500 response must use the static generic detail per stack-trace-exposure-remediation.md.
+        Assert.Equal(
+            "application/problem+json",
+            response.Content.Headers.ContentType?.MediaType
+        );
+
+        var body = await response.Content.ReadAsStringAsync();
+        var json = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(body);
+        Assert.NotNull(json);
+        Assert.True(
+            json.ContainsKey("detail"),
+            $"{endpointLabel}: 500 RFC 7807 response must contain 'detail'"
+        );
+        var detail = json["detail"]!.GetValue<string>();
+        Assert.True(
+            detail == ExpectedStaticDetail,
+            $"{endpointLabel}: 'detail' must be the static generic string per stack-trace-exposure-remediation.md, but was: {detail}"
+        );
+
+        // Raw exception text and stack trace must never appear in the response body.
+        Assert.DoesNotContain("at System.", body);
+        Assert.DoesNotContain("Exception:", body);
     }
 }
 
