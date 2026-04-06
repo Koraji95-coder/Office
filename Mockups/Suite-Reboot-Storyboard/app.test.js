@@ -776,3 +776,185 @@ describe('Developer Portal dock (developer-portal:hero)', () => {
         expect(pill.classList.contains('status-pill-info')).toBe(true);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Workshop launcher grouping — job categories and release state
+// Verifies the Workshop launcher in developer-portal:hero correctly groups
+// launchers by job and surfaces release state on staged tools.
+// ---------------------------------------------------------------------------
+describe('Workshop launcher grouping — job categories (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('Workshop launcher panel body describes grouping by job and release state', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        const copy = panelHero.querySelector('.panel-copy');
+        expect(copy.textContent).toContain('groups launchers by job and release state');
+    });
+
+    it('Workshop launcher copy states that dense diagnostics are deferred to Runtime Control', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const copy = panelHero.querySelector('.panel-copy');
+        expect(copy.textContent).toContain('defers dense diagnostics back to Runtime Control');
+    });
+
+    it('renders "Open Runtime Control" as the first Workshop launcher action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[0]).toBe('Open Runtime Control');
+    });
+
+    it('renders "Launch Architecture Map" as the second Workshop launcher action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[1]).toBe('Launch Architecture Map');
+    });
+
+    it('renders "Review future products" as the third Workshop launcher action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[2]).toBe('Review future products');
+    });
+
+    it('renders all five job-grouped launcher panels', () => {
+        const panelEyebrows = Array.from(document.querySelectorAll('.panel .panel-kicker')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(panelEyebrows).toContain('Publishing and evidence');
+        expect(panelEyebrows).toContain('Automation lab');
+        expect(panelEyebrows).toContain('Agent lab');
+        expect(panelEyebrows).toContain('Architecture and code');
+        expect(panelEyebrows).toContain('Developer docs');
+    });
+
+    it('Publishing and evidence panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Publishing and evidence');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+
+    it('Publishing and evidence panel lists three items', () => {
+        const panel = getPanelByEyebrow('Publishing and evidence');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('Automation lab panel lists four tools', () => {
+        const panel = getPanelByEyebrow('Automation lab');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(4);
+    });
+
+    it('Automation lab panel includes "AutoDraft Studio"', () => {
+        const panel = getPanelByEyebrow('Automation lab');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('AutoDraft Studio');
+    });
+
+    it('Agent lab panel uses a row-list layout to surface release state', () => {
+        const panel = getPanelByEyebrow('Agent lab');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('Agent lab panel renders exactly two rows', () => {
+        const panel = getPanelByEyebrow('Agent lab');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(2);
+    });
+
+    it('Agent lab panel shows "Agents route" row with "Developer beta" release state', () => {
+        const panel = getPanelByEyebrow('Agent lab');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Agents route');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Developer beta');
+    });
+
+    it('Agent lab panel shows "Pairing state" row with "Experimental" release state', () => {
+        const panel = getPanelByEyebrow('Agent lab');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Pairing state');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Experimental');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Workshop launcher — dense diagnostics deferral
+// Verifies that dense diagnostics are explicitly deferred back to Runtime
+// Control and that the inspector design rules reinforce this separation.
+// ---------------------------------------------------------------------------
+describe('Workshop launcher — dense diagnostics deferral (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('Workshop launcher copy references deferral of diagnostics to Runtime Control and Command Center', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const copy = panelHero.querySelector('.panel-copy');
+        expect(copy.textContent).toContain('Runtime Control and Command Center');
+    });
+
+    it('inspector "Keep" section lists "Release state and future-product callouts"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Release state and future-product callouts');
+    });
+
+    it('inspector "Keep" section lists "Runtime requirements as support metadata"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Runtime requirements as support metadata');
+    });
+
+    it('inspector "Reject" section lists "Command Center density on the front page"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Command Center density on the front page');
+    });
+
+    it('inspector "Reject" section lists "Customer-visible lab language"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Customer-visible lab language');
+    });
+});
