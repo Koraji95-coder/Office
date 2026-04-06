@@ -395,6 +395,69 @@ describe('Command palette interaction', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Architecture and code panel — Refactor pressure notes (developer-portal:hero)
+// ---------------------------------------------------------------------------
+describe('Architecture and code panel (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('renders an "Architecture and code" panel on the developer portal stage', () => {
+        expect(getPanelByEyebrow('Architecture and code')).not.toBeNull();
+    });
+
+    it('shows the panel title "Maps, graphs, and refactor surfaces"', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe('Maps, graphs, and refactor surfaces');
+    });
+
+    it('shows the copy describing portal access intent', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent.trim()).toBe(
+            'The portal gives quick access, but tool pages stay focused.'
+        );
+    });
+
+    it('renders exactly three items', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('includes "Architecture Map" as an item', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Map');
+    });
+
+    it('includes "Architecture Graph" as an item', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Graph');
+    });
+
+    it('includes "Refactor pressure notes" as an item', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Refactor pressure notes');
+    });
+
+    it('uses a key-list layout (not a row-list)', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Hash routing / navigation
 // ---------------------------------------------------------------------------
 describe('Hash routing', () => {
