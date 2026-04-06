@@ -159,7 +159,7 @@ These areas are well-understood technical debt that does not need immediate acti
 
 | | |
 |---|---|
-| **Files** | `DailyDesk/Services/TrainingStore.cs`, `DailyDesk/Services/OperatorMemoryStore.cs`, `DailyDesk/Services/OfficeSessionStateStore.cs` |
+| **Files** | `DailyDesk/Services/TrainingStore.cs`, `DailyDesk/Services/OperatorMemoryStore.cs`, `DailyDesk.Core/Services/OfficeSessionStateStore.cs` |
 | **Phase introduced** | Phase 2 (LiteDB migration) |
 
 **What it does now:**
