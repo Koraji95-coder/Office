@@ -297,6 +297,119 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
     }
 
     // -----------------------------------------------------------------------
+    // Group 5: Static-detail compliance tests (stack-trace-exposure-remediation.md).
+    // These tests verify that 500 responses from broker-style endpoints use the
+    // required static generic string in the 'detail' field and do NOT leak
+    // dynamic exception messages or stack traces to the caller.
+    // Uses the same in-process minimal server as Group 1 (BuildErrorTriggerAppAsync).
+    // -----------------------------------------------------------------------
+
+    private const string ExpectedStaticDetail =
+        "An unexpected error occurred. See server logs for details.";
+
+    [Fact]
+    public async Task GetEndpoint_500Detail_IsStaticGenericString()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.GetAsync("/trigger-get-error");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>();
+        Assert.NotNull(detail);
+        Assert.Equal(ExpectedStaticDetail, detail);
+    }
+
+    [Fact]
+    public async Task PostEndpoint_500Detail_IsStaticGenericString()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/trigger-post-error", new { });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>();
+        Assert.NotNull(detail);
+        Assert.Equal(ExpectedStaticDetail, detail);
+    }
+
+    [Fact]
+    public async Task DeleteEndpoint_500Detail_IsStaticGenericString()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.DeleteAsync("/trigger-delete-error");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>();
+        Assert.NotNull(detail);
+        Assert.Equal(ExpectedStaticDetail, detail);
+    }
+
+    [Fact]
+    public async Task GetEndpoint_500Detail_DoesNotContainExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.GetAsync("/trigger-get-error");
+
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>() ?? string.Empty;
+        Assert.DoesNotContain(
+            "Simulated GET server error",
+            detail,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+
+    [Fact]
+    public async Task PostEndpoint_500Detail_DoesNotContainExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/trigger-post-error", new { });
+
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>() ?? string.Empty;
+        Assert.DoesNotContain(
+            "Simulated POST server error",
+            detail,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+
+    [Fact]
+    public async Task DeleteEndpoint_500Detail_DoesNotContainExceptionMessage()
+    {
+        await using var app = await BuildErrorTriggerAppAsync();
+        using var client = app.GetTestClient();
+
+        var response = await client.DeleteAsync("/trigger-delete-error");
+
+        var json = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotNull(json);
+        var detail = json["detail"]?.GetValue<string>() ?? string.Empty;
+        Assert.DoesNotContain(
+            "Simulated DELETE server error",
+            detail,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -323,10 +436,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated GET server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: ExpectedStaticDetail,
                         title: "GET endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -343,10 +456,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated POST server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: ExpectedStaticDetail,
                         title: "POST endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
@@ -363,10 +476,10 @@ public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicati
                 {
                     throw new InvalidOperationException("Simulated DELETE server error");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return Results.Problem(
-                        detail: ex.Message,
+                        detail: ExpectedStaticDetail,
                         title: "DELETE endpoint failed",
                         statusCode: StatusCodes.Status500InternalServerError
                     );
