@@ -131,9 +131,9 @@ After confirming no active callers use `?sync=true`:
 | | |
 |---|---|
 | **File** | `Docs/PHASES-ROADMAP.md` |
-| **Issue** | Phases 4 and 5 are marked 🔲 Not Started but are implemented |
+| **Phase introduced** | N/A — documentation-only |
 
-**What it says:**
+**What it does now:**
 The roadmap status table shows Phase 4 (Observability & Health Monitoring) and Phase 5 (Semantic Search) as not started. Phase 6 through Phase 9 are marked complete.
 
 **Why it is under pressure:**
@@ -159,7 +159,7 @@ These areas are well-understood technical debt that does not need immediate acti
 
 | | |
 |---|---|
-| **Files** | `DailyDesk/Services/TrainingStore.cs`, `DailyDesk/Services/OperatorMemoryStore.cs`, `DailyDesk/Services/OfficeSessionStateStore.cs` |
+| **Files** | `DailyDesk/Services/TrainingStore.cs`, `DailyDesk/Services/OperatorMemoryStore.cs`, `DailyDesk.Core/Services/OfficeSessionStateStore.cs` |
 | **Phase introduced** | Phase 2 (LiteDB migration) |
 
 **What it does now:**
@@ -184,8 +184,9 @@ Once LiteDB has been proven stable across multiple workstations:
 
 | | |
 |---|---|
-| **Files** | `DailyDesk/ViewModels/MainViewModel.cs`, `MainViewModel.Operator.cs`, `MainViewModel.Workflow.cs`, `MainViewModel.OfficeChat.cs`, `MainViewModel.OfficeDesks.cs`, `MainViewModel.Guide.cs` |
+| **Files** | `DailyDesk/ViewModels/MainViewModel.cs`, `DailyDesk/ViewModels/MainViewModel.Operator.cs`, `DailyDesk/ViewModels/MainViewModel.Workflow.cs`, `DailyDesk/ViewModels/MainViewModel.OfficeChat.cs`, `DailyDesk/ViewModels/MainViewModel.OfficeDesks.cs`, `DailyDesk/ViewModels/MainViewModel.Guide.cs` |
 | **Combined size** | ~4,200+ lines |
+| **Phase introduced** | Phase 1 (grew through Phase 9) |
 
 **What it does now:**
 The WPF ViewModel is split across 6 partial class files. Each file handles a domain (operator memory, workflow automation, chat routing, desk selection, training guide).
@@ -212,6 +213,7 @@ Keep `MainViewModel` as a shell that navigates between desk ViewModels. This mir
 | | |
 |---|---|
 | **File** | `DailyDesk.Broker/Validators.cs` |
+| **Phase introduced** | Phase 1 (grew through Phase 9) |
 | **Convention** | `CONVENTIONS.md` specifies `DailyDesk.Broker/Validators/` folder |
 
 **What it does now:**
