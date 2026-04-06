@@ -1119,3 +1119,6 @@ internal sealed record CreateWorkflowStepRequest(
 
 // Phase 9: Knowledge search request record
 internal sealed record KnowledgeSearchRequest(string Query, int TopK = 5);
+
+// Expose the entry-point type so WebApplicationFactory<Program> can reference it from tests.
+public partial class Program { }
