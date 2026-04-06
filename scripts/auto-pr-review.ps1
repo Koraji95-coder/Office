@@ -38,6 +38,12 @@ foreach ($repo in $repos) {
                 continue
             }
 
+            # Skip draft PRs with [WIP] in title (Copilot actively editing)
+            if ($pr.draft -eq $true -and $pr.title -match "\[WIP\]") {
+                Write-Host "SKIPPING: $repo#$($pr.number) - WIP draft, Copilot still editing"
+                continue
+            }
+
             $prKey = "$repo#$($pr.number)@$($pr.updated_at)"
             if ($reviewed -contains $prKey) { continue }
 
@@ -126,8 +132,8 @@ Keep it concise. No fluff.
                 try {
                     $readyBody = @{ query = "mutation { markPullRequestReadyForReview(input: { pullRequestId: `"$($pr.node_id)`" }) { pullRequest { isDraft } } }" } | ConvertTo-Json -Compress
                     Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers @{ Authorization = "Bearer $ghToken" } -ContentType "application/json" -Body $readyBody | Out-Null
-                    Write-Host "Marked $repo#$($pr.number) as ready."
-                    Start-Sleep -Seconds 3
+                    Write-Host "Marked $repo#$($pr.number) as ready. Waiting for checks to initialize..."
+                    Start-Sleep -Seconds 15
                 } catch {
                     Write-Host "Failed to mark ready - skipping merge."
                     $mergeStatus = "Could not mark ready for review"
@@ -136,9 +142,17 @@ Keep it concise. No fluff.
             }
 
             if ($shouldMerge) {
+                # Re-fetch PR to get latest head SHA (Copilot may have pushed new commits)
+                try {
+                    $latestPr = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
+                    $headSha = $latestPr.head.sha
+                } catch {
+                    $headSha = $pr.head.sha
+                }
+
                 # Check CI checks
                 try {
-                    $checkRuns = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/commits/$($pr.head.sha)/check-runs" -Headers $headers
+                    $checkRuns = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/commits/$headSha/check-runs" -Headers $headers
                     $pendingChecks = @($checkRuns.check_runs | Where-Object { $_.status -ne "completed" })
                     $failedChecks = @($checkRuns.check_runs | Where-Object { $_.status -eq "completed" -and $_.conclusion -notin @("success", "neutral", "skipped") })
 
@@ -154,8 +168,8 @@ Keep it concise. No fluff.
                         $shouldMerge = $false
                     }
                 } catch {
-                    Write-Host "Could not fetch check runs for $repo#$($pr.number) - skipping merge."
-                    $mergeStatus = "Could not verify CI checks"
+                    Write-Host "WAITING: $repo#$($pr.number) - checks not ready yet, will retry next cycle."
+                    $mergeStatus = "Checks not ready yet - will retry next cycle"
                     $shouldMerge = $false
                 }
             }
@@ -269,3 +283,6 @@ Keep it concise. No fluff.
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
+
+
