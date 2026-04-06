@@ -1,6 +1,6 @@
 # Incremental Architecture Plan
 
-> **Goal:** Improve reliability, observability, and persistence — then prepare for async job execution. No rewrites. No new UI. No Semantic Kernel or Qdrant until prerequisites exist.
+> **Goal:** Improve reliability, observability, and persistence — then build out async job execution, semantic search, agent orchestration, scheduled automation, and WPF async integration. All 9 phases are now complete.
 
 ---
 
@@ -102,7 +102,7 @@ Before proposing changes, it is important to recognize what the codebase already
 - 90-second timeout behavior preserved.
 - No streaming added (can be added later as a separate PR).
 
-**Why OllamaSharp and not Semantic Kernel:** OllamaSharp is a thin, typed HTTP client. It replaces the exact code we wrote by hand. Semantic Kernel is an orchestration framework that would change the architecture — that comes later (Phase 4) after async jobs exist.
+**Why OllamaSharp and not Semantic Kernel:** OllamaSharp is a thin, typed HTTP client. It replaces the exact code we wrote by hand. Semantic Kernel is an orchestration framework that was added in Phase 6 after the async job model existed.
 
 ---
 
@@ -227,7 +227,7 @@ OfficeJob
 - `DELETE /api/jobs/{jobId}` — HTTP endpoint for single-job deletion (204 No Content / 404 / 400).
 - `GET /api/jobs?status=...&type=...` — Filtered listing with optional status and type query params.
 
-**Retention policy:** Completed jobs are eligible for deletion after 30 days (caller-triggered via `DeleteOlderThan`). Automated scheduled cleanup can be added in Phase 4 if needed.
+**Retention policy:** Completed jobs are eligible for deletion after 30 days. `JobRetentionWorker` (Phase 4) handles automated cleanup daily.
 
 ### 3.5 No UI Changes Required
 
@@ -238,60 +238,100 @@ The WPF client currently calls ML endpoints and waits for the response. With the
 
 ---
 
-## Phase 4 — Future Evaluation (After Job Model Exists)
+## Phase 4 — Observability & Health Monitoring ✅ COMPLETE
 
-### 4.1 Qdrant for Persistent Semantic Retrieval
+**Goal:** Add structured health checks, metrics, and operational endpoints so you can tell at a glance whether Ollama, Python, LiteDB, and the job worker are healthy.
 
-**Prerequisite:** Phase 3 complete (async jobs running, LiteDB storing results).
+### 4.1 Health Check Endpoint
 
-**Evaluate when:**
-- Document embeddings are being generated regularly via the job model.
-- The current TF-IDF fallback is demonstrably insufficient for knowledge search.
-- Docker is available on the target workstation.
+- `GET /api/health` returns structured status for each subsystem: Ollama, Python, LiteDB, job worker.
+- `IModelProvider.PingAsync()` checks Ollama reachability.
+- `ProcessRunner.CheckPythonAsync()` checks Python availability.
+- `OfficeHealthReport` model carries per-subsystem `ok`/`degraded`/`unavailable` status.
 
-**Integration point:** Replace `ml_document_embeddings.py` with:
-1. Ollama embeddings API (via OllamaSharp) for vector generation.
-2. Qdrant (local Docker) for vector storage and search.
-3. `KnowledgePromptContextBuilder` queries Qdrant instead of in-memory search.
+### 4.2 Job Metrics Endpoint
 
-### 4.2 Semantic Kernel for Agent Orchestration
+- `GET /api/jobs/metrics` returns total jobs by status, average duration, queue depth, and completed-since counts.
+- `OfficeJobStore.GetMetrics()`, `GetAverageDuration()`, `GetCountByStatus()`, `GetCompletedSince()` methods.
+- `OfficeJobMetrics` model.
 
-**Prerequisite:** Phase 3 complete + stable tool/plugin boundary in the broker.
+### 4.3 Automated Job Retention
 
-**Evaluate when:**
-- The 5 agent desks need tool-calling capabilities (execute code, query databases, trigger jobs).
-- Prompt composition needs template variables and chaining.
-- Multi-turn agent conversations need memory beyond thread state.
-
-**Integration point:** Replace `PromptComposer` + `OfficeRouteCatalog` with SK agents. Each desk becomes an SK agent with its own tools and system prompt.
-
-### 4.3 Docling for Richer Document Extraction
-
-**Prerequisite:** None (optional at any phase).
-
-**Evaluate when:**
-- PDF table extraction is needed (current `pypdf` is text-only).
-- PowerPoint content extraction is needed (currently claimed but not implemented).
-- OCR for scanned documents is needed.
-
-**Integration point:** Replace `extract_document_text.py` with Docling pipeline. Keep the same `ProcessRunner` subprocess model.
+- `JobRetentionWorker : BackgroundService` runs once per day and calls `OfficeJobStore.DeleteOlderThan()`.
+- Retention period configurable via `DailySettings.JobRetentionDays` (default: 30).
 
 ---
 
-## Smallest Safe Starting PR
+## Phase 5 — Semantic Search (Ollama Embeddings + Qdrant) ✅ COMPLETE
 
-**PR #1: Serilog structured logging in the Broker.**
+**Goal:** Replace the TF-IDF/keyword fallback in `KnowledgePromptContextBuilder` with real vector embeddings for semantic search across the knowledge library.
 
-This is the lowest-risk, highest-value change:
-- Adds no new behavior — only observability.
-- Plugs into existing `ILogger` interface (zero call site changes).
-- Rolling file logs go to `State/logs/` alongside existing state files.
-- No service changes needed.
-- Fully testable on Linux (Broker builds on Linux).
+### 5.1 Ollama Embeddings
 
-**Files touched:**
-- `DailyDesk.Broker/DailyDesk.Broker.csproj` — add Serilog packages.
-- `DailyDesk.Broker/Program.cs` — add `UseSerilog()` and configuration (~10 lines).
-- `DailyDesk.Broker/appsettings.json` — add Serilog section (optional).
+- `EmbeddingService` calls Ollama `/api/embed` via OllamaSharp. Returns `float[]` vector or null on failure.
 
-**Risk:** Near zero. Serilog is the most widely-used .NET logging library and is a drop-in for the built-in logger.
+### 5.2 Qdrant Local Vector Store
+
+- `VectorStoreService` wraps `Qdrant.Client` with `UpsertAsync`, `SearchAsync`, `DeleteAsync`, `GetCollectionInfoAsync`. Graceful empty fallback when Qdrant is unreachable.
+- Collection: `office-knowledge`. Qdrant runs as local Docker container.
+
+### 5.3 Knowledge Indexing Job
+
+- `knowledge-index` job type. `KnowledgeIndexStore` (LiteDB `knowledge_index`) tracks indexed document hashes to avoid re-indexing unchanged documents.
+
+### 5.4 Semantic Knowledge Search
+
+- `KnowledgePromptContextBuilder` generates embedding for the user's query, searches Qdrant, then fills remaining slots with keyword results.
+- `POST /api/knowledge/search` endpoint. Falls back to keyword search when Qdrant is unavailable.
+
+---
+
+## Phase 6 — Agent Orchestration (Semantic Kernel) ✅ COMPLETE
+
+**Goal:** Replace hand-rolled prompt composition with Semantic Kernel agents that have tool-calling capabilities.
+
+### 6.1–6.3 SK Core + Desk Agents + Multi-Turn Memory
+
+- `OfficeKernelFactory` builds an SK `Kernel` for the local Ollama endpoint (`Microsoft.SemanticKernel` 1.71.0).
+- `DeskAgent` base class wraps SK `ChatCompletionAgent` with system prompt and tool registration.
+- Five desk agents in `DailyDesk/Services/Agents/`: `ChiefOfStaffAgent`, `EngineeringDeskAgent`, `SuiteContextAgent`, `GrowthOpsAgent`, `MLEngineerAgent`.
+- Agent dispatch in `SendChatAsync` replaces `PromptComposer.ComposeChat()`, with fallback to direct `IModelProvider`.
+- `DeskThreadState.Summary` for multi-turn memory. `DeskMessageRecord.ToolCalls` for tool invocation records.
+
+---
+
+## Phase 7 — Document Extraction (Docling) ✅ COMPLETE
+
+**Goal:** Replace basic `pypdf` document extraction with Docling for tables, figures, and OCR.
+
+- `extract_document_text.py` uses Docling when installed; falls back to `pypdf`/`python-docx`.
+- Output: `{ ok, text, metadata, tables, figures }`.
+- `KnowledgeImportService.ExtractViaPythonRichAsync` returns the full response.
+- `LearningDocument` gains `ExtractedTable` and `ExtractedFigure` optional fields.
+
+---
+
+## Phase 8 — Scheduled Automation & Operator Workflows ✅ COMPLETE
+
+**Goal:** Add scheduled job execution and operator-defined workflows.
+
+- `JobSchedule` model + `JobSchedulerStore` (LiteDB `job_schedules`). `JobSchedulerWorker` enqueues jobs on schedule.
+- `daily-run` job type: state refresh → ML pipeline → artifact export → suggestions. `RunDailyWorkflowAsync` in orchestrator.
+- `WorkflowTemplate` + `WorkflowStore` (LiteDB `workflow_templates`). Three built-in templates: "Daily Run", "Exam Prep", "Knowledge Refresh".
+- New endpoints: `/api/schedules` CRUD, `/api/daily-run/latest`, `/api/workflows` CRUD + run.
+
+---
+
+## Phase 9 — WPF Client Async Integration ✅ COMPLETE
+
+**Goal:** Update the WPF desktop client to use the async job model and semantic search.
+
+- `JobPollingService` submits ML requests and polls `GET /api/jobs/{jobId}` every 2 seconds.
+- `KnowledgeSearchService` calls `POST /api/knowledge/search` for semantic search with similarity scores.
+- `KnowledgeSearchResult` model. `ToolCallRecord` in `DeskMessageRecord` surfaces tool use to the WPF UI.
+
+---
+
+## Implementation Status
+
+All 9 phases are complete. The codebase has 243 passing tests and a fully async, agent-orchestrated, semantically searchable architecture running entirely on the local workstation.

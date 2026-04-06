@@ -76,13 +76,44 @@ Enable the pipeline in `dailydesk.settings.json`:
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/api/ml/analytics` | Run Scikit-learn learning analytics |
-| POST | `/api/ml/forecast` | Run TensorFlow progress forecast |
-| POST | `/api/ml/embeddings` | Run PyTorch document embeddings (optional query) |
+| POST | `/api/ml/analytics` | Run Scikit-learn learning analytics (async; `?sync=true` for blocking) |
+| POST | `/api/ml/forecast` | Run TensorFlow progress forecast (async; `?sync=true` for blocking) |
+| POST | `/api/ml/embeddings` | Run PyTorch document embeddings (async; `?sync=true` for blocking) |
 | POST | `/api/ml/pipeline` | Run full ML pipeline (all three engines + artifact export) |
 | POST | `/api/ml/export-artifacts` | Export Suite integration artifacts |
 | POST | `/api/ml/index-knowledge` | Index knowledge documents into vector store (async, `?sync=true` for blocking) |
 | GET | `/api/knowledge/index-status` | Get knowledge index status (indexed vs. total) |
+| POST | `/api/knowledge/search` | Semantic search across the knowledge library |
+
+### Job Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/jobs` | List recent jobs (supports `?status=...&type=...` filters) |
+| GET | `/api/jobs/{jobId}` | Get job status and metadata |
+| GET | `/api/jobs/{jobId}/result` | Get job result (succeeded jobs only) |
+| GET | `/api/jobs/metrics` | Job throughput, failure rates, and queue depth |
+| DELETE | `/api/jobs/{jobId}` | Delete a completed job |
+
+### Schedule & Workflow Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/schedules` | List all job schedules |
+| POST | `/api/schedules` | Create a recurring schedule |
+| PUT | `/api/schedules/{id}` | Update a schedule (enable/disable, interval) |
+| DELETE | `/api/schedules/{id}` | Remove a schedule |
+| GET | `/api/daily-run/latest` | Most recent daily run summary |
+| GET | `/api/workflows` | List workflow templates |
+| POST | `/api/workflows` | Create a workflow template |
+| POST | `/api/workflows/{id}/run` | Execute a workflow template |
+| DELETE | `/api/workflows/{id}` | Remove a workflow template |
+
+### Health Endpoint
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/health` | Subsystem health: Ollama, Python, LiteDB, job worker |
 
 ## Qdrant Setup (Phase 5 — Semantic Search)
 
