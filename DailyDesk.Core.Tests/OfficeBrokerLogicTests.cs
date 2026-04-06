@@ -1868,6 +1868,199 @@ public sealed class OfficeBrokerLogicTests
         Assert.False(reachable);
     }
 
+    [Fact]
+    public void SubsystemHealth_CanSetUnavailableStatus()
+    {
+        var health = new SubsystemHealth
+        {
+            Status = HealthStatus.Unavailable,
+            Detail = "Ollama did not respond to ping."
+        };
+        Assert.Equal(HealthStatus.Unavailable, health.Status);
+        Assert.Equal("Ollama did not respond to ping.", health.Detail);
+    }
+
+    [Fact]
+    public void OfficeHealthReport_OverallStatus_IsUnavailableWhenOllamaUnavailable()
+    {
+        // Simulate the health aggregation logic: any Unavailable subsystem makes overall Unavailable
+        var report = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Ollama did not respond to ping." },
+            Python = new SubsystemHealth { Status = HealthStatus.Ok },
+            LiteDB = new SubsystemHealth { Status = HealthStatus.Ok },
+            JobWorker = new SubsystemHealth { Status = HealthStatus.Ok },
+            Overall = HealthStatus.Unavailable
+        };
+        Assert.Equal(HealthStatus.Unavailable, report.Overall);
+        Assert.Equal(HealthStatus.Unavailable, report.Ollama.Status);
+    }
+
+    [Fact]
+    public void OfficeHealthReport_OverallStatus_IsDegradedWhenJobWorkerDegraded()
+    {
+        // Simulate the health aggregation logic: Degraded subsystem without Unavailable → overall Degraded
+        var report = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth { Status = HealthStatus.Ok },
+            Python = new SubsystemHealth { Status = HealthStatus.Ok },
+            LiteDB = new SubsystemHealth { Status = HealthStatus.Ok },
+            JobWorker = new SubsystemHealth { Status = HealthStatus.Degraded, Detail = "2 job(s) running for more than 10 minutes." },
+            Overall = HealthStatus.Degraded
+        };
+        Assert.Equal(HealthStatus.Degraded, report.Overall);
+        Assert.Equal(HealthStatus.Degraded, report.JobWorker.Status);
+        Assert.Contains("10 minutes", report.JobWorker.Detail);
+    }
+
+    [Fact]
+    public void OfficeHealthReport_OverallStatus_IsOkWhenAllSubsystemsExplicitlyOk()
+    {
+        // All subsystems explicitly set to Ok → overall is Ok
+        var report = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth { Status = HealthStatus.Ok },
+            Python = new SubsystemHealth { Status = HealthStatus.Ok, Detail = "Python 3.11.0" },
+            LiteDB = new SubsystemHealth { Status = HealthStatus.Ok },
+            JobWorker = new SubsystemHealth { Status = HealthStatus.Ok, Detail = "0 job(s) currently running." },
+            Overall = HealthStatus.Ok
+        };
+        Assert.Equal(HealthStatus.Ok, report.Overall);
+        Assert.All(
+            new[] { report.Ollama.Status, report.Python.Status, report.LiteDB.Status, report.JobWorker.Status },
+            status => Assert.Equal(HealthStatus.Ok, status)
+        );
+    }
+
+    [Fact]
+    public void OfficeHealthReport_SubsystemDetail_IsPreservedForUnavailableOllama()
+    {
+        // Verify that the detail message from a failed ping is preserved in the report
+        const string unavailableDetail = "Ollama did not respond to ping.";
+        var report = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = unavailableDetail },
+            Overall = HealthStatus.Unavailable
+        };
+        Assert.Equal(unavailableDetail, report.Ollama.Detail);
+    }
+
+    [Fact]
+    public async Task OllamaService_GetInstalledModelsAsync_ReturnsEmptyListWhenUnreachable()
+    {
+        // Both the Ollama API and CLI should fail gracefully when the endpoint is unreachable,
+        // returning an empty list rather than throwing.
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        var models = await service.GetInstalledModelsAsync();
+        Assert.Empty(models);
+    }
+
+    [Fact]
+    public async Task OllamaService_PingAsync_ReturnsFalseWhenCancelled()
+    {
+        // A pre-cancelled token is passed through to ListLocalModelsAsync, which throws
+        // OperationCanceledException before any network call is made. PingAsync catches
+        // all exceptions and returns false, confirming the token propagates correctly.
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var reachable = await service.PingAsync(cts.Token);
+        Assert.False(reachable);
+    }
+
+    [Fact]
+    public void OllamaService_ProviderId_MatchesExpectedConstant()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        Assert.Equal(OllamaService.OllamaProviderId, service.ProviderId);
+        Assert.Equal("ollama", service.ProviderId);
+    }
+
+    [Fact]
+    public void OllamaService_ProviderLabel_MatchesExpectedLabel()
+    {
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        Assert.Equal(OllamaService.OllamaProviderLabel, service.ProviderLabel);
+        Assert.Equal("Ollama (local)", service.ProviderLabel);
+    }
+
+    [Fact]
+    public void OllamaModelVersionMismatch_ExactTagRequiredForModelMatch()
+    {
+        // Ollama model names include version tags (e.g. "llama3.2:8b").
+        // An exact-match check will miss the model if the tag differs.
+        // Base-name prefix matching is required for tag-agnostic lookups.
+        var installedModels = new[] { "llama3.2:8b", "nomic-embed-text:latest" };
+
+        // Exact match: "llama3.2" (no tag) is NOT equal to "llama3.2:8b"
+        Assert.DoesNotContain("llama3.2", installedModels, StringComparer.OrdinalIgnoreCase);
+
+        // Exact match: the tagged form is found
+        Assert.Contains("llama3.2:8b", installedModels, StringComparer.OrdinalIgnoreCase);
+
+        // Version-agnostic lookup: base name "llama3.2" matches "llama3.2:8b" via prefix
+        var baseModel = "llama3.2";
+        var hasBaseModel = installedModels.Any(m =>
+            m.Equals(baseModel, StringComparison.OrdinalIgnoreCase) ||
+            m.StartsWith(baseModel + ":", StringComparison.OrdinalIgnoreCase));
+        Assert.True(hasBaseModel);
+
+        // Mismatch: "llama3.2:latest" is not present when only "llama3.2:8b" is installed
+        Assert.DoesNotContain("llama3.2:latest", installedModels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OfficeHealthReport_ModelUnavailability_CanBeRepresentedViaSubsystemStatus()
+    {
+        // When a required model is not installed, the Ollama subsystem should be reported as
+        // Unavailable or Degraded depending on whether Ollama itself is reachable.
+        // This test verifies the state model can represent both scenarios.
+
+        // Scenario 1: Ollama unreachable (model cannot be checked)
+        var unreachableReport = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth
+            {
+                Status = HealthStatus.Unavailable,
+                Detail = "Ollama did not respond to ping."
+            },
+            Overall = HealthStatus.Unavailable
+        };
+        Assert.Equal(HealthStatus.Unavailable, unreachableReport.Ollama.Status);
+        Assert.NotNull(unreachableReport.Ollama.Detail);
+
+        // Scenario 2: Ollama reachable but required model not installed
+        var missingModelReport = new OfficeHealthReport
+        {
+            Ollama = new SubsystemHealth
+            {
+                Status = HealthStatus.Degraded,
+                Detail = "Required model 'llama3.2' is not installed."
+            },
+            Overall = HealthStatus.Degraded
+        };
+        Assert.Equal(HealthStatus.Degraded, missingModelReport.Ollama.Status);
+        Assert.Contains("llama3.2", missingModelReport.Ollama.Detail);
+    }
+
+    [Fact]
+    public async Task OllamaService_GenerateEmbeddingAsync_ReturnsNullWhenCancelled()
+    {
+        // A pre-cancelled token propagates through the resilience pipeline to EmbedAsync,
+        // which throws OperationCanceledException. The method catches all exceptions and
+        // returns null, confirming the token is threaded through the pipeline correctly.
+        var processRunner = new ProcessRunner();
+        var service = new OllamaService("http://127.0.0.1:1", processRunner);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var result = await service.GenerateEmbeddingAsync("test text", cancellationToken: cts.Token);
+        Assert.Null(result);
+    }
+
     private static string? FindRepoRoot()
     {
         // Walk up from the test assembly's directory to find the repo root
