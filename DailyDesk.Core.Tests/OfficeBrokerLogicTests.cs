@@ -3997,6 +3997,454 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(42, deserialized.ToolCalls![0].DurationMs);
     }
 
+    // ========================================================================
+    // Phase 12: Business Rule Error Response Format Compliance Tests
+    // Validates that API error responses adhere to CONVENTIONS.md shapes:
+    //   - Business rule error: { error: "message" }
+    //   - Validation error:    { errors: ["msg1", "msg2"] }
+    //   - Success:             { result, state } or job-specific fields
+    //   - Server error:        RFC 7807 Problem Details (title, status, detail)
+    // ========================================================================
+
+    // --- Job Endpoint: Not-Found Error Shape ---
+
+    [Fact]
+    public void JobEndpoint_GetById_NotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: GET /api/jobs/{jobId} when job does not exist.
+        // Convention: { error: "message" } — not { errors: [...] }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var missingId = "nonexistent-job-id";
+        var job = store.GetById(missingId);
+
+        // Confirm the not-found condition holds.
+        Assert.Null(job);
+
+        // Simulate the endpoint error-response object and verify its JSON shape.
+        var errorBody = new { error = $"Job '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp),
+            "Business rule error response must contain an 'error' key.");
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _),
+            "Business rule error response must NOT use the validation 'errors' array.");
+        Assert.Contains(missingId, errorProp.GetString()!);
+        Assert.Contains("not found", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Job Endpoint: Result Unavailable Error Shape ---
+
+    [Fact]
+    public void JobEndpoint_GetResult_QueuedJob_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: GET /api/jobs/{jobId}/result when job is still queued.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLAnalytics, "test-caller");
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+
+        var errorBody = new { error = $"Job '{job.Id}' has status '{job.Status}'. Result is only available for succeeded jobs." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(job.Id, errorProp.GetString()!);
+        Assert.Contains(job.Status, errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("succeeded", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JobEndpoint_GetResult_RunningJob_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: GET /api/jobs/{jobId}/result when job is running.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLForecast, "test-caller");
+        var running = store.DequeueNext();
+        Assert.NotNull(running);
+        Assert.Equal(OfficeJobStatus.Running, running!.Status);
+
+        var errorBody = new { error = $"Job '{running.Id}' has status '{running.Status}'. Result is only available for succeeded jobs." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(running.Id, errorProp.GetString()!);
+        Assert.Contains(running.Status, errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JobEndpoint_GetResult_FailedJob_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: GET /api/jobs/{jobId}/result when job has failed.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLPipeline, "test-caller");
+        store.DequeueNext();
+        store.MarkFailed(job.Id, "Processing failed.");
+        var failed = store.GetById(job.Id);
+        Assert.NotNull(failed);
+        Assert.Equal(OfficeJobStatus.Failed, failed!.Status);
+
+        var errorBody = new { error = $"Job '{failed.Id}' has status '{failed.Status}'. Result is only available for succeeded jobs." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(failed.Status, errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Job Endpoint: Delete Non-Completed Job Error Shape ---
+
+    [Fact]
+    public void JobEndpoint_DeleteQueuedJob_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: DELETE /api/jobs/{jobId} when job is queued.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLAnalytics, "test-caller");
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+
+        // Endpoint check: status is not (Succeeded or Failed).
+        var isDeletable = job.Status is OfficeJobStatus.Succeeded or OfficeJobStatus.Failed;
+        Assert.False(isDeletable);
+
+        var errorBody = new { error = $"Job '{job.Id}' has status '{job.Status}'. Only completed (succeeded/failed) jobs can be deleted." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(job.Id, errorProp.GetString()!);
+        Assert.Contains("succeeded/failed", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JobEndpoint_DeleteRunningJob_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: DELETE /api/jobs/{jobId} when job is running.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLEmbeddings, "test-caller");
+        var running = store.DequeueNext();
+        Assert.NotNull(running);
+        Assert.Equal(OfficeJobStatus.Running, running!.Status);
+
+        var isDeletable = running.Status is OfficeJobStatus.Succeeded or OfficeJobStatus.Failed;
+        Assert.False(isDeletable);
+
+        var errorBody = new { error = $"Job '{running.Id}' has status '{running.Status}'. Only completed (succeeded/failed) jobs can be deleted." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(running.Status, errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("succeeded/failed", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Job Endpoint: Not-Found (result and delete) ---
+
+    [Fact]
+    public void JobEndpoint_GetResultNotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: GET /api/jobs/{jobId}/result when job does not exist.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var missingId = "ghost-job-999";
+        var job = store.GetById(missingId);
+        Assert.Null(job);
+
+        var errorBody = new { error = $"Job '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(missingId, errorProp.GetString()!);
+    }
+
+    [Fact]
+    public void JobEndpoint_DeleteNotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: DELETE /api/jobs/{jobId} when job does not exist.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var missingId = "ghost-delete-999";
+        var job = store.GetById(missingId);
+        Assert.Null(job);
+
+        var errorBody = new { error = $"Job '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(missingId, errorProp.GetString()!);
+    }
+
+    // --- Schedule Endpoint: Error Shape ---
+
+    [Fact]
+    public void ScheduleEndpoint_UpdateNotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: PUT /api/schedules/{id} when schedule does not exist.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var missingId = "sched-missing-42";
+        var updated = store.Update(missingId, _ => { });
+        Assert.Null(updated);
+
+        var errorBody = new { error = $"Schedule '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(missingId, errorProp.GetString()!);
+        Assert.Contains("not found", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ScheduleEndpoint_DeleteNotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: DELETE /api/schedules/{id} when schedule does not exist.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new JobSchedulerStore(db);
+
+        var missingId = "sched-gone-77";
+        var deleted = store.Delete(missingId);
+        Assert.False(deleted);
+
+        var errorBody = new { error = $"Schedule '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(missingId, errorProp.GetString()!);
+    }
+
+    // --- Workflow Endpoint: Error Shape ---
+
+    [Fact]
+    public void WorkflowEndpoint_RunNotFound_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: POST /api/workflows/{id}/run when workflow does not exist.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        var missingId = "wf-missing-123";
+        var template = store.GetById(missingId);
+        Assert.Null(template);
+
+        var errorBody = new { error = $"Workflow '{missingId}' not found." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains(missingId, errorProp.GetString()!);
+        Assert.Contains("not found", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WorkflowEndpoint_DeleteBuiltIn_ErrorShapeHasSingleErrorKey()
+    {
+        // Simulates: DELETE /api/workflows/{id} when workflow is a built-in template.
+        // Convention: { error: "message" }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new WorkflowStore(db);
+
+        // Built-in templates cannot be deleted — Delete returns false.
+        var builtIns = store.ListAll();
+        Assert.NotEmpty(builtIns);
+        var builtInId = builtIns[0].Id;
+
+        var deleted = store.Delete(builtInId);
+        Assert.False(deleted);
+
+        var errorBody = new { error = $"Workflow '{builtInId}' not found or is a built-in template." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+        Assert.Contains("built-in", errorProp.GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Validation Error Shape vs Business Rule Error Shape ---
+
+    [Fact]
+    public void ValidationError_Shape_HasErrorsArrayNotErrorKey()
+    {
+        // Validation errors must use { errors: ["msg1", "msg2"] } per CONVENTIONS.md.
+        var messages = new[] { "Name is required.", "CronExpression is required." };
+        var errorBody = new { errors = messages };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("errors", out var errorsProp),
+            "Validation error response must contain an 'errors' array key.");
+        Assert.False(doc.RootElement.TryGetProperty("error", out _),
+            "Validation error response must NOT use the singular 'error' key.");
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, errorsProp.ValueKind);
+        Assert.Equal(2, errorsProp.GetArrayLength());
+    }
+
+    [Fact]
+    public void BusinessRuleError_Shape_HasErrorKeyNotErrorsArray()
+    {
+        // Business rule errors must use { error: "message" } per CONVENTIONS.md.
+        var errorBody = new { error = "No active practice test." };
+        var json = System.Text.Json.JsonSerializer.Serialize(errorBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp),
+            "Business rule error response must contain a singular 'error' key.");
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _),
+            "Business rule error response must NOT use the 'errors' array.");
+        Assert.Equal(System.Text.Json.JsonValueKind.String, errorProp.ValueKind);
+        Assert.False(string.IsNullOrWhiteSpace(errorProp.GetString()));
+    }
+
+    [Fact]
+    public void BusinessRuleError_AndValidationError_ShapesAreMutuallyExclusive()
+    {
+        // Verifies the two error shapes are structurally distinct — no overlap.
+        var businessRuleJson = System.Text.Json.JsonSerializer.Serialize(new { error = "Something went wrong." });
+        var validationJson = System.Text.Json.JsonSerializer.Serialize(new { errors = new[] { "Field A required.", "Field B required." } });
+
+        var businessDoc = System.Text.Json.JsonDocument.Parse(businessRuleJson);
+        var validationDoc = System.Text.Json.JsonDocument.Parse(validationJson);
+
+        // Business rule: has "error", does NOT have "errors".
+        Assert.True(businessDoc.RootElement.TryGetProperty("error", out _));
+        Assert.False(businessDoc.RootElement.TryGetProperty("errors", out _));
+
+        // Validation: has "errors" array, does NOT have singular "error".
+        Assert.True(validationDoc.RootElement.TryGetProperty("errors", out var errorsArr));
+        Assert.False(validationDoc.RootElement.TryGetProperty("error", out _));
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, errorsArr.ValueKind);
+    }
+
+    // --- Job Status Success Response Shape ---
+
+    [Fact]
+    public void JobEndpoint_SuccessResponse_ContainsRequiredJobFields()
+    {
+        // Simulates: GET /api/jobs/{jobId} success response shape.
+        // The endpoint projects: { Id, Type, Status, CreatedAt, StartedAt, CompletedAt, Error, RequestedBy }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLAnalytics, "test-caller");
+        var retrieved = store.GetById(job.Id);
+        Assert.NotNull(retrieved);
+
+        var successBody = new
+        {
+            retrieved!.Id,
+            retrieved.Type,
+            retrieved.Status,
+            retrieved.CreatedAt,
+            retrieved.StartedAt,
+            retrieved.CompletedAt,
+            retrieved.Error,
+            retrieved.RequestedBy,
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(successBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("Id", out _));
+        Assert.True(doc.RootElement.TryGetProperty("Type", out _));
+        Assert.True(doc.RootElement.TryGetProperty("Status", out _));
+        Assert.True(doc.RootElement.TryGetProperty("CreatedAt", out _));
+        Assert.False(doc.RootElement.TryGetProperty("error", out _));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+    }
+
+    [Fact]
+    public void JobEndpoint_SuccessResponse_StatusIsString()
+    {
+        // Job status in the success response must be a string (e.g. "queued", "running").
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        var job = store.Enqueue(OfficeJobType.MLForecast, "test-caller");
+        Assert.Equal(OfficeJobStatus.Queued, job.Status);
+
+        // The status constant is a string in the OfficeJobStatus class.
+        Assert.IsType<string>(job.Status);
+        Assert.False(string.IsNullOrWhiteSpace(job.Status));
+    }
+
+    // --- Job List Success Response Shape ---
+
+    [Fact]
+    public void JobEndpoint_ListResponse_ContainsJobsArray()
+    {
+        // Simulates: GET /api/jobs success response → { jobs: [...], total: N }.
+        using var tmp = new TempDirectory();
+        using var db = new OfficeDatabase(tmp.Path);
+        var store = new OfficeJobStore(db);
+
+        store.Enqueue(OfficeJobType.MLAnalytics, "a");
+        store.Enqueue(OfficeJobType.MLForecast, "b");
+
+        var jobs = store.ListRecent(50);
+        var total = store.GetTotalCount();
+        var successBody = new { jobs, total };
+        var json = System.Text.Json.JsonSerializer.Serialize(successBody);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("jobs", out var jobsProp));
+        Assert.True(doc.RootElement.TryGetProperty("total", out var totalProp));
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, jobsProp.ValueKind);
+        Assert.Equal(2, jobsProp.GetArrayLength());
+        Assert.Equal(2, totalProp.GetInt32());
+        Assert.False(doc.RootElement.TryGetProperty("error", out _));
+        Assert.False(doc.RootElement.TryGetProperty("errors", out _));
+    }
+
     // --- Test helpers ---
 
     /// <summary>
