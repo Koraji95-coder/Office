@@ -91,7 +91,7 @@ GitHub Actions check-run API returned **403 for all Office PRs** — no workflow
 
 All three touch `DailyDesk.Core.csproj` and `nuget.lock`. They will conflict on merge. **Keep the most recent (#59); close #29 and #43.**
 
-#### Cluster B — AGENT_REPLY_GUIDE Integration Tests (4 PRs)
+#### Cluster B — AGENT_REPLY_GUIDE Integration Tests (5 PRs)
 | PR | Title |
 |----|-------|
 | #37 | Add integration tests for agent reply guide compliance |
