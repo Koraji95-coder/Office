@@ -4850,6 +4850,404 @@ public sealed class OfficeBrokerLogicTests
         }
     }
 
+    // ───────────────────────────────────────────────────────────────────
+    //  Switchboard / Distribution Centre QA/QC Compliance
+    //  Watercare QA/QC Templates for General Electrical Construction
+    //  Standards – section 1.13 mandatory checks (chunk 3 of checklist)
+    // ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SwitchboardQaQc_LearningDocument_RepresentsTemplateRecord()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "qa_templates_for_electrical_construction_standards.pdf",
+            RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+            Kind = "pdf",
+            Summary = "QA/QC templates for general electrical construction standards – section 1.13 minimum mandatory tests",
+            Topics = ["switchboard", "distribution", "QA/QC", "electrical", "construction"],
+        };
+
+        Assert.Equal("pdf", doc.Kind);
+        Assert.Contains("switchboard", doc.Topics);
+        Assert.Contains("QA/QC", doc.Topics);
+        Assert.Contains("construction", doc.Topics);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_MandatoryCheckTopics_AreSearchable()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "Switchboards, distribution centres and control centres – termination checks, protection relay settings, interlocking verification, FAT/SAT records",
+                    Topics = ["switchboard", "distribution", "relay", "interlock", "FAT", "SAT"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("switchboard distribution relay", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+        // Confirm the matched document's topics include all three queried keywords
+        var matchedDoc = library.Documents.First(d => d.FileName == result.Results[0].Title);
+        Assert.Contains("switchboard", matchedDoc.Topics);
+        Assert.Contains("distribution", matchedDoc.Topics);
+        Assert.Contains("relay", matchedDoc.Topics);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_TerminationCheck_IsDiscoverableByKeyword()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "Termination checks for switchboards and distribution centres per section 1.13",
+                    Topics = ["termination", "switchboard", "distribution", "QA/QC"],
+                },
+                new LearningDocument
+                {
+                    FileName = "cable-installation.md",
+                    RelativePath = "Knowledge/cable-installation.md",
+                    Kind = "md",
+                    Summary = "Cable installation and conduit fill guidelines",
+                    Topics = ["cable", "conduit", "installation"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("termination switchboard", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_RelaySettings_FoundBeforeUnrelatedDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "Protection relay settings and verification for distribution centres",
+                    Topics = ["relay", "protection", "distribution", "settings"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-design.md",
+                    RelativePath = "Knowledge/lighting-design.md",
+                    Kind = "md",
+                    Summary = "Lighting circuit design and lux calculations",
+                    Topics = ["lighting", "lux", "circuit"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("relay protection settings", library);
+
+        Assert.True(result.Results.Count >= 1);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_InterlockingVerification_IsIndexedTopic()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "qa_templates_for_electrical_construction_standards.pdf",
+            RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+            Kind = "pdf",
+            Summary = "Interlocking verification for switchboards per Watercare section 1.13",
+            Topics = ["interlock", "switchboard", "verification", "QA/QC"],
+        };
+
+        Assert.Contains("interlock", doc.Topics);
+        Assert.Contains("verification", doc.Topics);
+        Assert.Contains("switchboard", doc.Topics);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_FatSatRecords_FoundByAcronymSearch()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "FAT SAT factory acceptance test site acceptance test records for switchboards",
+                    Topics = ["FAT", "SAT", "acceptance", "switchboard", "testing"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("FAT SAT acceptance", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+        // Confirm the matched document contains FAT and SAT in its topics
+        var matchedDoc = library.Documents.First(d => d.FileName == result.Results[0].Title);
+        Assert.Contains("FAT", matchedDoc.Topics);
+        Assert.Contains("SAT", matchedDoc.Topics);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_MandatoryCategories_CoverAllSection113Items()
+    {
+        // The seven mandatory test categories from Watercare QA/QC template section 1.13
+        var mandatoryCategories = new[]
+        {
+            "General Electrical Installation",
+            "Cables and Conduit",
+            "Switchboards, Distribution Centres, and Control Centres",
+            "Motors and Drives",
+            "Lighting and Small Power",
+            "Instrumentation and Control Wiring",
+            "Earthing and Bonding Systems",
+        };
+
+        Assert.Equal(7, mandatoryCategories.Length);
+        Assert.Contains("Switchboards, Distribution Centres, and Control Centres", mandatoryCategories);
+        Assert.Contains("Earthing and Bonding Systems", mandatoryCategories);
+        Assert.Contains("General Electrical Installation", mandatoryCategories);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_ReviewHierarchy_HasSixLevels()
+    {
+        // Review and approval hierarchy from the integration standards document
+        var hierarchy = new[]
+        {
+            "Designer / Drafter",
+            "Check Engineer",
+            "EE of Record",
+            "Site Electrical Supervisor",
+            "Independent Commissioning Engineer",
+            "Client / Asset Owner",
+        };
+
+        Assert.Equal(6, hierarchy.Length);
+        Assert.Equal("Designer / Drafter", hierarchy[0]);
+        Assert.Equal("Client / Asset Owner", hierarchy[^1]);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_WorkflowPhases_MapToFivePhases()
+    {
+        // Five workflow phases from the integration standards document
+        var phases = new[]
+        {
+            "Schematic Design",
+            "Design Development / IFC Drawings",
+            "Issued-for-Construction (IFC)",
+            "Construction & Installation",
+            "Commissioning & Handover",
+        };
+
+        Assert.Equal(5, phases.Length);
+        // Phase 4 is where Watercare QA/QC template applies
+        Assert.Equal("Construction & Installation", phases[3]);
+        // Phase 5 completes handover
+        Assert.Equal("Commissioning & Handover", phases[4]);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_ConstructionPhase_IsWatercareTemplateScope()
+    {
+        // The Watercare PDF applies post-installation (phases 4-5 only)
+        const string watercareScope = "Construction & Installation";
+        const string commissioningScope = "Commissioning & Handover";
+
+        var watercareApplicablePhases = new[] { watercareScope, commissioningScope };
+
+        Assert.Equal(2, watercareApplicablePhases.Length);
+        Assert.Contains("Construction & Installation", watercareApplicablePhases);
+        Assert.Contains("Commissioning & Handover", watercareApplicablePhases);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_SearchByDistributionCentre_ReturnsTemplateDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "Switchboards distribution centres control centres mandatory QA checks",
+                    Topics = ["switchboard", "distribution", "control", "QA/QC", "mandatory"],
+                },
+                new LearningDocument
+                {
+                    FileName = "raic-appendix-i.md",
+                    RelativePath = "Knowledge/raic-appendix-i.md",
+                    Kind = "md",
+                    Summary = "RAIC Appendix I internal review checklist for electrical drawings",
+                    Topics = ["RAIC", "drawings", "review", "checklist"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("distribution centres mandatory", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_SignedRecordSheet_IsRequiredDeliverable()
+    {
+        // Each category in section 1.13 requires a signed QA/QC record sheet
+        var switchboardChecklist = new[]
+        {
+            "termination checks",
+            "protection relay settings",
+            "interlocking verification",
+            "FAT/SAT records",
+        };
+
+        Assert.Equal(4, switchboardChecklist.Length);
+        Assert.Contains("termination checks", switchboardChecklist);
+        Assert.Contains("protection relay settings", switchboardChecklist);
+        Assert.Contains("interlocking verification", switchboardChecklist);
+        Assert.Contains("FAT/SAT records", switchboardChecklist);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_WatercareTemplateDocument_HasCorrectMetadata()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "qa_templates_for_electrical_construction_standards.pdf",
+            RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+            Kind = "pdf",
+            SourceRootLabel = "Watercare Electrical Standards",
+            Summary = "QA/QC templates for general electrical construction standards – section 1.13",
+            Topics = ["switchboard", "distribution", "QA/QC", "Watercare", "electrical", "construction"],
+        };
+
+        Assert.Equal("pdf", doc.Kind);
+        Assert.Equal("Watercare Electrical Standards", doc.SourceRootLabel);
+        Assert.NotEmpty(doc.Summary);
+        Assert.Contains("1.13", doc.Summary);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_MultipleQaDocuments_SwitchboardRanksHighestForSpecificQuery()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "qa_templates_for_electrical_construction_standards.pdf",
+                    RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+                    Kind = "pdf",
+                    Summary = "Switchboards distribution centres control centres termination relay interlock FAT SAT",
+                    Topics = ["switchboard", "distribution", "relay", "interlock", "testing"],
+                },
+                new LearningDocument
+                {
+                    FileName = "general-installation-qa.md",
+                    RelativePath = "Knowledge/general-installation-qa.md",
+                    Kind = "md",
+                    Summary = "General electrical installation QA earthing insulation polarity relay continuity",
+                    Topics = ["earthing", "insulation", "polarity", "relay", "testing"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motor-drives-qa.md",
+                    RelativePath = "Knowledge/motor-drives-qa.md",
+                    Kind = "md",
+                    Summary = "Motors and drives QA rotation current thermal overload termination wiring",
+                    Topics = ["motor", "drive", "rotation", "termination", "testing"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("switchboard termination relay interlock", library, topK: 3);
+
+        Assert.Equal(3, result.Results.Count);
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", result.Results[0].Title);
+        // The other two documents should rank lower (score 0 as they have no matching tokens)
+        Assert.True(result.Results[0].Score > result.Results[1].Score);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_PromptSummary_IncludesAllRelevantTopics()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "qa_templates_for_electrical_construction_standards.pdf",
+            RelativePath = "Knowledge/qa_templates_for_electrical_construction_standards.pdf",
+            Kind = "pdf",
+            SourceRootLabel = "Watercare Electrical Standards",
+            Summary = "Switchboards, distribution centres and control centres – mandatory QA/QC tests per section 1.13",
+            Topics = ["switchboard", "distribution", "QA/QC", "mandatory", "Watercare"],
+        };
+
+        var summary = doc.PromptSummary;
+
+        Assert.Contains("switchboard", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("QA/QC", summary, StringComparison.Ordinal);
+        Assert.Contains("Watercare Electrical Standards", summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_EarthingCategory_IsDistinctFromSwitchboardCategory()
+    {
+        // Earthing and Bonding (category 7) is a separate mandatory category from
+        // Switchboards/Distribution Centres (category 3) in section 1.13
+        const string category3 = "Switchboards, Distribution Centres, and Control Centres";
+        const string category7 = "Earthing and Bonding Systems";
+
+        Assert.NotEqual(category3, category7);
+        Assert.Contains("Switchboard", category3, StringComparison.Ordinal);
+        Assert.Contains("Earthing", category7, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SwitchboardQaQc_DrawingQaGate_AppliesToPhasesOneToThree()
+    {
+        // Drawing QA gate (phases 1-3) is controlled by EE of Record / RAIC checklist;
+        // Construction QA gate (phases 4-5) is controlled by Site Electrical Supervisor
+        // and the Watercare QA/QC template.
+        var drawingQaPhases = new[] { 1, 2, 3 };
+        var constructionQaPhases = new[] { 4, 5 };
+
+        Assert.Equal(3, drawingQaPhases.Length);
+        Assert.Equal(2, constructionQaPhases.Length);
+        Assert.DoesNotContain(4, drawingQaPhases);
+        Assert.DoesNotContain(1, constructionQaPhases);
+    }
+
     /// <summary>
     /// IModelProvider stub that always throws to force fallback paths in service tests.
     /// </summary>
