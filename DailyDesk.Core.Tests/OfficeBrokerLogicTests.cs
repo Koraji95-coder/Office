@@ -2080,6 +2080,35 @@ public sealed class OfficeBrokerLogicTests
         return null;
     }
 
+    /// <summary>
+    /// Extracts the body of the "### Revision Control and Audit Trail" section from AGENT_REPLY_GUIDE.md,
+    /// stopping at the next "### " heading (line-start anchored to avoid false matches inside fenced blocks).
+    /// Returns an empty string if the section is not found.
+    /// </summary>
+    private static string ExtractChunk6Section(string guideContent)
+    {
+        var lines = guideContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        var startLine = Array.FindIndex(lines, l => l.TrimEnd() == "### Revision Control and Audit Trail");
+        if (startLine < 0) return string.Empty;
+        var sectionLines = lines
+            .Skip(startLine + 1)
+            .TakeWhile(l => !System.Text.RegularExpressions.Regex.IsMatch(l, @"^### "))
+            .ToList();
+        return string.Join("\n", sectionLines);
+    }
+
+    /// <summary>
+    /// Extracts the content of the first fenced code block (``` … ```) found in the given section text.
+    /// Returns an empty string if no fenced block is present.
+    /// </summary>
+    private static string ExtractChunk6FencedBlock(string sectionContent)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            sectionContent,
+            @"```[^\r\n]*\r?\n([\s\S]*?)\r?\n```");
+        return match.Success ? match.Groups[1].Value : string.Empty;
+    }
+
     // --- Phase 5: Semantic Search Tests ---
 
     [Fact]
@@ -6006,81 +6035,88 @@ public sealed class OfficeBrokerLogicTests
     [Fact]
     public void RevisionControlAuditTrail_SignoffStates_HaveRequiredValues()
     {
-        // Required signoff states from the AGENT_REPLY_GUIDE.md chunk6 specification
-        var signoffStates = new[]
-        {
-            "Draft",
-            "In Review",
-            "Approved",
-            "Issued for Construction",
-            "Superseded",
-        };
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guideContent = File.ReadAllText(Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md"));
+        var chunk6Section = ExtractChunk6Section(guideContent);
+        Assert.False(string.IsNullOrEmpty(chunk6Section), "Chunk6 section not found in AGENT_REPLY_GUIDE.md");
+        var fencedBlock = ExtractChunk6FencedBlock(chunk6Section);
+        Assert.False(string.IsNullOrEmpty(fencedBlock), "Fenced block not found in chunk6 section");
 
-        Assert.Equal(5, signoffStates.Length);
-        Assert.Contains("Draft", signoffStates);
-        Assert.Contains("Approved", signoffStates);
-        Assert.Contains("Issued for Construction", signoffStates);
-        Assert.Contains("Superseded", signoffStates);
+        // The chunk6 fenced block must specify "signoff states" as a required return field
+        Assert.Contains("signoff states", fencedBlock, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void RevisionControlAuditTrail_RequiredReturnFields_ArePresent()
     {
-        // The chunk6 prompt template specifies four required return fields
-        var requiredReturnFields = new[]
-        {
-            "revision tracking",
-            "signoff states",
-            "audit trail requirements",
-            "package handoff steps",
-        };
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guideContent = File.ReadAllText(Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md"));
+        var chunk6Section = ExtractChunk6Section(guideContent);
+        Assert.False(string.IsNullOrEmpty(chunk6Section), "Chunk6 section not found in AGENT_REPLY_GUIDE.md");
+        var fencedBlock = ExtractChunk6FencedBlock(chunk6Section);
+        Assert.False(string.IsNullOrEmpty(fencedBlock), "Fenced block not found in chunk6 section");
 
-        Assert.Equal(4, requiredReturnFields.Length);
-        Assert.Contains("revision tracking", requiredReturnFields);
-        Assert.Contains("signoff states", requiredReturnFields);
-        Assert.Contains("audit trail requirements", requiredReturnFields);
-        Assert.Contains("package handoff steps", requiredReturnFields);
+        // The chunk6 fenced block must specify all four required return fields
+        Assert.Contains("revision tracking", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff states", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail requirements", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("package handoff steps", fencedBlock, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void RevisionControlAuditTrail_IgnoreList_ExcludesNonDraftingFeatures()
     {
-        // Features that must be excluded per chunk6: CRM, billing, and generic PM features
-        var excludedFeatures = new[]
-        {
-            "CRM",
-            "billing",
-            "generic PM features",
-        };
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guideContent = File.ReadAllText(Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md"));
+        var chunk6Section = ExtractChunk6Section(guideContent);
+        var fencedBlock = ExtractChunk6FencedBlock(chunk6Section);
+        Assert.False(string.IsNullOrEmpty(fencedBlock), "Fenced block not found in chunk6 section");
 
-        Assert.Equal(3, excludedFeatures.Length);
-        Assert.Contains("CRM", excludedFeatures);
-        Assert.Contains("billing", excludedFeatures);
-        Assert.DoesNotContain("revision tracking", excludedFeatures);
-        Assert.DoesNotContain("signoff states", excludedFeatures);
-        Assert.DoesNotContain("audit trail", excludedFeatures);
-        Assert.DoesNotContain("package handoff", excludedFeatures);
+        // Find the "Ignore" line within the fenced block (line-start anchored)
+        var ignoreLine = fencedBlock
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+            .FirstOrDefault(l => l.TrimStart().StartsWith("Ignore ", StringComparison.OrdinalIgnoreCase))
+            ?? string.Empty;
+        Assert.NotEmpty(ignoreLine);
+
+        // The Ignore line must name CRM and billing
+        Assert.Contains("CRM", ignoreLine, StringComparison.Ordinal);
+        Assert.Contains("billing", ignoreLine, StringComparison.OrdinalIgnoreCase);
+
+        // Drafting-workflow terms must NOT appear on the Ignore line
+        Assert.DoesNotContain("revision tracking", ignoreLine, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("signoff states", ignoreLine, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("audit trail", ignoreLine, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("package handoff", ignoreLine, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void RevisionControlAuditTrail_PackageHandoffSteps_MapToWorkflowSequence()
     {
-        // Package handoff steps for electrical drawing transmittal per chunk6
-        var handoffSteps = new[]
-        {
-            "Assemble drawing list with current revision state",
-            "Obtain signoff from engineer of record",
-            "Generate transmittal record with issue date and recipient",
-            "Deliver package and record recipient acknowledgement",
-            "Archive signed transmittal in audit trail",
-        };
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guideContent = File.ReadAllText(Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md"));
+        var chunk6Section = ExtractChunk6Section(guideContent);
+        var fencedBlock = ExtractChunk6FencedBlock(chunk6Section);
+        Assert.False(string.IsNullOrEmpty(fencedBlock), "Fenced block not found in chunk6 section");
 
-        Assert.Equal(5, handoffSteps.Length);
-        Assert.Equal("Assemble drawing list with current revision state", handoffSteps[0]);
-        Assert.Equal("Archive signed transmittal in audit trail", handoffSteps[^1]);
-        Assert.Contains("signoff", handoffSteps[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("transmittal", handoffSteps[2], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("audit trail", handoffSteps[4], StringComparison.OrdinalIgnoreCase);
+        // The chunk6 fenced block must list all four return fields in the expected sequence:
+        // revision tracking → signoff states → audit trail requirements → package handoff steps
+        var revisionIdx  = fencedBlock.IndexOf("revision tracking",       StringComparison.OrdinalIgnoreCase);
+        var signoffIdx   = fencedBlock.IndexOf("signoff states",           StringComparison.OrdinalIgnoreCase);
+        var auditIdx     = fencedBlock.IndexOf("audit trail requirements", StringComparison.OrdinalIgnoreCase);
+        var handoffIdx   = fencedBlock.IndexOf("package handoff steps",    StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(revisionIdx >= 0,              "chunk6 must specify 'revision tracking'");
+        Assert.True(signoffIdx > revisionIdx,       "chunk6 must list 'signoff states' after 'revision tracking'");
+        Assert.True(auditIdx > signoffIdx,          "chunk6 must list 'audit trail requirements' after 'signoff states'");
+        Assert.True(handoffIdx > auditIdx,          "chunk6 must list 'package handoff steps' after 'audit trail requirements'");
+
+        // The block must also specify that the scope is drawing approval and transmittal
+        Assert.Contains("transmittal", fencedBlock, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -6157,11 +6193,17 @@ public sealed class OfficeBrokerLogicTests
         // Verify the chunk6 section header exists
         Assert.Contains("### Revision Control and Audit Trail", content, StringComparison.Ordinal);
 
-        // Verify the four required return fields are specified
-        Assert.Contains("revision tracking", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("signoff states", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("audit trail requirements", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("package handoff steps", content, StringComparison.OrdinalIgnoreCase);
+        // Scope the four return-field assertions to the chunk6 section's fenced template only,
+        // so a match elsewhere in the document cannot satisfy this test.
+        var chunk6Section = ExtractChunk6Section(content);
+        Assert.False(string.IsNullOrEmpty(chunk6Section), "Chunk6 section body is empty");
+        var fencedBlock = ExtractChunk6FencedBlock(chunk6Section);
+        Assert.False(string.IsNullOrEmpty(fencedBlock), "Fenced code block not found in chunk6 section");
+
+        Assert.Contains("revision tracking", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff states", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail requirements", fencedBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("package handoff steps", fencedBlock, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -6177,7 +6219,7 @@ public sealed class OfficeBrokerLogicTests
         // Find the chunk6 section and verify it specifies what to ignore.
         // Split on lines so we can detect "### " headings at line starts only,
         // which avoids false matches inside fenced code blocks.
-        var lines = content.Split('\n');
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         var chunk6StartLine = Array.FindIndex(lines,
             l => l.TrimEnd() == "### Revision Control and Audit Trail");
         Assert.True(chunk6StartLine >= 0, "Chunk6 section not found in AGENT_REPLY_GUIDE.md");
@@ -6204,11 +6246,22 @@ public sealed class OfficeBrokerLogicTests
 
         var content = File.ReadAllText(guidePath);
 
-        // The "How To Write Useful Approval Reasons" section must reference the chunk6 focus areas
-        Assert.Contains("revision control", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("signoff states", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("audit trail", content, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("package handoff", content, StringComparison.OrdinalIgnoreCase);
+        // Scope assertions to the "## How To Write Useful Approval Reasons" section only,
+        // so matches elsewhere in the document cannot satisfy this test.
+        var allLines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        var approvalStartLine = Array.FindIndex(allLines,
+            l => l.TrimEnd() == "## How To Write Useful Approval Reasons");
+        Assert.True(approvalStartLine >= 0, "Approval reasons section not found in AGENT_REPLY_GUIDE.md");
+
+        var approvalSectionContent = string.Join("\n", allLines
+            .Skip(approvalStartLine + 1)
+            .TakeWhile(l => !System.Text.RegularExpressions.Regex.IsMatch(l, @"^## ")));
+
+        // The approval-reasons section must reference the chunk6 focus areas
+        Assert.Contains("revision control", approvalSectionContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff states", approvalSectionContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail", approvalSectionContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("package handoff", approvalSectionContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
