@@ -15,11 +15,14 @@ namespace DailyDesk.Core.Tests;
 /// Integration tests that verify server errors across all broker endpoint types adhere to
 /// RFC 7807 Problem Details format as required by CONVENTIONS.md.
 ///
-/// The tests are structured in three groups:
+/// The tests are structured in four groups:
 ///   1. RFC 7807 format tests using a minimal in-process server – always fast and deterministic.
+///      Verifies that the Results.Problem() pattern used in every broker catch block produces
+///      application/problem+json responses with the required status, title, and detail fields.
 ///   2. Validation-error (400) format tests against the real broker via WebApplicationFactory –
 ///      fast because validation runs before the orchestrator is invoked.
-///   3. Server-error (500) tests against the real broker – in CI environments (where Ollama /
+///   3. Not-found (404) format tests for job, workflow, and schedule endpoints.
+///   4. Server-error (500) tests against the real broker – in CI environments (where Ollama /
 ///      other dependencies are not available) these reliably produce RFC 7807 500 responses;
 ///      in local dev environments where the dependencies ARE reachable the same endpoints may
 ///      return 200, in which case the test verifies the 200 response shape instead.
