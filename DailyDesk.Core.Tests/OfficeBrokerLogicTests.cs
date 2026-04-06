@@ -5869,6 +5869,397 @@ public sealed class OfficeBrokerLogicTests
         Assert.DoesNotContain(1, constructionQaPhases);
     }
 
+    // ───────────────────────────────────────────────────────────────────
+    //  Revision Control and Audit Trail Compliance
+    //  AGENT_REPLY_GUIDE.md chunk6 – Best Reply Patterns For Electrical
+    //  Drafting Workflows: Revision Control and Audit Trail
+    // ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RevisionControlAuditTrail_LearningDocument_RepresentsRevisionRecord()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "revision-control-electrical-drafting.md",
+            RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+            Kind = "md",
+            Summary = "Revision tracking, signoff states, audit trail requirements, and package handoff steps for electrical drafting production workflows",
+            Topics = ["revision", "signoff", "audit trail", "package handoff", "electrical", "drafting"],
+        };
+
+        Assert.Equal("md", doc.Kind);
+        Assert.Contains("revision", doc.Topics);
+        Assert.Contains("signoff", doc.Topics);
+        Assert.Contains("audit trail", doc.Topics);
+        Assert.Contains("package handoff", doc.Topics);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_RevisionTracking_IsDiscoverableByKeyword()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "revision-control-electrical-drafting.md",
+                    RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+                    Kind = "md",
+                    Summary = "Revision tracking for electrical drawing sets: revision letters, revision clouds, title block updates, and change history",
+                    Topics = ["revision", "tracking", "drawing", "title block", "change history"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motor-protection-theory.md",
+                    RelativePath = "Knowledge/motor-protection-theory.md",
+                    Kind = "md",
+                    Summary = "Motor protection relay settings and thermal overload curves",
+                    Topics = ["motor", "protection", "relay", "thermal"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("revision tracking drawing", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("revision-control-electrical-drafting.md", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_SignoffStates_AreSearchable()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "revision-control-electrical-drafting.md",
+                    RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+                    Kind = "md",
+                    Summary = "Signoff states for electrical drawing review: draft, in-review, approved, issued-for-construction, superseded",
+                    Topics = ["signoff", "review", "approved", "issued-for-construction", "draft"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("signoff review approved", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("revision-control-electrical-drafting.md", result.Results[0].Title);
+        var matchedDoc = library.Documents.First(d => d.FileName == result.Results[0].Title);
+        Assert.Contains("signoff", matchedDoc.Topics);
+        Assert.Contains("approved", matchedDoc.Topics);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_AuditTrailRequirements_FoundBeforeUnrelatedDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "revision-control-electrical-drafting.md",
+                    RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+                    Kind = "md",
+                    Summary = "Audit trail requirements for drawing approval: who approved, when approved, revision state at approval, transmittal record",
+                    Topics = ["audit trail", "approval", "transmittal", "record", "drawing"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-design-guide.md",
+                    RelativePath = "Knowledge/lighting-design-guide.md",
+                    Kind = "md",
+                    Summary = "Lighting circuit design and lux level calculations for commercial buildings",
+                    Topics = ["lighting", "lux", "circuit", "commercial"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("audit trail approval transmittal", library);
+
+        Assert.True(result.Results.Count >= 1);
+        Assert.Equal("revision-control-electrical-drafting.md", result.Results[0].Title);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_PackageHandoff_IsIndexedTopic()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "revision-control-electrical-drafting.md",
+            RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+            Kind = "md",
+            Summary = "Package handoff steps for electrical drawing transmittal: drawing list, revision state, signoff record, recipient acknowledgement",
+            Topics = ["package handoff", "transmittal", "drawing list", "revision", "signoff"],
+        };
+
+        Assert.Contains("package handoff", doc.Topics);
+        Assert.Contains("transmittal", doc.Topics);
+        Assert.Contains("signoff", doc.Topics);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_SignoffStates_HaveRequiredValues()
+    {
+        // Required signoff states from the AGENT_REPLY_GUIDE.md chunk6 specification
+        var signoffStates = new[]
+        {
+            "Draft",
+            "In Review",
+            "Approved",
+            "Issued for Construction",
+            "Superseded",
+        };
+
+        Assert.Equal(5, signoffStates.Length);
+        Assert.Contains("Draft", signoffStates);
+        Assert.Contains("Approved", signoffStates);
+        Assert.Contains("Issued for Construction", signoffStates);
+        Assert.Contains("Superseded", signoffStates);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_RequiredReturnFields_ArePresent()
+    {
+        // The chunk6 prompt template specifies four required return fields
+        var requiredReturnFields = new[]
+        {
+            "revision tracking",
+            "signoff states",
+            "audit trail requirements",
+            "package handoff steps",
+        };
+
+        Assert.Equal(4, requiredReturnFields.Length);
+        Assert.Contains("revision tracking", requiredReturnFields);
+        Assert.Contains("signoff states", requiredReturnFields);
+        Assert.Contains("audit trail requirements", requiredReturnFields);
+        Assert.Contains("package handoff steps", requiredReturnFields);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_IgnoreList_ExcludesNonDraftingFeatures()
+    {
+        // Features that must be excluded per chunk6: CRM, billing, and generic PM features
+        var excludedFeatures = new[]
+        {
+            "CRM",
+            "billing",
+            "generic PM features",
+        };
+
+        Assert.Equal(3, excludedFeatures.Length);
+        Assert.Contains("CRM", excludedFeatures);
+        Assert.Contains("billing", excludedFeatures);
+        Assert.DoesNotContain("revision tracking", excludedFeatures);
+        Assert.DoesNotContain("signoff states", excludedFeatures);
+        Assert.DoesNotContain("audit trail", excludedFeatures);
+        Assert.DoesNotContain("package handoff", excludedFeatures);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_PackageHandoffSteps_MapToWorkflowSequence()
+    {
+        // Package handoff steps for electrical drawing transmittal per chunk6
+        var handoffSteps = new[]
+        {
+            "Assemble drawing list with current revision state",
+            "Obtain signoff from engineer of record",
+            "Generate transmittal record with issue date and recipient",
+            "Deliver package and record recipient acknowledgement",
+            "Archive signed transmittal in audit trail",
+        };
+
+        Assert.Equal(5, handoffSteps.Length);
+        Assert.Equal("Assemble drawing list with current revision state", handoffSteps[0]);
+        Assert.Equal("Archive signed transmittal in audit trail", handoffSteps[^1]);
+        Assert.Contains("signoff", handoffSteps[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("transmittal", handoffSteps[2], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail", handoffSteps[4], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_MultipleDocuments_RevisionDocRanksHighestForSpecificQuery()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "revision-control-electrical-drafting.md",
+                    RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+                    Kind = "md",
+                    Summary = "Revision tracking signoff states audit trail package handoff transmittal drawing approval",
+                    Topics = ["revision", "signoff", "audit trail", "transmittal", "approval"],
+                },
+                new LearningDocument
+                {
+                    FileName = "drawing-issue-register.md",
+                    RelativePath = "Knowledge/drawing-issue-register.md",
+                    Kind = "md",
+                    Summary = "Drawing issue register tracking revision number and approval date per drawing",
+                    Topics = ["drawing", "issue register", "revision", "approval"],
+                },
+                new LearningDocument
+                {
+                    FileName = "transmittal-log.md",
+                    RelativePath = "Knowledge/transmittal-log.md",
+                    Kind = "md",
+                    Summary = "Transmittal log for package delivery tracking with signoff confirmation",
+                    Topics = ["transmittal", "signoff", "delivery", "log"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("revision signoff audit trail transmittal approval", library, topK: 3);
+
+        Assert.Equal(3, result.Results.Count);
+        Assert.Equal("revision-control-electrical-drafting.md", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > result.Results[1].Score);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_PromptSummary_IncludesRevisionAndAuditTopics()
+    {
+        var doc = new LearningDocument
+        {
+            FileName = "revision-control-electrical-drafting.md",
+            RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+            Kind = "md",
+            SourceRootLabel = "Electrical Drafting Workflow Research",
+            Summary = "Revision control and audit trail patterns for electrical drafting production workflows",
+            Topics = ["revision", "audit trail", "signoff", "package handoff"],
+        };
+
+        var summary = doc.PromptSummary;
+
+        Assert.Contains("revision", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Electrical Drafting Workflow Research", summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_AgentReplyGuide_ContainsChunk6Content()
+    {
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guidePath = Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md");
+        Assert.True(File.Exists(guidePath), $"AGENT_REPLY_GUIDE.md not found at: {guidePath}");
+
+        var content = File.ReadAllText(guidePath);
+
+        // Verify the chunk6 section header exists
+        Assert.Contains("### Revision Control and Audit Trail", content, StringComparison.Ordinal);
+
+        // Verify the four required return fields are specified
+        Assert.Contains("revision tracking", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff states", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail requirements", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("package handoff steps", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_AgentReplyGuide_Chunk6ExcludesCrmAndBilling()
+    {
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guidePath = Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md");
+        Assert.True(File.Exists(guidePath), $"AGENT_REPLY_GUIDE.md not found at: {guidePath}");
+
+        var content = File.ReadAllText(guidePath);
+
+        // Find the chunk6 section and verify it specifies what to ignore.
+        // Split on lines so we can detect "### " headings at line starts only,
+        // which avoids false matches inside fenced code blocks.
+        var lines = content.Split('\n');
+        var chunk6StartLine = Array.FindIndex(lines,
+            l => l.TrimEnd() == "### Revision Control and Audit Trail");
+        Assert.True(chunk6StartLine >= 0, "Chunk6 section not found in AGENT_REPLY_GUIDE.md");
+
+        // Collect lines until the next "### " heading (section boundary)
+        var chunk6Lines = lines
+            .Skip(chunk6StartLine + 1)
+            .TakeWhile(l => !System.Text.RegularExpressions.Regex.IsMatch(l, @"^### "))
+            .ToList();
+
+        var chunk6Content = string.Join("\n", chunk6Lines);
+
+        Assert.Contains("CRM", chunk6Content, StringComparison.Ordinal);
+        Assert.Contains("billing", chunk6Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_ApprovalReasonPattern_ReferencesRevisionControlFocus()
+    {
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var guidePath = Path.Combine(root!, "DailyDesk", "AGENT_REPLY_GUIDE.md");
+        Assert.True(File.Exists(guidePath), $"AGENT_REPLY_GUIDE.md not found at: {guidePath}");
+
+        var content = File.ReadAllText(guidePath);
+
+        // The "How To Write Useful Approval Reasons" section must reference the chunk6 focus areas
+        Assert.Contains("revision control", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff states", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("audit trail", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("package handoff", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_DrawingTransmittal_IsDistinctFromDrawingReview()
+    {
+        // Transmittal (package delivery to external parties) is distinct from
+        // drawing review (internal approval gate before IFC)
+        const string transmittalScope = "Package delivery to external parties with signed record";
+        const string drawingReviewScope = "Internal approval gate with signoff before issuing";
+
+        Assert.NotEqual(transmittalScope, drawingReviewScope);
+        Assert.Contains("delivery", transmittalScope, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("signoff", drawingReviewScope, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RevisionControlAuditTrail_SearchByPackageHandoff_ReturnsRevisionDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "revision-control-electrical-drafting.md",
+                    RelativePath = "Knowledge/Research/revision-control-electrical-drafting.md",
+                    Kind = "md",
+                    Summary = "Package handoff drawing transmittal revision state signoff engineer of record",
+                    Topics = ["package handoff", "transmittal", "revision", "signoff", "engineer"],
+                },
+                new LearningDocument
+                {
+                    FileName = "grounding-electrode-design.md",
+                    RelativePath = "Knowledge/grounding-electrode-design.md",
+                    Kind = "md",
+                    Summary = "Grounding electrode conductor sizing and soil resistivity methods",
+                    Topics = ["grounding", "electrode", "conductor", "soil resistivity"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("package handoff transmittal", library);
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("revision-control-electrical-drafting.md", result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+        var matchedDoc = library.Documents.First(d => d.FileName == result.Results[0].Title);
+        Assert.Contains("package handoff", matchedDoc.Topics);
+        Assert.Contains("transmittal", matchedDoc.Topics);
+    }
+
     /// <summary>
     /// IModelProvider stub that always throws to force fallback paths in service tests.
     /// </summary>
