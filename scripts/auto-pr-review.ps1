@@ -279,24 +279,26 @@ Provide your review:
             if ($review -match "(\d+)\s*/\s*10") { $score = [int]$Matches[1] }
 
             # ========== SCORING TIERS ==========
+            # Verdict from LLM always wins — tiers only decide merge behavior
             $ghReviewEvent = "COMMENT"
             $tierAction = ""
 
-            if ($score -ge 8) {
-                # Tier 1: Auto-merge
-                if ($verdict -eq "APPROVE") { $ghReviewEvent = "APPROVE" }
+            # If LLM explicitly said REQUEST_CHANGES, respect that regardless of score
+            if ($verdict -eq "REQUEST_CHANGES") {
+                $ghReviewEvent = "REQUEST_CHANGES"
+                $tierAction = "request-changes"
+            } elseif ($score -ge 8 -and $verdict -eq "APPROVE") {
+                $ghReviewEvent = "APPROVE"
                 $tierAction = "auto-merge"
-            } elseif ($score -ge 6) {
-                # Tier 2: Approve but manual merge
-                if ($verdict -eq "APPROVE") { $ghReviewEvent = "APPROVE" }
+            } elseif ($score -ge 6 -and $verdict -eq "APPROVE") {
+                $ghReviewEvent = "APPROVE"
                 $tierAction = "manual-merge"
             } elseif ($score -ge 4) {
-                # Tier 3: Request changes
-                $ghReviewEvent = "REQUEST_CHANGES"
-                $verdict = "REQUEST_CHANGES"
-                $tierAction = "request-changes"
+                # Score 4-7 but not APPROVE = needs work
+                $ghReviewEvent = "COMMENT"
+                $tierAction = "needs-attention"
             } else {
-                # Tier 4: Auto-close
+                # Score 1-3 = auto-close
                 $tierAction = "auto-close"
             }
 
@@ -354,6 +356,9 @@ Provide your review:
             } elseif ($tierAction -eq "request-changes") {
                 $mergeStatus = "Score $score/10 — changes requested"
                 Write-Host "CHANGES: $repoShort#$($pr.number) - $mergeStatus"
+            } elseif ($tierAction -eq "needs-attention") {
+                $mergeStatus = "Score $score/10 — needs attention, not approved"
+                Write-Host "ATTENTION: $repoShort#$($pr.number) - $mergeStatus"
             } elseif ($tierAction -eq "auto-close") {
                 try {
                     Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Method PATCH -Headers $headers -ContentType "application/json" -Body '{"state":"closed"}' | Out-Null
@@ -387,6 +392,8 @@ Provide your review:
                 $color = 15548997; $statusLabel = "CHANGES REQUESTED"
             } elseif ($verdict -eq "NEEDS_DISCUSSION") {
                 $color = 16776960; $statusLabel = "NEEDS DISCUSSION"
+            } elseif ($tierAction -eq "needs-attention") {
+                $color = 16776960; $statusLabel = "NEEDS ATTENTION"
             } elseif ($tierAction -eq "manual-merge") {
                 $color = 16744192; $statusLabel = "NEEDS MANUAL MERGE"
             } elseif ($verdict -eq "APPROVE") {
@@ -430,5 +437,6 @@ Provide your review:
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
 
