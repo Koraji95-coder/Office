@@ -61,21 +61,16 @@ foreach ($repo in $repos) {
 
             $repoShort = $repo.Split("/")[1]
 
-            # ========== GATE 1: No code yet ==========
-            if ($pr.additions -eq 0 -and $pr.deletions -eq 0) {
-                Write-Host "SKIP: $repoShort#$($pr.number) - no code changes yet"
-                continue
-            }
-
-            # ========== GATE 2: Still a draft ==========
+            # ========== GATE 1: Still a draft ==========
             if ($pr.draft -eq $true) {
                 $createdAt = [DateTime]::Parse($pr.created_at).ToUniversalTime()
                 $age = (Get-Date).ToUniversalTime() - $createdAt
-                if ($pr.additions -gt 0 -and $age.TotalMinutes -gt 10) {
+                # Fetch full PR to get accurate additions count (list endpoint returns 0)
+                $draftDetail = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
+                if ($draftDetail.additions -gt 0 -and $age.TotalMinutes -gt 10) {
                     Write-Host "PROMOTE: $repoShort#$($pr.number) - draft with code, $([int]$age.TotalMinutes)m old, marking ready..."
                     try {
-                        $prDetail = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $headers
-                        $nodeId = $prDetail.node_id
+                        $nodeId = $draftDetail.node_id
                         $gqlHeaders = @{ Authorization = "Bearer $ghToken"; "Content-Type" = "application/json" }
                         $gqlBody = @{ query = "mutation { markPullRequestReadyForReview(input: {pullRequestId: `"$nodeId`"}) { pullRequest { number } } }" } | ConvertTo-Json -Compress
                         Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method POST -Headers $gqlHeaders -Body $gqlBody | Out-Null
@@ -86,6 +81,12 @@ foreach ($repo in $repos) {
                     continue
                 }
                 Write-Host "SKIP: $repoShort#$($pr.number) - draft (Copilot still working)"
+                continue
+            }
+
+            # ========== GATE 2: No code yet ==========
+            if ($pr.additions -eq 0 -and $pr.deletions -eq 0) {
+                Write-Host "SKIP: $repoShort#$($pr.number) - no code changes yet"
                 continue
             }
 
@@ -426,3 +427,4 @@ Provide your review:
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
