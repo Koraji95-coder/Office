@@ -519,3 +519,260 @@ describe('Hash routing', () => {
         expect(active.querySelector('strong').textContent.trim()).toBe('Runtime Control');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Developer Portal hero view overall structure
+// ---------------------------------------------------------------------------
+describe('Developer Portal hero view overall structure', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('sets the route title to "Developer Portal"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Developer Portal');
+    });
+
+    it('sets the route stage to "High-fidelity hero"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('High-fidelity hero');
+    });
+
+    it('sets the route kicker to include "Developer Portal"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Developer Portal');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the Architecture and code panel alongside sibling panels', () => {
+        expect(getPanelByEyebrow('Architecture and code')).not.toBeNull();
+        expect(getPanelByEyebrow('Publishing and evidence')).not.toBeNull();
+        expect(getPanelByEyebrow('Automation lab')).not.toBeNull();
+    });
+
+    it('renders the Agent lab panel', () => {
+        expect(getPanelByEyebrow('Agent lab')).not.toBeNull();
+    });
+
+    it('renders the Developer docs panel', () => {
+        expect(getPanelByEyebrow('Developer docs')).not.toBeNull();
+    });
+
+    it('renders four dock items for the developer portal', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+
+    it('renders the hero lead panel with eyebrow "Workshop launcher"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Workshop launcher');
+    });
+
+    it('renders the companion panel with eyebrow "Reference move"', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        expect(companion).not.toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Refactor pressure notes — Architecture metric alignment
+// Verifies the "Architecture" metrics card correctly signals the two live
+// architecture surfaces (map and graph) that accompany Refactor pressure notes
+// in the Developer Portal storyboard.
+// ---------------------------------------------------------------------------
+describe('Refactor pressure notes — Architecture metric alignment (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('renders an "Architecture" metric card', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const archCard = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Architecture'
+        );
+        expect(archCard).not.toBeUndefined();
+    });
+
+    it('shows the Architecture metric value as "2 live"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const archCard = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Architecture'
+        );
+        expect(archCard.querySelector('.metric-value').textContent.trim()).toBe('2 live');
+    });
+
+    it('shows the Architecture metric meta text "map and graph"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const archCard = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Architecture'
+        );
+        expect(archCard.querySelector('.metric-meta').textContent.trim()).toBe('map and graph');
+    });
+
+    it('Architecture and code panel item count matches the number of live architecture surfaces plus refactor notes', () => {
+        // The "Architecture" metric reports 2 live architecture surfaces (map and graph).
+        // The panel contains those two plus "Refactor pressure notes" = 3 items total.
+        const panel = getPanelByEyebrow('Architecture and code');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('panel item order starts with architecture surfaces before refactor notes', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts[0]).toBe('Architecture Map');
+        expect(texts[1]).toBe('Architecture Graph');
+        expect(texts[2]).toBe('Refactor pressure notes');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Developer Portal inspector
+// Verifies the inspector panel for the developer portal hero surfaces the
+// correct design rules that govern the "Refactor pressure notes" surface.
+// ---------------------------------------------------------------------------
+describe('Developer Portal inspector (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('renders the inspector panel', () => {
+        expect(document.getElementById('inspector').querySelector('.inspector-card')).not.toBeNull();
+    });
+
+    it('shows the inspector title "Portal rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Portal rules');
+    });
+
+    it('shows the inspector subtitle describing the portal intent', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe(
+            'Launch and summarize, do not become a diagnostic duplicate.'
+        );
+    });
+
+    it('renders inspector sections', () => {
+        const sections = document.getElementById('inspector').querySelectorAll('.inspector-section');
+        expect(sections.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('includes a "Keep" section in the inspector', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        expect(keepSection).not.toBeUndefined();
+    });
+
+    it('includes a "Reject" section in the inspector', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        expect(rejectSection).not.toBeUndefined();
+    });
+
+    it('"Keep" section lists grouped launcher by job', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Grouped launcher by job');
+    });
+
+    it('"Reject" section lists flat tool-card grid', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Flat tool-card grid as the whole page');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Developer Portal dock
+// Verifies the activity dock for the developer portal hero renders the correct
+// status items and applies the right status-pill classes.
+// ---------------------------------------------------------------------------
+describe('Developer Portal dock (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('renders a "Developer route" dock item', () => {
+        const labels = Array.from(
+            document.querySelectorAll('#activity-dock .dock-item strong')
+        ).map((el) => el.textContent.trim());
+        expect(labels).toContain('Developer route');
+    });
+
+    it('renders an "Automation lab" dock item', () => {
+        const labels = Array.from(
+            document.querySelectorAll('#activity-dock .dock-item strong')
+        ).map((el) => el.textContent.trim());
+        expect(labels).toContain('Automation lab');
+    });
+
+    it('renders an "Agent lab" dock item', () => {
+        const labels = Array.from(
+            document.querySelectorAll('#activity-dock .dock-item strong')
+        ).map((el) => el.textContent.trim());
+        expect(labels).toContain('Agent lab');
+    });
+
+    it('renders a "Runtime Control" dock item', () => {
+        const labels = Array.from(
+            document.querySelectorAll('#activity-dock .dock-item strong')
+        ).map((el) => el.textContent.trim());
+        expect(labels).toContain('Runtime Control');
+    });
+
+    it('applies status-pill-ready to the "Developer route" dock item (Ready)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const devRoute = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Developer route'
+        );
+        expect(devRoute).not.toBeUndefined();
+        const pill = devRoute.querySelector('.status-pill');
+        expect(pill.classList.contains('status-pill-ready')).toBe(true);
+    });
+
+    it('applies status-pill-info to the "Automation lab" dock item (Active)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const labItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Automation lab'
+        );
+        expect(labItem).not.toBeUndefined();
+        const pill = labItem.querySelector('.status-pill');
+        expect(pill.classList.contains('status-pill-info')).toBe(true);
+    });
+
+    it('applies status-pill-info to the "Runtime Control" dock item (Primary)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const runtimeItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Runtime Control'
+        );
+        expect(runtimeItem).not.toBeUndefined();
+        const pill = runtimeItem.querySelector('.status-pill');
+        expect(pill.classList.contains('status-pill-info')).toBe(true);
+    });
+});
