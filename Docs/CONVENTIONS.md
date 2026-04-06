@@ -66,7 +66,13 @@ catch (ArgumentException ex)
 catch (Exception ex)
 {
     logger.LogError(ex, "Endpoint {Endpoint} failed", endpointName);
-    return Results.Problem(detail: ex.Message, statusCode: 500);
+    // ⚠ Never return ex.Message or ex.ToString() — use a static generic string.
+    // The full exception (message + stack trace) is preserved in the server log.
+    // See Docs/stack-trace-exposure-remediation.md for the full policy.
+    return Results.Problem(
+        detail: "An unexpected error occurred. See server logs for details.",
+        statusCode: 500
+    );
 }
 ```
 
@@ -154,7 +160,12 @@ app.MapPost("/api/{resource}/{action}", async (RequestType request, OfficeBroker
     catch (Exception ex)
     {
         logger.LogError(ex, "Endpoint {Endpoint} failed", "/api/{resource}/{action}");
-        return Results.Problem(detail: ex.Message, statusCode: 500);
+        // ⚠ Never return ex.Message — use a static generic string.
+        // See Docs/stack-trace-exposure-remediation.md for the full policy.
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
     }
 });
 ```
