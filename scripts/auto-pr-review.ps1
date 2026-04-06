@@ -138,6 +138,16 @@ foreach ($repo in $repos) {
             $prKey = "$repo#$($pr.number)@$($freshPr.updated_at)"
             if ($reviewed -contains $prKey) { continue }
 
+            # ========== GATE 6B: Already has a review from us ==========
+            try {
+                $existingReviews = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" -Headers $headers
+                $ourReview = $existingReviews | Where-Object { $_.user.login -eq "Koraji95-coder" -and $_.body -match "Auto-Review" }
+                if ($ourReview) {
+                    Write-Host "SKIP: $repoShort#$($pr.number) - already reviewed (score locked)"
+                    continue
+                }
+            } catch {}
+
             # ========== GATE 7: Duplicate detection ==========
             $thisFiles = $openPrFiles[$pr.number]
             $isDuplicate = $false
@@ -437,6 +447,7 @@ Provide your review:
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
 
 
