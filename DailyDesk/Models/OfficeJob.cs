@@ -10,6 +10,16 @@ public sealed class OfficeJob
     public string Type { get; set; } = string.Empty;
     public string Status { get; set; } = OfficeJobStatus.Queued;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
+
+    /// <summary>
+    /// Monotonically increasing counter assigned at enqueue time.
+    /// Used as a secondary sort key in <see cref="OfficeJobStore.DequeueNext"/> to guarantee
+    /// stable FIFO ordering even when multiple jobs share the same <see cref="CreatedAt"/>
+    /// timestamp (e.g. jobs enqueued within the same clock tick).
+    /// Legacy records persisted before this field was introduced have the default value 0
+    /// and are ordered by <see cref="CreatedAt"/> instead.
+    /// </summary>
+    public int SequenceNumber { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? Error { get; set; }

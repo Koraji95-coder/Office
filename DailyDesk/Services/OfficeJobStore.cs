@@ -10,9 +10,37 @@ public sealed class OfficeJobStore
 {
     private readonly OfficeDatabase _db;
 
+    // Process-scoped counter that gives each new job a monotonically increasing sequence
+    // number used as a sort key in DequeueNext() for deterministic FIFO ordering.
+    // Initialized on first store construction from the maximum SequenceNumber found in the
+    // database so that new jobs enqueued after a process restart are always ordered after
+    // any unprocessed jobs that remain from the previous run.
+    private static int _nextSequenceNumber;
+
     public OfficeJobStore(OfficeDatabase db)
     {
         _db = db;
+        InitializeSequenceCounter();
+    }
+
+    // Atomically advances _nextSequenceNumber to at least the maximum SequenceNumber already
+    // stored in the database.  Safe to call from multiple concurrent constructors.
+    private void InitializeSequenceCounter()
+    {
+        var maxInDb = _db.Jobs.Query()
+            .Select(j => j.SequenceNumber)
+            .ToList()
+            .DefaultIfEmpty(0)
+            .Max();
+
+        // CAS loop: update only if the current static value is less than what the DB holds.
+        int current;
+        do
+        {
+            current = _nextSequenceNumber;
+            if (maxInDb <= current) break;
+        }
+        while (Interlocked.CompareExchange(ref _nextSequenceNumber, maxInDb, current) != current);
     }
 
     /// <summary>
@@ -26,6 +54,7 @@ public sealed class OfficeJobStore
             Type = type,
             Status = OfficeJobStatus.Queued,
             CreatedAt = DateTimeOffset.Now,
+            SequenceNumber = Interlocked.Increment(ref _nextSequenceNumber),
             RequestedBy = requestedBy,
             RequestPayload = requestPayload,
         };
@@ -54,16 +83,34 @@ public sealed class OfficeJobStore
     }
 
     /// <summary>
-    /// Dequeues the next queued job (oldest first).
+    /// Dequeues the next queued job (oldest first, FIFO).
     /// Returns null if no queued jobs exist.
     /// </summary>
     public OfficeJob? DequeueNext()
     {
+        // Fetch all queued jobs and select the one with the lowest composite sort key.
+        // The sort key is projected once per item (not re-evaluated per comparison).
+        //
+        // Ordering rules:
+        //   - Legacy records (SequenceNumber == 0, predating this field) receive sort key 0
+        //     so they are always dequeued before any new record; ties among legacy records
+        //     are broken by CreatedAt.
+        //   - New records (SequenceNumber > 0) are ordered by their sequence number, which is
+        //     a monotonically increasing counter assigned at enqueue time, guaranteeing
+        //     stable FIFO ordering even for jobs enqueued within the same clock tick.
         var job = _db.Jobs.Query()
             .Where(j => j.Status == OfficeJobStatus.Queued)
-            .OrderBy(j => j.CreatedAt)
-            .Limit(1)
-            .FirstOrDefault();
+            .ToList()
+            .Select(j => new
+            {
+                Job = j,
+                PrimaryKey = j.SequenceNumber > 0 ? (long)j.SequenceNumber : 0L,
+                SecondaryKey = j.CreatedAt.UtcTicks,
+            })
+            .OrderBy(x => x.PrimaryKey)
+            .ThenBy(x => x.SecondaryKey)
+            .FirstOrDefault()
+            ?.Job;
 
         if (job is null) return null;
 
