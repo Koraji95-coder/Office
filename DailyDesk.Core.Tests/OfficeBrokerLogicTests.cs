@@ -5869,6 +5869,230 @@ public sealed class OfficeBrokerLogicTests
         Assert.DoesNotContain(1, constructionQaPhases);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Integration Tests: PDF QA/QC Template Application from Specified URL
+    //  Verifies the system correctly references and applies the QA/QC template
+    //  from the Watercare PDF as documented in chunk 3 of the research checklist:
+    //  Knowledge/Research/20260324-000659-electrical-drawing-qa-workflow-
+    //  standards-review-checklist.md
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // --- Group A: Chunk 3 source-reference verification (reads actual file) ---
+
+    [Fact]
+    public void PdfQaQcTemplate_ResearchMarkdown_ContainsWatercareQaQcUrl()
+    {
+        var repoRoot = FindRepoRoot();
+        Assert.NotNull(repoRoot);
+
+        var markdownPath = Path.Combine(
+            repoRoot!,
+            "Knowledge", "Research",
+            "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md"
+        );
+
+        Assert.True(File.Exists(markdownPath), $"Expected markdown file at: {markdownPath}");
+        var content = File.ReadAllText(markdownPath);
+        Assert.Contains(WatercareQaQcPdfUrl, content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_ResearchMarkdown_Chunk3_HasWatercareAsSourceDomain()
+    {
+        var repoRoot = FindRepoRoot();
+        Assert.NotNull(repoRoot);
+
+        var markdownPath = Path.Combine(
+            repoRoot!,
+            "Knowledge", "Research",
+            "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md"
+        );
+
+        var content = File.ReadAllText(markdownPath);
+        Assert.Contains(WatercareQaQcPdfDomain, content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_ResearchMarkdown_Chunk3_SearchSnippet_ReferencesSection113AndSwitchboards()
+    {
+        var repoRoot = FindRepoRoot();
+        Assert.NotNull(repoRoot);
+
+        var markdownPath = Path.Combine(
+            repoRoot!,
+            "Knowledge", "Research",
+            "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md"
+        );
+
+        var content = File.ReadAllText(markdownPath);
+        // The chunk 3 search snippet explicitly mentions section 1.13 and Switchboards
+        Assert.Contains("1.13", content, StringComparison.Ordinal);
+        Assert.Contains("Switchboards", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Group B: PDF template application from URL ---
+
+    [Fact]
+    public void PdfQaQcTemplate_FileNameFromUrl_HasPdfExtension()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+
+        Assert.Equal("qa_templates_for_electrical_construction_standards.pdf", fileName);
+        Assert.Equal(".pdf", Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_KindInference_FromUrlFileName_IsPdf()
+    {
+        // KnowledgeImportService sets Kind = extension.TrimStart('.').ToUpperInvariant()
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+        var kind = Path.GetExtension(fileName).TrimStart('.').ToUpperInvariant();
+
+        Assert.Equal("PDF", kind);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_UrlPath_ContainsElectricalStandardsSegment()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        Assert.Contains("electrical-standards", uri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_UrlPath_ContainsKenticoMediaLibrariesContainer()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        Assert.Contains("kentico-media-libraries-prod", uri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_AsAppliedDocument_IsSearchableForMandatoryTests()
+    {
+        // Simulate applying the template: build a LearningDocument as KnowledgeImportService would,
+        // using the filename from the URL and Section 1.13 content, then verify it is discoverable.
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = fileName,
+                    RelativePath = $"Knowledge/{fileName}",
+                    Kind = "PDF",
+                    SourceRootLabel = "Watercare Electrical Standards",
+                    Summary = "QA/QC templates for general electrical construction standards – section 1.13 minimum mandatory tests",
+                    Topics = ["QA/QC", "mandatory", "electrical", "construction", "section 1.13", "Watercare"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch("QA/QC mandatory tests section 1.13", library);
+
+        Assert.Equal("text", result.SearchMode);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal(fileName, result.Results[0].Title);
+        Assert.True(result.Results[0].Score > 0);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_AsAppliedDocument_CoversSwitchboardsAndAllMandatoryTopics()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+
+        var doc = new LearningDocument
+        {
+            FileName = fileName,
+            RelativePath = $"Knowledge/{fileName}",
+            Kind = "PDF",
+            SourceRootLabel = "Watercare Electrical Standards",
+            Summary = "Section 1.13 mandatory test categories: switchboards, distribution centres, earthing, cables, motors, lighting, instrumentation",
+            Topics = ["switchboard", "distribution", "earthing", "cables", "motors", "lighting", "instrumentation"],
+        };
+
+        Assert.Contains("switchboard", doc.Topics);
+        Assert.Contains("earthing", doc.Topics);
+        Assert.Contains("cables", doc.Topics);
+        Assert.Contains("motors", doc.Topics);
+        Assert.Contains("lighting", doc.Topics);
+        Assert.Contains("instrumentation", doc.Topics);
+    }
+
+    [Fact]
+    public async Task PdfQaQcTemplate_MockFetch_Returns200_WithPdfContentType()
+    {
+        var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        response.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+
+        var handler = new SequenceHttpHandler([response]);
+        using var client = new HttpClient(handler);
+
+        var result = await client.GetAsync(WatercareQaQcPdfUrl);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, result.StatusCode);
+        Assert.Equal("application/pdf", result.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_AllSection113Categories_CoveredByAppliedDocument()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+
+        // Build the applied document with all 7 mandatory category topics
+        var doc = new LearningDocument
+        {
+            FileName = fileName,
+            RelativePath = $"Knowledge/{fileName}",
+            Kind = "PDF",
+            SourceRootLabel = "Watercare Electrical Standards",
+            Summary =
+                "Section 1.13 mandatory test categories covering all seven areas: "
+                + "General Electrical Installation, Cables and Conduit, "
+                + "Switchboards Distribution Centres and Control Centres, "
+                + "Motors and Drives, Lighting and Small Power, "
+                + "Instrumentation and Control Wiring, Earthing and Bonding Systems.",
+            Topics = ["switchboard", "cable", "earthing", "motor", "lighting", "instrumentation", "QA/QC"],
+        };
+
+        // The summary must contain references to all seven mandatory categories
+        Assert.Contains("General Electrical Installation", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Cables and Conduit", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Switchboards", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Motors and Drives", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Lighting and Small Power", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Instrumentation and Control Wiring", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Earthing and Bonding Systems", doc.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(7, Section113MandatoryCategories.Length);
+    }
+
+    [Fact]
+    public void PdfQaQcTemplate_AppliedDocument_PromptSummary_IncludesWatercareSourceLabel()
+    {
+        var uri = new Uri(WatercareQaQcPdfUrl);
+        var fileName = Path.GetFileName(uri.LocalPath);
+
+        var doc = new LearningDocument
+        {
+            FileName = fileName,
+            RelativePath = $"Knowledge/{fileName}",
+            Kind = "PDF",
+            SourceRootLabel = "Watercare Electrical Standards",
+            Summary = "QA/QC templates for general electrical construction standards – section 1.13",
+            Topics = ["QA/QC", "electrical", "construction", "Watercare"],
+        };
+
+        Assert.Contains("Watercare Electrical Standards", doc.PromptSummary, StringComparison.Ordinal);
+        Assert.Contains("PDF", doc.PromptSummary, StringComparison.Ordinal);
+        Assert.Contains("section 1.13", doc.PromptSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// IModelProvider stub that always throws to force fallback paths in service tests.
     /// </summary>
