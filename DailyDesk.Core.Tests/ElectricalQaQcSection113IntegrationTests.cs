@@ -274,6 +274,140 @@ public sealed class ElectricalQaQcSection113IntegrationTests
         Assert.Contains("FAT/SAT records", scenario.Prompt);
     }
 
+    [Fact]
+    public void Category3_Switchboard_WhatGoodLooksLike_CoversFourMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboards distribution centres control centres QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers all four mandatory QA/QC checks per Watercare section 1.13: "
+                + "termination checks, protection relay settings, "
+                + "interlocking verification, and FAT/SAT records. "
+                + "The response should identify which check applies to each device type.",
+        };
+
+        Assert.Contains("termination checks", scenario.WhatGoodLooksLike);
+        Assert.Contains("protection relay settings", scenario.WhatGoodLooksLike);
+        Assert.Contains("interlocking verification", scenario.WhatGoodLooksLike);
+        Assert.Contains("FAT/SAT records", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category3_FallbackScoring_TerminationKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboards distribution centres control centres QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "All termination checks must be completed and verified against the approved "
+            + "protection standard before the switchboard or distribution centre is energised.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Category3_FallbackScoring_ProtectionRelayKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboards distribution centres control centres QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Protection relay settings must be verified against the approved relay co-ordination "
+            + "study for each switchboard, distribution centre, and control centre before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void Category3_LearningDocument_Topics_IncludeAllFourMandatoryChecks()
+    {
+        var document = new LearningDocument
+        {
+            FileName = "section113-category3-switchboard-dc-cc-qaqc.md",
+            RelativePath = "Knowledge/section113-category3-switchboard-dc-cc-qaqc.md",
+            Summary =
+                "Watercare QA/QC template section 1.13 category 3: mandatory tests for "
+                + "switchboards, distribution centres, and control centres. "
+                + "Covers termination checks, protection relay settings, "
+                + "interlocking verification, and FAT/SAT records.",
+            Topics =
+            [
+                "switchboard",
+                "distribution centre",
+                "control centre",
+                "termination checks",
+                "protection relay settings",
+                "interlocking verification",
+                "FAT/SAT records",
+            ],
+        };
+
+        Assert.Contains("termination checks", document.Topics);
+        Assert.Contains("protection relay settings", document.Topics);
+        Assert.Contains("interlocking verification", document.Topics);
+        Assert.Contains("FAT/SAT records", document.Topics);
+    }
+
+    [Fact]
+    public void Category3_KnowledgeSearch_SwitchboardQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "section113-category3-switchboard-dc-cc-qaqc.md",
+                    RelativePath = "Knowledge/section113-category3-switchboard-dc-cc-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests per Watercare section 1.13 category 3: "
+                        + "switchboards, distribution centres, control centres. "
+                        + "Termination checks, protection relay settings, interlocking verification, FAT/SAT records.",
+                    Topics =
+                    [
+                        "switchboard",
+                        "distribution centre",
+                        "control centre",
+                        "termination checks",
+                        "protection relay settings",
+                        "interlocking verification",
+                        "FAT/SAT records",
+                    ],
+                },
+                new LearningDocument
+                {
+                    FileName = "cables-conduit-qaqc.md",
+                    RelativePath = "Knowledge/cables-conduit-qaqc.md",
+                    Summary = "Cables and conduit installation inspection, cable pulling records, megger test results.",
+                    Topics = ["cables", "conduit", "megger", "installation inspection"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "switchboard termination protection relay interlocking FAT SAT",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("section113-category3-switchboard-dc-cc-qaqc.md", result.Results[0].Title);
+    }
+
     // =========================================================================
     // Group 4 – Motors and Drives (Category 4)
     // =========================================================================
