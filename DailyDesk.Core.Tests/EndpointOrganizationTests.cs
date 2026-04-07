@@ -117,6 +117,27 @@ public sealed class EndpointOrganizationTests : IClassFixture<BrokerWebApplicati
             $"≤ 80 lines (infrastructure setup only). Move endpoint handlers to Endpoints/*.cs.");
     }
 
+    [Fact]
+    public void ValidatorsDirectory_DoesNotExist_ValidatorsAreCoLocatedInEndpointFiles()
+    {
+        // Walk up from the test assembly base directory to find the repo root.
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "DailyDesk", "DailyDesk.csproj")))
+                break;
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        Assert.NotNull(dir);
+
+        var validatorsDirPath = Path.Combine(dir!, "DailyDesk.Broker", "Validators");
+        Assert.False(Directory.Exists(validatorsDirPath),
+            $"The Validators/ directory still exists at: {validatorsDirPath}. " +
+            $"Validator classes must be co-located in their corresponding Endpoints/*.cs files " +
+            $"alongside the request records they validate.");
+    }
+
     // -----------------------------------------------------------------------
     // Group 3: Smoke tests — endpoints still respond after refactor
     // -----------------------------------------------------------------------
