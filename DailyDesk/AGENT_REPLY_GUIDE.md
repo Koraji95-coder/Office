@@ -510,7 +510,8 @@ these steps:
    - Approval routing → `IssueSetState` states: Pending → InApproval → Approved / Rejected → Resubmitted
    - Audit trail → `AuditTrailEntry` (Actor, Action, FromState, ToState, Notes, OccurredAt)
 3. **Record fit-gap findings** as a research note in `Knowledge/Research/` following the
-   existing naming convention (e.g. `YYYYMMDD-draftflow-fit-gap-summary.md`).
+   existing naming convention (`YYYYMMDD-HHMMSS-topic.md`, e.g.
+   `YYYYMMDD-HHMMSS-draftflow-fit-gap-summary.md`).
 4. **Identify implementation gaps.** Any DraftFlow capability that Suite models cannot yet
    support should be logged as an Inbox item for Chief of Staff routing.
 
@@ -526,8 +527,8 @@ Each entry in `AuditTrailEntry` must capture the following fields:
 | `RevisionId` | Yes | Links the audit entry to the specific revision or issue-set record |
 | `Action` | Yes | Human-readable description of the event (e.g. "submitted for review", "approved", "rejected", "issued to package") |
 | `Actor` | Yes | Name or identifier of the person who performed the action |
-| `FromState` | Yes | `DrawingSignoffState` the drawing was in before the transition |
-| `ToState` | Yes | `DrawingSignoffState` the drawing moved to after the transition |
+| `FromState` | Revision only | `DrawingSignoffState` the drawing was in before the transition. Leave at default for issue-set audit entries — `IssueSetState` is a distinct enum; record issue-set state changes in `Action` and `Notes` instead. |
+| `ToState` | Revision only | `DrawingSignoffState` the drawing moved to after the transition. Leave at default for issue-set audit entries (same reason as `FromState`). |
 | `Notes` | Optional | Reviewer comments, rejection reasons, or transmittal references |
 | `OccurredAt` | Yes | UTC timestamp of the action |
 

@@ -306,6 +306,7 @@ public sealed class DraftFlowProductionControlTests
         Assert.Equal(DrawingSignoffState.InReview,  entry.FromState);
         Assert.Equal(DrawingSignoffState.Approved,  entry.ToState);
         Assert.Equal("All comments resolved.", entry.Notes);
+        Assert.NotEqual(default, entry.OccurredAt);
     }
 
     [Fact]
@@ -324,6 +325,7 @@ public sealed class DraftFlowProductionControlTests
         Assert.Equal("B",        record.RevisionNumber);
         Assert.Equal("A.Jones",  record.IssuedBy);
         Assert.Equal(DrawingSignoffState.InReview, record.State);
+        Assert.Equal(string.Empty, record.PackageRef);
     }
 
     [Fact]
@@ -339,9 +341,89 @@ public sealed class DraftFlowProductionControlTests
         };
         record.RevisionIds.Add("rev-001");
 
-        Assert.Equal("DWG-SET-001",        record.DrawingSetRef);
-        Assert.Equal("J.Smith",            record.IssuedBy);
+        Assert.Equal("DWG-SET-001",            record.DrawingSetRef);
+        Assert.Equal("J.Smith",                record.IssuedBy);
         Assert.Equal(IssueSetState.InApproval, record.State);
+        Assert.Equal(string.Empty,             record.RejectionReason);
+        Assert.Equal(string.Empty,             record.PackageRef);
+        Assert.NotNull(record.RevisionIds);
         Assert.Single(record.RevisionIds);
+    }
+
+    // -----------------------------------------------------------------------
+    // Group 5: Reflection-based model compliance
+    // Cross-reference the actual C# model definitions against the fields
+    // documented in the Suite Model Reference table, so renames or removals
+    // of documented properties are caught at test time.
+    // -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Id")]
+    [InlineData("DrawingId")]
+    [InlineData("RevisionId")]
+    [InlineData("Action")]
+    [InlineData("Actor")]
+    [InlineData("FromState")]
+    [InlineData("ToState")]
+    [InlineData("Notes")]
+    [InlineData("OccurredAt")]
+    public void AuditTrailEntry_DocumentedProperty_ExistsOnModel(string propertyName)
+    {
+        var prop = typeof(AuditTrailEntry).GetProperty(propertyName);
+        Assert.NotNull(prop);
+    }
+
+    [Theory]
+    [InlineData("Id")]
+    [InlineData("DrawingId")]
+    [InlineData("RevisionNumber")]
+    [InlineData("Description")]
+    [InlineData("IssuedBy")]
+    [InlineData("State")]
+    [InlineData("IssuedAt")]
+    [InlineData("PackageRef")]
+    public void DrawingRevisionRecord_DocumentedProperty_ExistsOnModel(string propertyName)
+    {
+        var prop = typeof(DrawingRevisionRecord).GetProperty(propertyName);
+        Assert.NotNull(prop);
+    }
+
+    [Theory]
+    [InlineData("Id")]
+    [InlineData("DrawingSetRef")]
+    [InlineData("IssuedBy")]
+    [InlineData("State")]
+    [InlineData("IssuedAt")]
+    [InlineData("RevisionIds")]
+    [InlineData("RejectionReason")]
+    [InlineData("PackageRef")]
+    public void IssueSetRecord_DocumentedProperty_ExistsOnModel(string propertyName)
+    {
+        var prop = typeof(IssueSetRecord).GetProperty(propertyName);
+        Assert.NotNull(prop);
+    }
+
+    [Theory]
+    [InlineData("Draft")]
+    [InlineData("InReview")]
+    [InlineData("Approved")]
+    [InlineData("Rejected")]
+    [InlineData("Superseded")]
+    public void DrawingSignoffState_DocumentedValue_ExistsInEnum(string valueName)
+    {
+        Assert.True(Enum.IsDefined(typeof(DrawingSignoffState), valueName),
+            $"DrawingSignoffState.{valueName} is documented in AGENT_REPLY_GUIDE.md but does not exist in the enum");
+    }
+
+    [Theory]
+    [InlineData("Pending")]
+    [InlineData("InApproval")]
+    [InlineData("Approved")]
+    [InlineData("Rejected")]
+    [InlineData("Resubmitted")]
+    public void IssueSetState_DocumentedValue_ExistsInEnum(string valueName)
+    {
+        Assert.True(Enum.IsDefined(typeof(IssueSetState), valueName),
+            $"IssueSetState.{valueName} is documented in AGENT_REPLY_GUIDE.md but does not exist in the enum");
     }
 }
