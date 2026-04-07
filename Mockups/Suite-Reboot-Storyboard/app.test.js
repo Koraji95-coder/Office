@@ -1741,3 +1741,255 @@ describe('Runtime Control diagnostics — inspector design rules (runtime-contro
         expect(items).toContain('Safe actions');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Architecture Map — developer-portal tool isolation
+// Verifies that Architecture Map is present as a named tool in the Developer
+// Portal "Architecture and code" panel and is absent from all customer-facing
+// routes. The map is a developer-only visualisation surface and must not leak
+// into customer or operational routes.
+// ---------------------------------------------------------------------------
+describe('Architecture Map — developer-portal tool isolation (developer-portal:hero)', () => {
+    it('Architecture Map is present in the developer-portal Architecture and code panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        expect(panel).not.toBeNull();
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Map');
+    });
+
+    it('Architecture Map is the first item in the Architecture and code panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts[0]).toBe('Architecture Map');
+    });
+
+    it('Architecture Map does NOT appear in any panel on customer-app:hero', () => {
+        initApp('#customer-app/hero');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Map');
+    });
+
+    it('Architecture Map does NOT appear in any panel on customer-app:project-detail', () => {
+        initApp('#customer-app/project-detail');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Map');
+    });
+
+    it('Architecture Map does NOT appear in any panel on daily-desk:hero', () => {
+        initApp('#daily-desk/hero');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Map');
+    });
+
+    it('"Launch Architecture Map" is the only architecture-tool CTA in the Workshop launcher', () => {
+        initApp('#developer-portal/hero');
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        const archActions = actions.filter((a) => a.toLowerCase().includes('architecture'));
+        expect(archActions).toHaveLength(1);
+        expect(archActions[0]).toBe('Launch Architecture Map');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Architecture Graph — tool presence across routes
+// Verifies that Architecture Graph appears as a named tool in the Developer
+// Portal "Architecture and code" panel (full tool detail) and also as a quick-
+// launch shortcut in the Runtime Control "Developer tools" panel. Neither
+// version should appear in customer-facing routes.
+// ---------------------------------------------------------------------------
+describe('Architecture Graph — tool presence across routes', () => {
+    it('Architecture Graph is present in the developer-portal Architecture and code panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Graph');
+    });
+
+    it('Architecture Graph is the second item in the Architecture and code panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts[1]).toBe('Architecture Graph');
+    });
+
+    it('"Architecture graph" shortcut also appears in runtime-control:hero Developer tools panel', () => {
+        initApp('#runtime-control/hero');
+        const panel = getPanelByEyebrow('Developer tools');
+        expect(panel).not.toBeNull();
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture graph');
+    });
+
+    it('Architecture Graph does NOT appear in any panel on customer-app:hero', () => {
+        initApp('#customer-app/hero');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Graph');
+        expect(allItems).not.toContain('Architecture graph');
+    });
+
+    it('Architecture Graph does NOT appear in any panel on customer-app:project-detail', () => {
+        initApp('#customer-app/project-detail');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Graph');
+        expect(allItems).not.toContain('Architecture graph');
+    });
+
+    it('Architecture Map and Architecture Graph are sibling items in the same panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Map');
+        expect(texts).toContain('Architecture Graph');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Architecture tools — customer-app isolation and inspector enforcement
+// Verifies that the customer-facing routes do not expose architecture tooling
+// and that the customer-app inspector design rules explicitly reject it.
+// ---------------------------------------------------------------------------
+describe('Architecture tools — customer-app isolation and inspector enforcement (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('customer-app:hero does not render an "Architecture and code" panel', () => {
+        expect(getPanelByEyebrow('Architecture and code')).toBeNull();
+    });
+
+    it('customer-app:hero does not have an "Architecture" metric card', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const archCard = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Architecture'
+        );
+        expect(archCard).toBeUndefined();
+    });
+
+    it('customer-app:hero lead panel actions do not reference architecture tools', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim().toLowerCase()
+        );
+        const archActions = actions.filter((a) => a.includes('architecture'));
+        expect(archActions).toHaveLength(0);
+    });
+
+    it('customer-app:hero inspector has a "Reject" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        expect(rejectSection).not.toBeUndefined();
+    });
+
+    it('customer-app:hero inspector "Reject" section lists "Architecture pressure"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Architecture pressure');
+    });
+
+    it('customer-app:hero inspector "Reject" section lists "Diagnostics in the customer viewport"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Diagnostics in the customer viewport');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Architecture Map and Graph — companion note and tool-page separation
+// Verifies that the Developer Portal companion note reinforces that the portal
+// provides quick access to architecture tools while the tool pages themselves
+// stay focused. This separation is a core design rule for both tools.
+// ---------------------------------------------------------------------------
+describe('Architecture Map and Graph — companion note and tool-page separation (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('developer-portal:hero renders a companion note with eyebrow "Reference move"', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        expect(companion).not.toBeUndefined();
+    });
+
+    it('companion note title references collapsible navigation and consistent tool grouping', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        const title = companion.querySelector('.panel-title');
+        expect(title.textContent).toContain('collapsible navigation system');
+    });
+
+    it('Architecture and code panel copy states "tool pages stay focused"', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent).toContain('tool pages stay focused');
+    });
+
+    it('Architecture and code panel copy states the portal gives quick access', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent).toContain('portal gives quick access');
+    });
+
+    it('developer-portal:hero inspector "Reject" section lists "Flat tool-card grid as the whole page"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Flat tool-card grid as the whole page');
+    });
+});
