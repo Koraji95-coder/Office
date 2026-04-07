@@ -640,12 +640,40 @@ The electrical drawing QA/QC workflow references an official PDF template publis
 
 **QA/QC Templates for General Electrical Construction Standards**
 - URL: [qa_templates_for_electrical_construction_standards.pdf](https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf)
-- Relevant section: **1.13 QA/QC template** — Minimum mandatory tests, including switchboards, distribution centres, and control centres.
+- Relevant section: **1.13 QA/QC Template** — Minimum mandatory tests for seven electrical construction categories.
+
+> **See also:** [`Knowledge/Research/20260406-electrical-qaqc-workflow-integration-standards.md`](../Knowledge/Research/20260406-electrical-qaqc-workflow-integration-standards.md) — covers how this template integrates with the end-to-end electrical construction workflow, the review-and-sign-off hierarchy, and Daily Desk integration.
 
 Use this template when:
 - Running an electrical drawing review against construction standards
 - Verifying that a drawing package satisfies the 1.13 QA/QC minimum mandatory test requirements
 - Generating a checklist prompt for the Engineering Desk grounded in official construction standards
+
+### Section 1.13 Mandatory Test Categories
+
+The Watercare QA/QC template defines minimum mandatory tests for seven electrical construction categories. Each category requires a signed QA/QC record sheet retained as a project deliverable.
+
+| # | Category | Mandatory Tests |
+|---|---|---|
+| 1 | **General Electrical Installation** | Earthing continuity, insulation resistance, polarity checks, functional tests before energisation |
+| 2 | **Cables and Conduit** | Installation inspection, cable pulling records, megger test results |
+| 3 | **Switchboards, Distribution Centres, and Control Centres** | Termination checks, protection relay settings, interlocking verification, FAT/SAT records |
+| 4 | **Motors and Drives** | Rotation checks, no-load and full-load current measurements, thermal overload settings |
+| 5 | **Lighting and Small Power** | Circuit continuity, RCD trip-time testing, lux level verification |
+| 6 | **Instrumentation and Control Wiring** | Loop checks, signal calibration records, PLC I/O verification |
+| 7 | **Earthing and Bonding Systems** | Earth resistance measurements, bonding continuity records |
+
+### Workflow Integration: When Each Standard Applies
+
+QA/QC for electrical construction projects is a continuous chain across project phases:
+
+| Phase | Activity | Applicable Standard |
+|---|---|---|
+| 1 – Schematic Design | Verify code references, applicable standards, floor plan alignment | ELECTRICAL (ELEC) Schematic Design Checklist |
+| 2 – Design Development / IFC | Internal review for completeness, detail, and coordination | RAIC Appendix I – Internal Review of Drawings: Electrical |
+| 3 – Issued-for-Construction (IFC) | Final drawing release gate | Engineering Drawings Review Checklist (30+ items) |
+| 4 – Construction & Installation | Field QA/QC testing against constructed systems | **Watercare QA/QC Templates – section 1.13** |
+| 5 – Commissioning & Handover | Witness testing, sign-off sheets, as-built mark-ups | Watercare QA/QC Templates + commissioning plan |
 
 ### Prompt Pattern For 1.13 QA/QC Review
 
@@ -653,8 +681,20 @@ Use this template when:
 Use the Watercare QA/QC Templates for General Electrical Construction Standards (section 1.13).
 Source: https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf
 Review [drawing package or topic] against the minimum mandatory test requirements.
-Return a pass/fail checklist covering switchboards, distribution centres, and control centres.
+Return a pass/fail checklist covering all seven categories: general electrical installation,
+cables and conduit, switchboards/distribution centres/control centres, motors and drives,
+lighting and small power, instrumentation and control wiring, and earthing and bonding systems.
 Flag any items that are missing or unclear.
+```
+
+### Prompt Pattern For Category-Specific Review
+
+```text
+Use the Watercare QA/QC Templates for General Electrical Construction Standards (section 1.13).
+Source: https://wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf
+Focus on category [number and name, e.g. "3 – Switchboards, Distribution Centres, and Control Centres"].
+Return a pass/fail checklist of the mandatory tests for that category only.
+Include the required sign-off record for each test item.
 ```
 
 ## Current Practical Rule
