@@ -3,7 +3,7 @@ $userId = "1356296581472718988"
 
 try {
     $chatBody = @{
-        model    = "qwen3:14b"
+        model    = "mistral:7b"
         messages = @(@{ role = "user"; content = "Give me a daily brief. What should I focus on today?" })
         stream   = $false
     } | ConvertTo-Json -Depth 3
