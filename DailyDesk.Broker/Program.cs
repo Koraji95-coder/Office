@@ -827,243 +827,397 @@ app.MapPost("/api/knowledge/search", async (KnowledgeSearchRequest request, Offi
 
 app.MapGet("/api/jobs", (HttpContext httpContext, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var statusFilter = httpContext.Request.Query["status"].FirstOrDefault();
-    var typeFilter = httpContext.Request.Query["type"].FirstOrDefault();
-
-    IReadOnlyList<DailyDesk.Models.OfficeJob> jobs;
-    if (!string.IsNullOrWhiteSpace(statusFilter))
+    try
     {
-        jobs = orchestrator.JobStore.ListByStatus(statusFilter.ToLowerInvariant(), 50);
-    }
-    else
-    {
-        jobs = orchestrator.JobStore.ListRecent(50);
-    }
+        var statusFilter = httpContext.Request.Query["status"].FirstOrDefault();
+        var typeFilter = httpContext.Request.Query["type"].FirstOrDefault();
 
-    if (!string.IsNullOrWhiteSpace(typeFilter))
-    {
-        jobs = jobs.Where(j => j.Type.Equals(typeFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-    }
+        IReadOnlyList<DailyDesk.Models.OfficeJob> jobs;
+        if (!string.IsNullOrWhiteSpace(statusFilter))
+        {
+            jobs = orchestrator.JobStore.ListByStatus(statusFilter.ToLowerInvariant(), 50);
+        }
+        else
+        {
+            jobs = orchestrator.JobStore.ListRecent(50);
+        }
 
-    return Results.Ok(new { jobs, total = orchestrator.JobStore.GetTotalCount() });
+        if (!string.IsNullOrWhiteSpace(typeFilter))
+        {
+            jobs = jobs.Where(j => j.Type.Equals(typeFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        return Results.Ok(new { jobs, total = orchestrator.JobStore.GetTotalCount() });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/jobs");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 // --- Job Metrics Endpoint (Phase 4) ---
 
 app.MapGet("/api/jobs/metrics", (OfficeBrokerOrchestrator orchestrator) =>
 {
-    return Results.Ok(orchestrator.JobStore.GetMetrics());
+    try
+    {
+        return Results.Ok(orchestrator.JobStore.GetMetrics());
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/jobs/metrics");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapGet("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var job = orchestrator.JobStore.GetById(jobId);
-    if (job is null)
+    try
     {
-        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+        var job = orchestrator.JobStore.GetById(jobId);
+        if (job is null)
+        {
+            return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+        }
+        return Results.Ok(new
+        {
+            job.Id,
+            job.Type,
+            job.Status,
+            job.CreatedAt,
+            job.StartedAt,
+            job.CompletedAt,
+            job.Error,
+            job.RequestedBy,
+        });
     }
-    return Results.Ok(new
+    catch (Exception exception)
     {
-        job.Id,
-        job.Type,
-        job.Status,
-        job.CreatedAt,
-        job.StartedAt,
-        job.CompletedAt,
-        job.Error,
-        job.RequestedBy,
-    });
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/jobs/{jobId}");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapGet("/api/jobs/{jobId}/result", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var job = orchestrator.JobStore.GetById(jobId);
-    if (job is null)
-    {
-        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
-    }
-    if (job.Status != DailyDesk.Models.OfficeJobStatus.Succeeded)
-    {
-        return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Result is only available for succeeded jobs." });
-    }
-    if (string.IsNullOrWhiteSpace(job.ResultJson))
-    {
-        return Results.Ok(new { result = (object?)null });
-    }
-
     try
     {
-        var result = System.Text.Json.JsonSerializer.Deserialize<object>(job.ResultJson);
-        return Results.Ok(new { result });
+        var job = orchestrator.JobStore.GetById(jobId);
+        if (job is null)
+        {
+            return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+        }
+        if (job.Status != DailyDesk.Models.OfficeJobStatus.Succeeded)
+        {
+            return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Result is only available for succeeded jobs." });
+        }
+        if (string.IsNullOrWhiteSpace(job.ResultJson))
+        {
+            return Results.Ok(new { result = (object?)null });
+        }
+
+        try
+        {
+            var result = System.Text.Json.JsonSerializer.Deserialize<object>(job.ResultJson);
+            return Results.Ok(new { result });
+        }
+        catch
+        {
+            return Results.Ok(new { result = job.ResultJson });
+        }
     }
-    catch
+    catch (Exception exception)
     {
-        return Results.Ok(new { result = job.ResultJson });
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/jobs/{jobId}/result");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
     }
 });
 
 app.MapDelete("/api/jobs/{jobId}", (string jobId, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var job = orchestrator.JobStore.GetById(jobId);
-    if (job is null)
+    try
     {
-        return Results.NotFound(new { error = $"Job '{jobId}' not found." });
-    }
-    if (job.Status is not (DailyDesk.Models.OfficeJobStatus.Succeeded or DailyDesk.Models.OfficeJobStatus.Failed))
-    {
-        return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Only completed (succeeded/failed) jobs can be deleted." });
-    }
+        var job = orchestrator.JobStore.GetById(jobId);
+        if (job is null)
+        {
+            return Results.NotFound(new { error = $"Job '{jobId}' not found." });
+        }
+        if (job.Status is not (DailyDesk.Models.OfficeJobStatus.Succeeded or DailyDesk.Models.OfficeJobStatus.Failed))
+        {
+            return Results.BadRequest(new { error = $"Job '{jobId}' has status '{job.Status}'. Only completed (succeeded/failed) jobs can be deleted." });
+        }
 
-    orchestrator.JobStore.DeleteById(jobId);
-    return Results.NoContent();
+        orchestrator.JobStore.DeleteById(jobId);
+        return Results.NoContent();
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/jobs/{jobId}");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 // --- Schedule Endpoints (Phase 8) ---
 
 app.MapGet("/api/schedules", (OfficeBrokerOrchestrator orchestrator) =>
 {
-    var schedules = orchestrator.SchedulerStore.ListAll();
-    return Results.Ok(new { schedules });
+    try
+    {
+        var schedules = orchestrator.SchedulerStore.ListAll();
+        return Results.Ok(new { schedules });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/schedules");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapPost("/api/schedules", (CreateScheduleRequest request, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var validator = new CreateScheduleRequestValidator();
-    var validation = validator.Validate(request);
-    if (!validation.IsValid)
+    try
     {
-        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+        var validator = new CreateScheduleRequestValidator();
+        var validation = validator.Validate(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+        }
+
+        var schedule = new DailyDesk.Models.JobSchedule
+        {
+            Name = request.Name,
+            JobType = request.JobType,
+            CronExpression = request.CronExpression,
+            Enabled = request.Enabled ?? true,
+            RequestPayload = request.RequestPayload,
+        };
+
+        var created = orchestrator.SchedulerStore.Create(schedule);
+        return Results.Created($"/api/schedules/{created.Id}", created);
     }
-
-    var schedule = new DailyDesk.Models.JobSchedule
+    catch (Exception exception)
     {
-        Name = request.Name,
-        JobType = request.JobType,
-        CronExpression = request.CronExpression,
-        Enabled = request.Enabled ?? true,
-        RequestPayload = request.RequestPayload,
-    };
-
-    var created = orchestrator.SchedulerStore.Create(schedule);
-    return Results.Created($"/api/schedules/{created.Id}", created);
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/schedules");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapPut("/api/schedules/{id}", (string id, UpdateScheduleRequest request, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var validator = new UpdateScheduleRequestValidator();
-    var validation = validator.Validate(request);
-    if (!validation.IsValid)
+    try
     {
-        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+        var validator = new UpdateScheduleRequestValidator();
+        var validation = validator.Validate(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+        }
+
+        var updated = orchestrator.SchedulerStore.Update(id, schedule =>
+        {
+            if (request.Name is not null) schedule.Name = request.Name;
+            if (request.CronExpression is not null) schedule.CronExpression = request.CronExpression;
+            if (request.Enabled.HasValue) schedule.Enabled = request.Enabled.Value;
+            if (request.RequestPayload is not null) schedule.RequestPayload = request.RequestPayload;
+        });
+
+        if (updated is null)
+        {
+            return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+        }
+
+        return Results.Ok(updated);
     }
-
-    var updated = orchestrator.SchedulerStore.Update(id, schedule =>
+    catch (Exception exception)
     {
-        if (request.Name is not null) schedule.Name = request.Name;
-        if (request.CronExpression is not null) schedule.CronExpression = request.CronExpression;
-        if (request.Enabled.HasValue) schedule.Enabled = request.Enabled.Value;
-        if (request.RequestPayload is not null) schedule.RequestPayload = request.RequestPayload;
-    });
-
-    if (updated is null)
-    {
-        return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/schedules/{id}");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
     }
-
-    return Results.Ok(updated);
 });
 
 app.MapDelete("/api/schedules/{id}", (string id, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var deleted = orchestrator.SchedulerStore.Delete(id);
-    if (!deleted)
+    try
     {
-        return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+        var deleted = orchestrator.SchedulerStore.Delete(id);
+        if (!deleted)
+        {
+            return Results.NotFound(new { error = $"Schedule '{id}' not found." });
+        }
+        return Results.NoContent();
     }
-    return Results.NoContent();
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/schedules/{id}");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 // --- Daily Run Endpoint (Phase 8) ---
 
 app.MapGet("/api/daily-run/latest", (OfficeBrokerOrchestrator orchestrator) =>
 {
-    var summary = orchestrator.GetLatestDailyRunSummary();
-    if (summary is null)
+    try
     {
-        return Results.Ok(new { message = "No daily run has been executed yet." });
+        var summary = orchestrator.GetLatestDailyRunSummary();
+        if (summary is null)
+        {
+            return Results.Ok(new { message = "No daily run has been executed yet." });
+        }
+        return Results.Ok(summary);
     }
-    return Results.Ok(summary);
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/daily-run/latest");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 // --- Workflow Endpoints (Phase 8) ---
 
 app.MapGet("/api/workflows", (OfficeBrokerOrchestrator orchestrator) =>
 {
-    var workflows = orchestrator.WorkflowStore.ListAll();
-    return Results.Ok(new { workflows });
+    try
+    {
+        var workflows = orchestrator.WorkflowStore.ListAll();
+        return Results.Ok(new { workflows });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/workflows");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapPost("/api/workflows", (CreateWorkflowRequest request, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var validator = new CreateWorkflowRequestValidator();
-    var validation = validator.Validate(request);
-    if (!validation.IsValid)
+    try
     {
-        return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
-    }
-
-    var template = new DailyDesk.Models.WorkflowTemplate
-    {
-        Name = request.Name,
-        Description = request.Description ?? string.Empty,
-        FailurePolicy = request.FailurePolicy ?? DailyDesk.Models.WorkflowFailurePolicy.Abort,
-        Steps = request.Steps.Select(s => new DailyDesk.Models.WorkflowStep
+        var validator = new CreateWorkflowRequestValidator();
+        var validation = validator.Validate(request);
+        if (!validation.IsValid)
         {
-            JobType = s.JobType,
-            Label = s.Label ?? string.Empty,
-            RequestPayload = s.RequestPayload,
-        }).ToList(),
-    };
+            return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+        }
 
-    var created = orchestrator.WorkflowStore.Create(template);
-    return Results.Created($"/api/workflows/{created.Id}", created);
+        var template = new DailyDesk.Models.WorkflowTemplate
+        {
+            Name = request.Name,
+            Description = request.Description ?? string.Empty,
+            FailurePolicy = request.FailurePolicy ?? DailyDesk.Models.WorkflowFailurePolicy.Abort,
+            Steps = request.Steps.Select(s => new DailyDesk.Models.WorkflowStep
+            {
+                JobType = s.JobType,
+                Label = s.Label ?? string.Empty,
+                RequestPayload = s.RequestPayload,
+            }).ToList(),
+        };
+
+        var created = orchestrator.WorkflowStore.Create(template);
+        return Results.Created($"/api/workflows/{created.Id}", created);
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/workflows");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapPost("/api/workflows/{id}/run", (string id, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var template = orchestrator.WorkflowStore.GetById(id);
-    if (template is null)
+    try
     {
-        return Results.NotFound(new { error = $"Workflow '{id}' not found." });
-    }
+        var template = orchestrator.WorkflowStore.GetById(id);
+        if (template is null)
+        {
+            return Results.NotFound(new { error = $"Workflow '{id}' not found." });
+        }
 
-    var jobIds = new List<string>();
-    foreach (var step in template.Steps)
-    {
-        var job = orchestrator.JobStore.Enqueue(
-            step.JobType,
-            requestedBy: $"workflow:{template.Name}",
-            requestPayload: step.RequestPayload);
-        jobIds.Add(job.Id);
-    }
+        var jobIds = new List<string>();
+        foreach (var step in template.Steps)
+        {
+            var job = orchestrator.JobStore.Enqueue(
+                step.JobType,
+                requestedBy: $"workflow:{template.Name}",
+                requestPayload: step.RequestPayload);
+            jobIds.Add(job.Id);
+        }
 
-    return Results.Accepted(value: new
+        return Results.Accepted(value: new
+        {
+            workflowId = id,
+            workflowName = template.Name,
+            jobIds,
+            totalSteps = template.Steps.Count,
+        });
+    }
+    catch (Exception exception)
     {
-        workflowId = id,
-        workflowName = template.Name,
-        jobIds,
-        totalSteps = template.Steps.Count,
-    });
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/workflows/{id}/run");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.MapDelete("/api/workflows/{id}", (string id, OfficeBrokerOrchestrator orchestrator) =>
 {
-    var deleted = orchestrator.WorkflowStore.Delete(id);
-    if (!deleted)
+    try
     {
-        return Results.NotFound(new { error = $"Workflow '{id}' not found or is a built-in template." });
+        var deleted = orchestrator.WorkflowStore.Delete(id);
+        if (!deleted)
+        {
+            return Results.NotFound(new { error = $"Workflow '{id}' not found or is a built-in template." });
+        }
+        return Results.NoContent();
     }
-    return Results.NoContent();
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Endpoint {Endpoint} failed", "/api/workflows/{id}");
+        return Results.Problem(
+            detail: "An unexpected error occurred. See server logs for details.",
+            statusCode: 500
+        );
+    }
 });
 
 app.Run();
