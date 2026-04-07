@@ -521,6 +521,240 @@ public sealed class ElectricalQaQcSection113IntegrationTests
         Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
     }
 
+    // =========================================================================
+    // Group 3b – Per-keyword heuristic validation
+    //            One test per new mentionsTechnical keyword, each using a
+    //            minimal answer that contains only that keyword so that the
+    //            assertion directly proves the keyword drives the score.
+    // =========================================================================
+
+    [Fact]
+    public async Task Section113_NewKeyword_Insulation_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Insulation resistance must be tested before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Megger_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "cables and conduit QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "A megger test confirms cable integrity before connection.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Earthing_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Earthing electrode installations are measured before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Bonding_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Bonding between all metallic enclosures must be confirmed.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Resistance_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Resistance of the earth loop path must be below the design limit.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Continuity_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Continuity of all circuit conductors is confirmed before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Calibration_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "instrumentation and control wiring QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Calibration certificates are required for every field instrument.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Relay_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboard QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Protection relay pickup values must be confirmed before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Overload_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Overload relay settings must match the motor nameplate full-load current.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_Rotation_ScoresTechnicalCorrectness()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Rotation direction of every motor must be confirmed before coupling the load.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NewKeyword_AllTen_InOneAnswer_ScoresTechnicalCorrectnessThree()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        // Answer deliberately contains all 10 new keywords so the test acts as a
+        // single integration-wide smoke-test for the mentionsTechnical heuristic.
+        var answer =
+            "Insulation resistance is measured with a megger. "
+            + "Earthing electrode resistance is below the limit. "
+            + "Bonding continuity is verified for all enclosures. "
+            + "Calibration of instruments is confirmed. "
+            + "Protection relay settings are set. "
+            + "Motor overload relay matches nameplate current. "
+            + "Rotation direction is confirmed before coupling the load.";
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            answer,
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(3, technical.Score);
+    }
+
+    [Fact]
+    public async Task Section113_NoNewKeyword_WithoutAnyTechnicalTerm_ScoresTechnicalCorrectnessTwo()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Everything should be done carefully before starting.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
+        Assert.Equal(2, technical.Score);
+    }
+
     [Fact]
     public async Task Section113_FallbackScoring_TradeoffKeyword_ScoresTradeoffReasoning()
     {
