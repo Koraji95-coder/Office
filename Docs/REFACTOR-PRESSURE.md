@@ -18,7 +18,7 @@ These areas actively slow down new feature development and increase the risk of 
 
 | | |
 |---|---|
-| **File** | `DailyDesk.Core/Services/OfficeBrokerOrchestrator.cs` |
+| **Files** | `DailyDesk.Core/Services/OfficeBrokerOrchestrator.cs`, `DailyDesk.Core/Services/MLPipelineCoordinator.cs` |
 | **Size** | ~3,850 lines |
 | **Phase introduced** | Phase 1 (grew through Phase 9) |
 
@@ -34,7 +34,7 @@ The orchestrator is the single entry point for every operation — study session
 Split into domain coordinators:
 - `StudySessionCoordinator` — practice, defense, reflection, scoring.
 - `ResearchCoordinator` — research jobs, watchlist, enrichment.
-- `MLPipelineCoordinator` — ML job dispatch, result retrieval, export artifacts.
+- `MLPipelineCoordinator` — ML job dispatch, result retrieval, export artifacts. ✅ Extracted and wired: `OfficeBrokerOrchestrator` now holds `_mlPipelineCoordinator` and delegates all ML pipeline methods to it.
 - `KnowledgeCoordinator` — import, indexing, context building.
 
 Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordinators. The facade boundary means `Program.cs` endpoints do not change callers.

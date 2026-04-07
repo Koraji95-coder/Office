@@ -525,6 +525,28 @@ public sealed class OrchestratorGraphIntegrationTests
     }
 
     // -------------------------------------------------------------------------
+    // Group 6: OfficeBrokerOrchestrator delegates ML pipeline to MLPipelineCoordinator.
+    //
+    // These tests verify that OfficeBrokerOrchestrator contains the extracted
+    // MLPipelineCoordinator as a dependency, enforcing the facade pattern
+    // described in REFACTOR-PRESSURE.md entry #1.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void OrchestratorGraph_OfficeBrokerOrchestrator_ContainsMlPipelineCoordinatorField()
+    {
+        // Verifies that OfficeBrokerOrchestrator has an _mlPipelineCoordinator field —
+        // the structural evidence that ML pipeline work is delegated to the extracted
+        // coordinator rather than implemented inline in the orchestrator.
+        var field = typeof(OfficeBrokerOrchestrator).GetField(
+            "_mlPipelineCoordinator",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        Assert.NotNull(field);
+        Assert.Equal(typeof(MLPipelineCoordinator), field!.FieldType);
+    }
+
+    // -------------------------------------------------------------------------
     // Private stub
     // -------------------------------------------------------------------------
 
