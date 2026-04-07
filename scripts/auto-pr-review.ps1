@@ -10,8 +10,8 @@ try {
 } catch {}
 
 if (-not $ollamaRunning) {
-    Write-Host "Loading qwen3:14b..."
-    Start-Process -FilePath "ollama" -ArgumentList "run qwen3:14b" -WindowStyle Hidden
+    Write-Host "Loading mistral:7b..."
+    Start-Process -FilePath "ollama" -ArgumentList "run mistral:7b" -WindowStyle Hidden
     Start-Sleep -Seconds 30
 }
 
@@ -270,7 +270,7 @@ Provide your review:
 "@
 
             $chatBody = @{
-                model    = "qwen3:14b"
+                model    = "mistral:7b"
                 messages = @(@{ role = "user"; content = $reviewPrompt })
                 stream   = $false
             } | ConvertTo-Json -Depth 3
@@ -321,7 +321,7 @@ Provide your review:
             # Submit GitHub PR review
             try {
                 $reviewBody = @{
-                    body  = "## Auto-Review (Ollama) — Score: $score/10`n`n$review$overlapNote`n`n---`n*Automated review powered by qwen3:14b + RAG context | Scoring Engine v2*"
+                    body  = "## Auto-Review (Ollama) — Score: $score/10`n`n$review$overlapNote`n`n---`n*Automated review powered by mistral:7b + RAG context | Scoring Engine v2*"
                     event = $ghReviewEvent
                 } | ConvertTo-Json -Compress
                 Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($reviewBody)) | Out-Null
@@ -447,6 +447,7 @@ Provide your review:
 
 $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
 Write-Host "`n=== Review cycle complete ==="
+
 
 
 
