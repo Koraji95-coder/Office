@@ -30,6 +30,7 @@ _STATIC_UNEXPECTED_ERROR = (
     "An unexpected error occurred. See server logs for details."
 )
 _STATIC_JSON_ERROR = "Invalid JSON input."
+_STATIC_FILE_NOT_FOUND_ERROR = "Input file not found."
 
 _MINIMAL_VALID_INPUT = json.dumps(
     {
@@ -211,6 +212,54 @@ class TestHappyPath(unittest.TestCase):
     def test_empty_json_object_returns_ok_true(self):
         result = _run_main_with_input("{}")
         self.assertTrue(result["ok"])
+
+
+# ---------------------------------------------------------------------------
+# Group 4: FileNotFoundError path
+# ---------------------------------------------------------------------------
+class TestFileNotFoundErrorPath(unittest.TestCase):
+    """_read_input() raising FileNotFoundError must produce a compliant static error."""
+
+    def _run_with_file_not_found(self) -> dict:
+        """Run main() with _read_input patched to raise FileNotFoundError."""
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("/no/such/file.json")):
+            captured = StringIO()
+            with patch("sys.stdout", captured):
+                _module.main()
+        return json.loads(captured.getvalue().strip())
+
+    def test_file_not_found_returns_ok_false(self):
+        result = self._run_with_file_not_found()
+        self.assertFalse(result["ok"])
+
+    def test_file_not_found_returns_static_error_string(self):
+        result = self._run_with_file_not_found()
+        self.assertEqual(result["error"], _STATIC_FILE_NOT_FOUND_ERROR)
+
+    def test_file_not_found_error_has_no_path_details(self):
+        """The error value must be a static string, not a dynamic file path."""
+        result = self._run_with_file_not_found()
+        self.assertNotIn("/no/such/file.json", result["error"])
+
+    def test_file_not_found_error_is_distinct_from_unexpected_error(self):
+        """FileNotFoundError must produce a different message than the generic unexpected error."""
+        result = self._run_with_file_not_found()
+        self.assertNotEqual(result["error"], _STATIC_UNEXPECTED_ERROR)
+
+    def test_file_not_found_error_is_distinct_from_json_error(self):
+        """FileNotFoundError must produce a different message than the JSON decode error."""
+        result = self._run_with_file_not_found()
+        self.assertNotEqual(result["error"], _STATIC_JSON_ERROR)
+
+    def test_read_input_with_nonexistent_argv_path_returns_static_error(self):
+        """Passing --input with a nonexistent path must produce the static file-not-found error."""
+        with patch("sys.argv", ["ml_suite_artifacts.py", "--input", "/tmp/nonexistent_ml_suite_input_xyz.json"]):
+            captured = StringIO()
+            with patch("sys.stdout", captured):
+                _module.main()
+        result = json.loads(captured.getvalue().strip())
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], _STATIC_FILE_NOT_FOUND_ERROR)
 
 
 if __name__ == "__main__":
