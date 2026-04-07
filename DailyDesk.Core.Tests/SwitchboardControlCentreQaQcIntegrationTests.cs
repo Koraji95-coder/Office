@@ -15,6 +15,25 @@ namespace DailyDesk.Core.Tests;
 public sealed class SwitchboardControlCentreQaQcIntegrationTests
 {
     // -------------------------------------------------------------------------
+    // Shared constants – section 1.13 category 3 mandatory checks and device types
+    // -------------------------------------------------------------------------
+
+    private static readonly string[] MandatoryChecks =
+    [
+        "termination checks",
+        "protection relay settings",
+        "interlocking verification",
+        "FAT/SAT records",
+    ];
+
+    private static readonly string[] DeviceTypes =
+    [
+        "switchboard",
+        "distribution centre",
+        "control centre",
+    ];
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -829,6 +848,215 @@ public sealed class SwitchboardControlCentreQaQcIntegrationTests
         );
 
         Assert.False(string.IsNullOrWhiteSpace(evaluation.NextReviewRecommendation));
+    }
+
+    // =========================================================================
+    // Group 7 – Per-Device Mandatory Check Coverage
+    // (All four mandatory checks from Watercare QA/QC template section 1.13
+    // category 3 verified for each of the three device types)
+    // =========================================================================
+
+    [Fact]
+    public async Task Section3_FallbackScoring_TerminationKeyword_Switchboard_ScoresTechnicalThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboard QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "All switchboard termination checks must be completed to the standard torque values "
+            + "before energisation, with each termination point inspected against the standard drawing.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_TerminationKeyword_DistributionCentre_ScoresTechnicalThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "distribution centre QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Distribution centre termination checks must confirm all bus bar connections meet the "
+            + "standard installation requirements before the protection relay is commissioned.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_TerminationKeyword_ControlCentre_ScoresTechnicalThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "control centre QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Control centre termination checks ensure all control wiring connections meet the "
+            + "standard before PLC I/O loops are commissioned and verified.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_FatSatKeyword_Switchboard_ScoresValidationThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboard QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Switchboard FAT records must be checked to confirm that factory acceptance tests were "
+            + "completed before delivery, and the SAT must verify on-site functionality before handover.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_FatSatKeyword_DistributionCentre_ScoresValidationThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "distribution centre QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Distribution centre FAT/SAT records must be reviewed to verify that all tests were "
+            + "completed and accepted before the site commissioning walk-down is conducted.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_InterlockingKeyword_Switchboard_ScoresValidationThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboard QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Switchboard interlocking must be tested to verify that incompatible closing sequences "
+            + "are blocked and the correct switching order is enforced by the interlock scheme.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_InterlockingKeyword_DistributionCentre_ScoresValidationThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "distribution centre QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Distribution centre interlocking must be verified to prevent parallel sources being "
+            + "accidentally closed together, which would test the protection coordination scheme.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public async Task Section3_FallbackScoring_RelaySettingsKeyword_ControlCentre_ScoresTechnicalThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "control centre QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Control centre protection relay settings must be verified against the approved standard "
+            + "co-ordination study before energisation of the control centre bus.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void Section3_ValidatesMandatoryCheckDeviceTypeMatrix()
+    {
+        // Verify that all four mandatory checks from Watercare QA/QC template section 1.13
+        // category 3 are represented for all three device types (12 combinations in total).
+        var scenarios = new List<OralDefenseScenario>();
+        foreach (var device in DeviceTypes)
+        {
+            foreach (var check in MandatoryChecks)
+            {
+                scenarios.Add(new OralDefenseScenario
+                {
+                    Topic = $"{device} QA/QC",
+                    Prompt =
+                        $"Describe the {check} requirements for a {device} under "
+                        + "Watercare QA/QC template section 1.13.",
+                    WhatGoodLooksLike =
+                        $"A strong answer addresses {check} for a {device} context.",
+                });
+            }
+        }
+
+        // 3 device types × 4 mandatory checks = 12 scenarios
+        Assert.Equal(12, scenarios.Count);
+
+        // Every mandatory check appears in at least one scenario prompt
+        foreach (var check in MandatoryChecks)
+        {
+            Assert.Contains(scenarios, s => s.Prompt.Contains(check));
+        }
+
+        // Every device type appears in at least one scenario topic
+        foreach (var device in DeviceTypes)
+        {
+            Assert.Contains(scenarios, s => s.Topic.Contains(device));
+        }
+
+        // All scenario fields are populated
+        Assert.All(scenarios, s => Assert.False(string.IsNullOrWhiteSpace(s.Topic)));
+        Assert.All(scenarios, s => Assert.False(string.IsNullOrWhiteSpace(s.Prompt)));
+        Assert.All(scenarios, s => Assert.False(string.IsNullOrWhiteSpace(s.WhatGoodLooksLike)));
     }
 
     // -------------------------------------------------------------------------
