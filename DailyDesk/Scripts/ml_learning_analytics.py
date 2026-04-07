@@ -428,12 +428,12 @@ def _sklearn_analytics(
         data = topic_accuracy.get(topic, {})
         attempts = data.get("attempts", [])
 
-        # Use forgetting curve to set optimal review interval
+        # Use forgetting curve to set optimal review interval.
+        # R = e^(-t/S) => solve for t when R = 0.6: t = S * ln(1/0.6)
         fc = heuristic["forgettingCurves"].get(topic, {})
         stability = fc.get("stability_days", 3.0)
-        # Schedule review when predicted retention drops below 0.6
         if stability > 0:
-            optimal_interval = max(1, int(stability * -math.log(0.6)))
+            optimal_interval = max(1, int(stability * math.log(1.0 / 0.6)))
             item["intervalDays"] = optimal_interval
             item["forgettingCurveInterval"] = True
 
