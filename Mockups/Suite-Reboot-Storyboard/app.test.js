@@ -1129,6 +1129,34 @@ describe('Developer Portal tool-detail — graduation and staging panels (develo
         expect(texts).toContain('Tighten customer-safe copy');
     });
 
+    it('"Graduation path" panel includes "Prove workflow value with operators"', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Prove workflow value with operators');
+    });
+
+    it('"Graduation path" panel includes "Remove lab-only controls from the route"', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Remove lab-only controls from the route');
+    });
+
+    it('"Graduation path" panel lists workflow steps in the correct order', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toEqual([
+            'Tighten customer-safe copy',
+            'Prove workflow value with operators',
+            'Remove lab-only controls from the route'
+        ]);
+    });
+
     it('renders the "Future product fit" panel', () => {
         expect(getPanelByEyebrow('Future product fit')).not.toBeNull();
     });
