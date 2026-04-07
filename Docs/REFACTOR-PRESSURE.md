@@ -43,41 +43,11 @@ Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordin
 
 ---
 
-### 2. Broker Program.cs — All Endpoints in One File
-
-| | |
-|---|---|
-| **File** | `DailyDesk.Broker/Program.cs` |
-| **Size** | ~1,120 lines |
-| **Phase introduced** | Phase 1 (grew through Phase 9) |
-
-**What it does now:**
-All 30+ API endpoints are defined inline in `Program.cs`. Shared infrastructure (request records, service registration, middleware, and logging) is mixed with endpoint handler logic in the same file. Request record types are defined at the top of `Program.cs` while their corresponding validators live in the `DailyDesk.Broker/Validators/` folder, which means navigating between a record definition and its validation rules requires crossing files.
-
-**Why it is under pressure:**
-- Finding a specific endpoint requires searching through 1,000+ lines.
-- Adding a new endpoint family (e.g., a future customer API) means extending an already-dense file.
-- Service registration, middleware setup, and endpoint handlers are all interleaved, making each section harder to scan in isolation.
-
-**Refactor direction:**
-Extract endpoint groups into separate files using `IEndpointRouteBuilder` extension methods:
-- `StudyEndpoints.cs` — `/api/study/*`
-- `MLEndpoints.cs` — `/api/ml/*`, `/api/jobs/*`
-- `KnowledgeEndpoints.cs` — `/api/knowledge/*`, `/api/library/*`
-- `ScheduleEndpoints.cs` — `/api/schedules/*`, `/api/workflows/*`, `/api/daily-run/*`
-- `OperatorEndpoints.cs` — `/api/inbox/*`, `/api/operator/*`, `/api/workspace/*`
-
-Keep shared setup (Serilog, DI, middleware) in `Program.cs`. Endpoint groups call `app.MapStudyEndpoints()` etc.
-
-**Prerequisite:** None. This is additive restructuring. The test suite is not affected because tests call the orchestrator directly, not the endpoint handlers.
-
----
-
 ## Medium Pressure
 
 These areas add maintenance overhead but do not block current development.
 
-### 3. MLAnalyticsService — Redundant In-Memory TTL Cache
+### 2. MLAnalyticsService — Redundant In-Memory TTL Cache
 
 | | |
 |---|---|
@@ -100,11 +70,11 @@ Remove the in-memory TTL cache from `MLAnalyticsService`. Replace the three `_ca
 
 ---
 
-### 4. ML Endpoints — `?sync=true` Backward Compatibility Path
+### 3. ML Endpoints — `?sync=true` Backward Compatibility Path
 
 | | |
 |---|---|
-| **Files** | `DailyDesk.Broker/Program.cs` |
+| **Files** | `DailyDesk.Broker/Endpoints/MLEndpoints.cs` |
 | **Phase introduced** | Phase 3 (async job model) |
 | **Removal condition** | WPF client fully migrated to job polling (Phase 9 complete) |
 
@@ -130,7 +100,7 @@ After confirming no active callers use `?sync=true`:
 
 These areas are well-understood technical debt that does not need immediate action but should be tracked.
 
-### 5. Store JSON Export — Dropbox Compatibility Holdover
+### 4. Store JSON Export — Dropbox Compatibility Holdover
 
 | | |
 |---|---|
@@ -155,7 +125,7 @@ Once LiteDB has been proven stable across multiple workstations:
 
 ---
 
-### 6. WPF MainViewModel — Partial Class Growth
+### 5. WPF MainViewModel — Partial Class Growth
 
 | | |
 |---|---|
@@ -202,3 +172,4 @@ Keep a record of pressure areas that have been resolved so contributors understa
 | WPF client blocking on ML calls | Phase 9 | Added `JobPollingService` with async poll loop |
 | Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs` and `StudyValidators.cs`; deleted root-level `Validators.cs` |
 | PHASES-ROADMAP.md stale phase status | Tech Debt (chunk issue) | Updated status table: Phase 4 → ✅ Complete (health monitoring, JobRetentionWorker, PingAsync); Phase 5 → ✅ Complete (EmbeddingService, VectorStoreService, KnowledgeIndexStore) |
+| Broker Program.cs — All Endpoints in One File | Tech Debt (chunk issue) | Extracted 30+ endpoints into 8 dedicated `IEndpointRouteBuilder` extension files under `DailyDesk.Broker/Endpoints/`; request records co-located with their handlers; `Program.cs` reduced to ~70 lines of infrastructure setup |

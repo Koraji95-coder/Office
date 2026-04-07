@@ -110,7 +110,9 @@ Office/
 │   ├── ViewModels/         # WPF-specific MVVM
 │   └── Views/              # XAML views
 ├── DailyDesk.Broker/       # ASP.NET Core web service (localhost-only)
-│   └── Program.cs          # All endpoints defined here
+│   ├── Endpoints/          # IEndpointRouteBuilder extension classes (one per domain group)
+│   ├── Validators/         # FluentValidation validators (one file per domain group)
+│   └── Program.cs          # Infrastructure setup only (DI, middleware, hosted services)
 ├── DailyDesk.Core/         # Shared library (net10.0, no Windows dependency)
 │   └── Services/           # Core-only services (Orchestrator, SessionStore, etc.)
 ├── DailyDesk.Core.Tests/   # xUnit tests
@@ -125,7 +127,7 @@ Office/
 |-------------|----------|-----|
 | New service used by both WPF and Broker | `DailyDesk/Services/` | Auto-compiled into Core via link |
 | New model used everywhere | `DailyDesk/Models/` | Auto-compiled into Core via link |
-| Broker-only endpoint logic | `DailyDesk.Broker/Program.cs` | Endpoints live in Program.cs |
+| Broker-only endpoint logic | `DailyDesk.Broker/Endpoints/` | One static class per domain group; call `app.Map*Endpoints(logger)` in `Program.cs` |
 | Broker-only background service | `DailyDesk.Broker/` (new file) | Register in Program.cs |
 | Core-only service (no WPF dependency) | `DailyDesk.Core/Services/` | Direct file in Core project |
 | FluentValidation validators | `DailyDesk.Broker/Validators/` | Validation is an API boundary concern |
