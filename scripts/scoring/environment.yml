@@ -9,3 +9,4 @@ dependencies:
     - numpy>=2.4
     - gitpython
     - chromadb
+    - scipy>=1.15
