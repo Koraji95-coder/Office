@@ -18,6 +18,7 @@ All artifacts are deterministic and review-first (matching Suite's design philos
 """
 
 import json
+import os
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -210,6 +211,32 @@ def _build_watchdog_baseline(
     }
 
 
+def _resolve_state_root() -> str:
+    """Resolve the State root path: env var first, then Dropbox default."""
+    env_val = os.environ.get("OFFICE_STATE_ROOT", "")
+    if env_val:
+        return env_val
+    return os.path.join(
+        os.path.expanduser("~"),
+        "Dropbox",
+        "SuiteWorkspace",
+        "Office",
+        "State",
+    )
+
+
+def _load_scoring_model_metrics() -> dict[str, Any] | None:
+    """Load model-metrics.json from the State artifacts directory if it exists."""
+    try:
+        metrics_path = os.path.join(_resolve_state_root(), "ml-artifacts", "model-metrics.json")
+        if not os.path.exists(metrics_path):
+            return None
+        with open(metrics_path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 def main() -> None:
     try:
         raw = _read_input()
@@ -233,6 +260,10 @@ def main() -> None:
                 _build_watchdog_baseline(analytics, forecast),
             ],
         }
+
+        scoring_model_metrics = _load_scoring_model_metrics()
+        if scoring_model_metrics is not None:
+            artifacts["scoringModelMetrics"] = scoring_model_metrics
 
         print(json.dumps(artifacts, ensure_ascii=False))
     except Exception:
