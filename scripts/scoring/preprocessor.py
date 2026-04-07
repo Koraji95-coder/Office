@@ -310,44 +310,86 @@ def _classify_area(files) -> str:
     return max(area_counts, key=area_counts.get)
 
 
+def _resolve_state_root() -> str:
+    """Resolve the State root path: env var first, then Dropbox default."""
+    env_val = os.environ.get("OFFICE_STATE_ROOT", "")
+    if env_val:
+        return env_val
+    return os.path.join(
+        os.path.expanduser("~"),
+        "Dropbox",
+        "SuiteWorkspace",
+        "Office",
+        "State",
+    )
+
+
 def _ml_historical_score(pr_data, full_memory, area) -> tuple[int, str]:
-    """Use scikit-learn to predict merge likelihood from historical features."""
+    """Use scikit-learn to predict merge likelihood from historical features.
+
+    Attempts to load a persisted model from State/ml-artifacts/pr-scorer-model.joblib
+    first. Falls back to training an ephemeral model if loading fails or the file
+    does not exist.
+    """
     import numpy as np
     from sklearn.ensemble import GradientBoostingClassifier
 
-    # Build training data from memory
-    X = []
-    y = []
-    for entry in full_memory:
-        decision = entry.get("decision", "")
-        if decision not in ("auto-merged", "rejected", "closed"):
-            continue
-        entry_files = entry.get("files") or []
-        features = _extract_features(entry, entry_files)
-        X.append(features)
-        y.append(1 if decision == "auto-merged" else 0)
+    clf = None
+    model_source = "ephemeral"
 
-    if len(X) < 10 or len(set(y)) < 2:
-        raise ValueError("Insufficient training data")
+    # Try to load persisted model
+    try:
+        import joblib
+        model_path = os.path.join(_resolve_state_root(), "ml-artifacts", "pr-scorer-model.joblib")
+        if os.path.exists(model_path):
+            clf = joblib.load(model_path)
+            model_source = "persisted"
+    except Exception:
+        clf = None
+        model_source = "ephemeral"
 
-    X_arr = np.array(X, dtype=np.float64)
-    y_arr = np.array(y, dtype=np.int64)
+    if clf is None:
+        # Train an ephemeral model on the spot
+        X = []
+        y = []
+        for entry in full_memory:
+            decision = entry.get("decision", "")
+            if decision not in ("auto-merged", "rejected", "closed"):
+                continue
+            entry_files = entry.get("files") or []
+            features = _extract_features(entry, entry_files)
+            X.append(features)
+            y.append(1 if decision == "auto-merged" else 0)
 
-    clf = GradientBoostingClassifier(
-        n_estimators=50, max_depth=3, random_state=42, min_samples_split=3
-    )
-    clf.fit(X_arr, y_arr)
+        if len(X) < 10 or len(set(y)) < 2:
+            raise ValueError("Insufficient training data")
+
+        X_arr = np.array(X, dtype=np.float64)
+        y_arr = np.array(y, dtype=np.int64)
+
+        clf = GradientBoostingClassifier(
+            n_estimators=50, max_depth=3, random_state=42, min_samples_split=3
+        )
+        clf.fit(X_arr, y_arr)
+        n_samples = len(X)
+    else:
+        # Count samples for reporting (from memory, same logic as training)
+        n_samples = sum(
+            1 for e in full_memory
+            if e.get("decision", "") in ("auto-merged", "rejected", "closed")
+        )
 
     # Predict for current PR
     pr_features = _extract_features(pr_data, pr_data.get("files", []))
     prob = clf.predict_proba(np.array([pr_features], dtype=np.float64))[0]
     merge_prob = prob[1] if len(prob) > 1 else prob[0]
 
+    reason_suffix = f"area: {area}, n={n_samples}, model_source: {model_source}"
     if merge_prob >= 0.7:
-        return 2, f"ML: {merge_prob:.0%} merge confidence (area: {area}, n={len(X)})"
+        return 2, f"ML: {merge_prob:.0%} merge confidence ({reason_suffix})"
     elif merge_prob >= 0.4:
-        return 1, f"ML: {merge_prob:.0%} merge confidence (area: {area}, n={len(X)})"
-    return 0, f"ML: {merge_prob:.0%} merge confidence (area: {area}, n={len(X)})"
+        return 1, f"ML: {merge_prob:.0%} merge confidence ({reason_suffix})"
+    return 0, f"ML: {merge_prob:.0%} merge confidence ({reason_suffix})"
 
 
 def _extract_features(entry, files) -> list[float]:
