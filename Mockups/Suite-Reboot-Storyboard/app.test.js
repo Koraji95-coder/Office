@@ -66,6 +66,33 @@ function getPanelByEyebrow(label) {
     return null;
 }
 
+/**
+ * Navigate to a route and return all visible panel item labels
+ * (both key-list strong elements and row-list row-label elements).
+ */
+function getVisiblePanelItemLabels(hash) {
+    initApp(hash);
+    return Array.from(
+        document.querySelectorAll('.key-row strong, .data-row .row-label')
+    ).map((el) => el.textContent.trim());
+}
+
+/**
+ * Return the text content of all list items under a named inspector section
+ * heading. The section is identified by the text of its h4 element.
+ * Returns null when the section is not found.
+ */
+function getInspectorSectionItems(sectionLabel) {
+    const sections = Array.from(
+        document.getElementById('inspector').querySelectorAll('.inspector-section')
+    );
+    const section = sections.find(
+        (s) => s.querySelector('h4').textContent.trim() === sectionLabel
+    );
+    if (!section) return null;
+    return Array.from(section.querySelectorAll('li')).map((li) => li.textContent.trim());
+}
+
 // ---------------------------------------------------------------------------
 // Review Queue component
 // ---------------------------------------------------------------------------
@@ -1770,27 +1797,15 @@ describe('Architecture Map — developer-portal tool isolation (developer-portal
     });
 
     it('Architecture Map does NOT appear in any panel on customer-app:hero', () => {
-        initApp('#customer-app/hero');
-        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
-            (el) => el.textContent.trim()
-        );
-        expect(allItems).not.toContain('Architecture Map');
+        expect(getVisiblePanelItemLabels('#customer-app/hero')).not.toContain('Architecture Map');
     });
 
     it('Architecture Map does NOT appear in any panel on customer-app:project-detail', () => {
-        initApp('#customer-app/project-detail');
-        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
-            (el) => el.textContent.trim()
-        );
-        expect(allItems).not.toContain('Architecture Map');
+        expect(getVisiblePanelItemLabels('#customer-app/project-detail')).not.toContain('Architecture Map');
     });
 
     it('Architecture Map does NOT appear in any panel on daily-desk:hero', () => {
-        initApp('#daily-desk/hero');
-        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
-            (el) => el.textContent.trim()
-        );
-        expect(allItems).not.toContain('Architecture Map');
+        expect(getVisiblePanelItemLabels('#daily-desk/hero')).not.toContain('Architecture Map');
     });
 
     it('"Launch Architecture Map" is the only architecture-tool CTA in the Workshop launcher', () => {
@@ -1842,21 +1857,15 @@ describe('Architecture Graph — tool presence across routes', () => {
     });
 
     it('Architecture Graph does NOT appear in any panel on customer-app:hero', () => {
-        initApp('#customer-app/hero');
-        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
-            (el) => el.textContent.trim()
-        );
-        expect(allItems).not.toContain('Architecture Graph');
-        expect(allItems).not.toContain('Architecture graph');
+        const items = getVisiblePanelItemLabels('#customer-app/hero');
+        expect(items).not.toContain('Architecture Graph');
+        expect(items).not.toContain('Architecture graph');
     });
 
     it('Architecture Graph does NOT appear in any panel on customer-app:project-detail', () => {
-        initApp('#customer-app/project-detail');
-        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
-            (el) => el.textContent.trim()
-        );
-        expect(allItems).not.toContain('Architecture Graph');
-        expect(allItems).not.toContain('Architecture graph');
+        const items = getVisiblePanelItemLabels('#customer-app/project-detail');
+        expect(items).not.toContain('Architecture Graph');
+        expect(items).not.toContain('Architecture graph');
     });
 
     it('Architecture Map and Architecture Graph are sibling items in the same panel', () => {
@@ -1902,39 +1911,15 @@ describe('Architecture tools — customer-app isolation and inspector enforcemen
     });
 
     it('customer-app:hero inspector has a "Reject" section', () => {
-        const sections = Array.from(
-            document.getElementById('inspector').querySelectorAll('.inspector-section')
-        );
-        const rejectSection = sections.find(
-            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
-        );
-        expect(rejectSection).not.toBeUndefined();
+        expect(getInspectorSectionItems('Reject')).not.toBeNull();
     });
 
     it('customer-app:hero inspector "Reject" section lists "Architecture pressure"', () => {
-        const sections = Array.from(
-            document.getElementById('inspector').querySelectorAll('.inspector-section')
-        );
-        const rejectSection = sections.find(
-            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
-        );
-        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
-            li.textContent.trim()
-        );
-        expect(items).toContain('Architecture pressure');
+        expect(getInspectorSectionItems('Reject')).toContain('Architecture pressure');
     });
 
     it('customer-app:hero inspector "Reject" section lists "Diagnostics in the customer viewport"', () => {
-        const sections = Array.from(
-            document.getElementById('inspector').querySelectorAll('.inspector-section')
-        );
-        const rejectSection = sections.find(
-            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
-        );
-        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
-            li.textContent.trim()
-        );
-        expect(items).toContain('Diagnostics in the customer viewport');
+        expect(getInspectorSectionItems('Reject')).toContain('Diagnostics in the customer viewport');
     });
 });
 
@@ -1981,15 +1966,6 @@ describe('Architecture Map and Graph — companion note and tool-page separation
     });
 
     it('developer-portal:hero inspector "Reject" section lists "Flat tool-card grid as the whole page"', () => {
-        const sections = Array.from(
-            document.getElementById('inspector').querySelectorAll('.inspector-section')
-        );
-        const rejectSection = sections.find(
-            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
-        );
-        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
-            li.textContent.trim()
-        );
-        expect(items).toContain('Flat tool-card grid as the whole page');
+        expect(getInspectorSectionItems('Reject')).toContain('Flat tool-card grid as the whole page');
     });
 });
