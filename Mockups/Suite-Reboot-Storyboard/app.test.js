@@ -958,3 +958,975 @@ describe('Workshop launcher — dense diagnostics deferral (developer-portal:her
         expect(items).toContain('Customer-visible lab language');
     });
 });
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control hero overall structure
+// Verifies that the runtime-control:hero view renders its full set of panels,
+// metrics, inspector rules, and dock items, conforming to the REFACTOR-PRESSURE
+// design principle that Runtime Control owns "compact, trustworthy, and
+// supportable" workstation operations — distinct from the Developer Portal.
+// ---------------------------------------------------------------------------
+describe('Runtime Control hero overall structure (runtime-control:hero)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/hero');
+    });
+
+    it('sets the route title to "Runtime Control"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Runtime Control');
+    });
+
+    it('sets the route stage to "High-fidelity hero"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('High-fidelity hero');
+    });
+
+    it('sets the route kicker to include "Runtime Control"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Runtime Control');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Operational center"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Operational center');
+    });
+
+    it('renders the companion panel with eyebrow "Reference move"', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        expect(companion).not.toBeUndefined();
+    });
+
+    it('renders the Unified doctor panel', () => {
+        expect(getPanelByEyebrow('Unified doctor')).not.toBeNull();
+    });
+
+    it('renders the Support actions panel', () => {
+        expect(getPanelByEyebrow('Support actions')).not.toBeNull();
+    });
+
+    it('renders the Developer tools panel', () => {
+        expect(getPanelByEyebrow('Developer tools')).not.toBeNull();
+    });
+
+    it('renders the Watchdog panel', () => {
+        expect(getPanelByEyebrow('Watchdog')).not.toBeNull();
+    });
+
+    it('renders the Recent events panel', () => {
+        expect(getPanelByEyebrow('Recent events')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control hero: Unified doctor panel compliance
+// Verifies the Unified doctor panel correctly uses a row-list layout and
+// exposes all four subsystems using a single trust vocabulary, as required by
+// the REFACTOR-PRESSURE.md "one report, four subsystems, one trust vocabulary"
+// design principle.
+// ---------------------------------------------------------------------------
+describe('Runtime Control hero: Unified doctor panel (runtime-control:hero)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/hero');
+    });
+
+    it('renders the Unified doctor panel', () => {
+        expect(getPanelByEyebrow('Unified doctor')).not.toBeNull();
+    });
+
+    it('shows the panel title "One report, four subsystems, one trust vocabulary"', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe('One report, four subsystems, one trust vocabulary');
+    });
+
+    it('shows the copy describing unified reporting intent', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent.trim()).toContain('without parallel status universes');
+    });
+
+    it('uses a row-list layout (not a key-list)', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('renders exactly four subsystem rows', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(4);
+    });
+
+    it('shows Frontend subsystem as "Ready"', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Frontend');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Ready');
+    });
+
+    it('shows Gateway subsystem as "Unavailable"', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Gateway');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Unavailable');
+    });
+
+    it('includes all four subsystem labels', () => {
+        const panel = getPanelByEyebrow('Unified doctor');
+        const labels = Array.from(panel.querySelectorAll('.row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(labels).toContain('Frontend');
+        expect(labels).toContain('Backend');
+        expect(labels).toContain('Gateway');
+        expect(labels).toContain('Watchdog');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control hero: inspector design rules compliance
+// Verifies the inspector for runtime-control:hero surfaces the correct Keep
+// and Reject rules. The "Keep" list must include centralised runtime dashboard
+// and integrated logs; the "Reject" list must exclude multiple health
+// vocabularies and Developer Portal content duplication.
+// ---------------------------------------------------------------------------
+describe('Runtime Control hero: inspector rules (runtime-control:hero)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/hero');
+    });
+
+    it('shows the inspector title "Runtime rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Runtime rules');
+    });
+
+    it('shows the inspector subtitle "Compact, trustworthy, and supportable."', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe('Compact, trustworthy, and supportable.');
+    });
+
+    it('includes a "Keep" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        expect(keepSection).not.toBeUndefined();
+    });
+
+    it('includes a "Reject" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        expect(rejectSection).not.toBeUndefined();
+    });
+
+    it('"Keep" section lists "Central runtime dashboard"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Central runtime dashboard');
+    });
+
+    it('"Keep" section lists "Integrated logs and terminal access"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Integrated logs and terminal access');
+    });
+
+    it('"Reject" section lists "Multiple health vocabularies"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Multiple health vocabularies');
+    });
+
+    it('"Reject" section lists "Developer portal content duplicated here"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Developer portal content duplicated here');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control diagnostics overall structure
+// Verifies that the runtime-control:diagnostics view renders its full set of
+// panels, metrics, and dock items, and that its inspector enforces the
+// "diagnostics should help resolve issues, not add a new workflow" principle.
+// ---------------------------------------------------------------------------
+describe('Runtime Control diagnostics overall structure (runtime-control:diagnostics)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/diagnostics');
+    });
+
+    it('sets the route title to "Diagnostics Detail"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Diagnostics Detail');
+    });
+
+    it('sets the route stage to "Structural detail"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('Structural detail');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Support detail"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Support detail');
+    });
+
+    it('renders the Log streams panel', () => {
+        expect(getPanelByEyebrow('Log streams')).not.toBeNull();
+    });
+
+    it('renders the Bundle contents panel', () => {
+        expect(getPanelByEyebrow('Bundle contents')).not.toBeNull();
+    });
+
+    it('renders the Restart safety panel', () => {
+        expect(getPanelByEyebrow('Restart safety')).not.toBeNull();
+    });
+
+    it('renders the Evidence chain panel', () => {
+        expect(getPanelByEyebrow('Evidence chain')).not.toBeNull();
+    });
+
+    it('renders the Support note panel', () => {
+        expect(getPanelByEyebrow('Support note')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control diagnostics: Bundle contents panel compliance
+// Verifies the Bundle contents panel uses a row-list layout with all three
+// required bundle components (Doctor snapshot, Runtime logs, Config masks).
+// ---------------------------------------------------------------------------
+describe('Runtime Control diagnostics: Bundle contents panel (runtime-control:diagnostics)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/diagnostics');
+    });
+
+    it('shows the panel title "Support export should be predictable"', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe('Support export should be predictable');
+    });
+
+    it('shows the copy describing bundle legibility requirement', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent.trim()).toBe('Bundle content must be legible before export.');
+    });
+
+    it('uses a row-list layout (not a key-list)', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('renders exactly three bundle component rows', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(3);
+    });
+
+    it('includes "Doctor snapshot" as a bundle component', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const labels = Array.from(panel.querySelectorAll('.row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(labels).toContain('Doctor snapshot');
+    });
+
+    it('includes "Runtime logs" as a bundle component', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const labels = Array.from(panel.querySelectorAll('.row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(labels).toContain('Runtime logs');
+    });
+
+    it('includes "Config masks" as a bundle component', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const labels = Array.from(panel.querySelectorAll('.row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(labels).toContain('Config masks');
+    });
+
+    it('shows Config masks value as "Included"', () => {
+        const panel = getPanelByEyebrow('Bundle contents');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Config masks');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Included');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Runtime Control diagnostics: inspector design rules compliance
+// Verifies the inspector for runtime-control:diagnostics surfaces the correct
+// Visible section items, ensuring diagnostics keeps the surface investigative
+// and not theatrical.
+// ---------------------------------------------------------------------------
+describe('Runtime Control diagnostics: inspector rules (runtime-control:diagnostics)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/diagnostics');
+    });
+
+    it('shows the inspector title "Support rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Support rules');
+    });
+
+    it('shows the inspector subtitle about resolving issues', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe(
+            'Diagnostics should help resolve issues, not add a new workflow.'
+        );
+    });
+
+    it('includes a "Visible" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        expect(visibleSection).not.toBeUndefined();
+    });
+
+    it('"Visible" section lists "Current issue summary"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Current issue summary');
+    });
+
+    it('"Visible" section lists "Evidence and timestamps"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Evidence and timestamps');
+    });
+
+    it('"Visible" section lists "Safe actions"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Safe actions');
+    });
+
+    it('"Visible" section lists "Bundle export path"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Bundle export path');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Developer Portal tool-detail overall structure
+// Verifies that the developer-portal:tool-detail view renders its full set of
+// panels and enforces the staging / graduation design principle: future product
+// tools need explicit staging, not accidental product exposure.
+// ---------------------------------------------------------------------------
+describe('Developer Portal tool-detail overall structure (developer-portal:tool-detail)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/tool-detail');
+    });
+
+    it('sets the route title to "Tool Detail"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Tool Detail');
+    });
+
+    it('sets the route stage to "Structural detail"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('Structural detail');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Single-tool readiness"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe(
+            'Single-tool readiness'
+        );
+    });
+
+    it('renders the Launch readiness panel', () => {
+        expect(getPanelByEyebrow('Launch readiness')).not.toBeNull();
+    });
+
+    it('renders the Graduation path panel', () => {
+        expect(getPanelByEyebrow('Graduation path')).not.toBeNull();
+    });
+
+    it('renders the Future product fit panel', () => {
+        expect(getPanelByEyebrow('Future product fit')).not.toBeNull();
+    });
+
+    it('renders the Proof inputs panel', () => {
+        expect(getPanelByEyebrow('Proof inputs')).not.toBeNull();
+    });
+
+    it('renders the Route hygiene panel', () => {
+        expect(getPanelByEyebrow('Route hygiene')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Developer Portal tool-detail: Launch readiness and Graduation path
+// Verifies that the launch readiness panel uses a row-list layout to expose
+// runtime dependency states, and that the graduation path panel uses a
+// key-list layout to enumerate the three steps toward customer-safe release.
+// ---------------------------------------------------------------------------
+describe('Developer Portal tool-detail: Launch readiness and Graduation path (developer-portal:tool-detail)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/tool-detail');
+    });
+
+    it('Launch readiness panel uses a row-list layout', () => {
+        const panel = getPanelByEyebrow('Launch readiness');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('Launch readiness panel renders exactly three dependency rows', () => {
+        const panel = getPanelByEyebrow('Launch readiness');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(3);
+    });
+
+    it('Launch readiness panel shows "Frontend route" as "Available"', () => {
+        const panel = getPanelByEyebrow('Launch readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Frontend route');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Available');
+    });
+
+    it('Launch readiness panel shows "Gateway bridge" requiring attention', () => {
+        const panel = getPanelByEyebrow('Launch readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Gateway bridge');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Needs attention');
+    });
+
+    it('Graduation path panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+
+    it('Graduation path panel lists three graduation steps', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('Graduation path panel includes the customer-safe copy step', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Tighten customer-safe copy');
+    });
+
+    it('Graduation path panel includes the lab-only controls removal step', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Remove lab-only controls from the route');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Customer App hero overall structure
+// Verifies that the customer-app:hero view renders its full set of panels and
+// metrics, and that the inspector enforces the "Premium, calm, and
+// product-safe" design principle — no architecture pressure, no agent memory
+// surfaces, no repo hotspots in the customer viewport.
+// ---------------------------------------------------------------------------
+describe('Customer App hero overall structure (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('sets the route title to "Customer App"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Customer App');
+    });
+
+    it('sets the route stage to "High-fidelity hero"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('High-fidelity hero');
+    });
+
+    it('sets the route kicker to include "Customer App"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Customer App');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Mission board"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Mission board');
+    });
+
+    it('renders the Project readiness panel', () => {
+        expect(getPanelByEyebrow('Project readiness')).not.toBeNull();
+    });
+
+    it('renders the Review pressure panel', () => {
+        expect(getPanelByEyebrow('Review pressure')).not.toBeNull();
+    });
+
+    it('renders the Issue sets panel', () => {
+        expect(getPanelByEyebrow('Issue sets')).not.toBeNull();
+    });
+
+    it('renders the Transmittal queue panel', () => {
+        expect(getPanelByEyebrow('Transmittal queue')).not.toBeNull();
+    });
+
+    it('renders the Deadlines panel', () => {
+        expect(getPanelByEyebrow('Deadlines')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Customer App hero: Project readiness panel compliance
+// Verifies the Project readiness panel uses a row-list layout and lists the
+// three projects with their delivery states. This panel anchors the
+// customer-facing "mission board" framing.
+// ---------------------------------------------------------------------------
+describe('Customer App hero: Project readiness panel (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('shows the panel title "Projects should read like deliverable state, not system state"', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe(
+            'Projects should read like deliverable state, not system state'
+        );
+    });
+
+    it('shows the copy describing the readiness lens', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent.trim()).toBe('Readiness is the main customer lens.');
+    });
+
+    it('uses a row-list layout (not a key-list)', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('renders exactly three project rows', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(3);
+    });
+
+    it('includes "North Substation" as a project', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const labels = Array.from(panel.querySelectorAll('.row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(labels).toContain('North Substation');
+    });
+
+    it('shows North Substation as "Ready for review"', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('North Substation');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Ready for review');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Customer App hero: inspector design rules compliance
+// Verifies the inspector for customer-app:hero enforces the "Premium, calm,
+// product-safe" design principle. The Reject section must exclude architecture
+// pressure, agent memory surfaces, repo hotspots, and diagnostics.
+// ---------------------------------------------------------------------------
+describe('Customer App hero: inspector rules (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('shows the inspector title "Customer rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Customer rules');
+    });
+
+    it('shows the inspector subtitle "Premium, calm, and product-safe."', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe('Premium, calm, and product-safe.');
+    });
+
+    it('includes a "Keep" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        expect(keepSection).not.toBeUndefined();
+    });
+
+    it('includes a "Reject" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        expect(rejectSection).not.toBeUndefined();
+    });
+
+    it('"Keep" section lists "Project, issue, and deadline structure"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Project, issue, and deadline structure');
+    });
+
+    it('"Keep" section lists "Mission-board framing"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Mission-board framing');
+    });
+
+    it('"Reject" section lists "Architecture pressure"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Architecture pressure');
+    });
+
+    it('"Reject" section lists "Agent memory surfaces"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Agent memory surfaces');
+    });
+
+    it('"Reject" section lists "Diagnostics in the customer viewport"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Diagnostics in the customer viewport');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Customer App project-detail overall structure
+// Verifies that the customer-app:project-detail view renders its full set of
+// panels and enforces delivery-facing depth: only milestones, issue groups,
+// reference docs, and package prep belong here — no developer internals.
+// ---------------------------------------------------------------------------
+describe('Customer App project-detail overall structure (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('sets the route title to "Project Detail"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Project Detail');
+    });
+
+    it('sets the route stage to "Structural detail"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('Structural detail');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Project depth"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Project depth');
+    });
+
+    it('renders the Milestones panel', () => {
+        expect(getPanelByEyebrow('Milestones')).not.toBeNull();
+    });
+
+    it('renders the Reference library panel', () => {
+        expect(getPanelByEyebrow('Reference library')).not.toBeNull();
+    });
+
+    it('renders the Issue lane panel', () => {
+        expect(getPanelByEyebrow('Issue lane')).not.toBeNull();
+    });
+
+    it('renders the Package prep panel', () => {
+        expect(getPanelByEyebrow('Package prep')).not.toBeNull();
+    });
+
+    it('renders the Customer trust panel', () => {
+        expect(getPanelByEyebrow('Customer trust')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+
+    it('shows the inspector title "Project detail rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Project detail rules');
+    });
+
+    it('shows the inspector subtitle about delivery-facing depth', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe('Only delivery-facing depth belongs here.');
+    });
+
+    it('"Visible" section lists "Milestones"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        expect(visibleSection).not.toBeUndefined();
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Milestones');
+    });
+
+    it('"Visible" section lists "Package prep"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Package prep');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// chunk12 — Daily Desk hero overall structure
+// Verifies that the daily-desk:hero view renders its full set of panels,
+// metrics, and dock items, and that the inspector enforces the "command-first
+// operator console" design principle.
+// ---------------------------------------------------------------------------
+describe('Daily Desk hero overall structure (daily-desk:hero)', () => {
+    beforeAll(() => {
+        initApp('#daily-desk/hero');
+    });
+
+    it('sets the route title to "Daily Desk"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Daily Desk');
+    });
+
+    it('sets the route stage to "High-fidelity hero"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('High-fidelity hero');
+    });
+
+    it('sets the route kicker to include "Daily Desk"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Daily Desk');
+    });
+
+    it('renders four metrics cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders the lead panel with eyebrow "Command strip"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Command strip');
+    });
+
+    it('renders the Today stack panel', () => {
+        expect(getPanelByEyebrow('Today stack')).not.toBeNull();
+    });
+
+    it('renders the Inbox glance panel', () => {
+        expect(getPanelByEyebrow('Inbox glance')).not.toBeNull();
+    });
+
+    it('renders the Training panel', () => {
+        expect(getPanelByEyebrow('Training')).not.toBeNull();
+    });
+
+    it('renders the Research panel', () => {
+        expect(getPanelByEyebrow('Research')).not.toBeNull();
+    });
+
+    it('renders the Repo coach panel', () => {
+        expect(getPanelByEyebrow('Repo coach')).not.toBeNull();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+
+    it('shows the inspector title "Borrow rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Borrow rules');
+    });
+
+    it('inspector "Keep" section lists "Global command-first entry"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find((s) => s.querySelector('h4').textContent.trim() === 'Keep');
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Global command-first entry');
+    });
+
+    it('inspector "Reject" section lists "Card mosaics as the main layout"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Card mosaics as the main layout');
+    });
+});
