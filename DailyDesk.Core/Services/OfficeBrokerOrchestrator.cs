@@ -36,6 +36,7 @@ public sealed class OfficeBrokerOrchestrator
     private readonly OperatorMemoryStore _operatorMemoryStore;
     private readonly OfficeSessionStateStore _sessionStore;
     private readonly MLAnalyticsService _mlAnalyticsService;
+    private readonly MLPipelineCoordinator _mlPipelineCoordinator;
     private readonly OfficeDatabase _officeDatabase;
     private readonly OfficeJobStore _jobStore;
     private readonly MLResultStore _mlResultStore;
@@ -117,6 +118,7 @@ public sealed class OfficeBrokerOrchestrator
             resiliencePipeline: pythonPipeline,
             logger: lf.CreateLogger<MLAnalyticsService>()
         );
+        _mlPipelineCoordinator = new MLPipelineCoordinator(_mlAnalyticsService, _mlResultStore);
 
         // Phase 5: Semantic search services
         var ollamaUri = new Uri(_settings.OllamaEndpoint.EndsWith("/") ? _settings.OllamaEndpoint : $"{_settings.OllamaEndpoint}/");
@@ -3230,7 +3232,7 @@ public sealed class OfficeBrokerOrchestrator
         await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            var result = await _mlAnalyticsService.RunLearningAnalyticsAsync(
+            var result = await _mlPipelineCoordinator.RunMLAnalyticsAsync(
                 attempts,
                 decisions,
                 cancellationToken
@@ -3247,7 +3249,6 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
-            _mlResultStore.SaveAnalytics(result);
             return result;
         }
         finally
@@ -3276,7 +3277,7 @@ public sealed class OfficeBrokerOrchestrator
         await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            var result = await _mlAnalyticsService.RunProgressForecastAsync(
+            var result = await _mlPipelineCoordinator.RunMLForecastAsync(
                 attempts,
                 cancellationToken
             );
@@ -3292,7 +3293,6 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
-            _mlResultStore.SaveForecast(result);
             return result;
         }
         finally
@@ -3322,7 +3322,7 @@ public sealed class OfficeBrokerOrchestrator
         await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            var result = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+            var result = await _mlPipelineCoordinator.RunMLEmbeddingsAsync(
                 documents,
                 query,
                 cancellationToken
@@ -3339,7 +3339,6 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
-            _mlResultStore.SaveEmbeddings(result);
             return result;
         }
         finally
@@ -3372,37 +3371,10 @@ public sealed class OfficeBrokerOrchestrator
         await _mlGate.WaitAsync(cancellationToken);
         try
         {
-            // Run analytics, forecast, and embeddings in parallel — they are independent
-            var analyticsTask = _mlAnalyticsService.RunLearningAnalyticsAsync(
+            var pipelineResult = await _mlPipelineCoordinator.RunFullMLPipelineAsync(
                 attempts,
                 decisions,
-                cancellationToken
-            );
-            var forecastTask = _mlAnalyticsService.RunProgressForecastAsync(
-                attempts,
-                cancellationToken
-            );
-            var embeddingsTask = _mlAnalyticsService.RunDocumentEmbeddingsAsync(
                 documents,
-                null,
-                cancellationToken
-            );
-
-            await Task.WhenAll(analyticsTask, forecastTask, embeddingsTask);
-
-            var analytics = await analyticsTask;
-            var forecast = await forecastTask;
-            var embeddings = await embeddingsTask;
-
-            var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
-                analytics,
-                embeddings,
-                forecast,
-                cancellationToken
-            );
-
-            var exportPath = await _mlAnalyticsService.ExportArtifactsAsync(
-                artifacts,
                 _stateRootPath,
                 cancellationToken
             );
@@ -3410,10 +3382,10 @@ public sealed class OfficeBrokerOrchestrator
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                _latestMLAnalytics = analytics;
-                _latestMLForecast = forecast;
-                _latestMLEmbeddings = embeddings;
-                _lastMLArtifactExportPath = exportPath;
+                _latestMLAnalytics = pipelineResult.Analytics;
+                _latestMLForecast = pipelineResult.Forecast;
+                _latestMLEmbeddings = pipelineResult.Embeddings;
+                _lastMLArtifactExportPath = pipelineResult.ExportPath;
                 _lastMLRunAt = DateTimeOffset.Now;
             }
             finally
@@ -3421,17 +3393,13 @@ public sealed class OfficeBrokerOrchestrator
                 _gate.Release();
             }
 
-            _mlResultStore.SaveAnalytics(analytics);
-            _mlResultStore.SaveForecast(forecast);
-            _mlResultStore.SaveEmbeddings(embeddings);
-
             return new
             {
-                analytics,
-                forecast,
-                embeddings,
-                artifacts,
-                exportPath,
+                analytics = pipelineResult.Analytics,
+                forecast = pipelineResult.Forecast,
+                embeddings = pipelineResult.Embeddings,
+                artifacts = pipelineResult.Artifacts,
+                exportPath = pipelineResult.ExportPath,
             };
         }
         finally
