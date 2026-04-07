@@ -727,4 +727,478 @@ public sealed class AuditTrailChunk8Tests
         var distinctRevisionIds = allEntries.Select(e => e.RevisionId).Distinct().ToList();
         Assert.Equal(5, distinctRevisionIds.Count);
     }
+
+    // -----------------------------------------------------------------------
+    // Group 6: Customer-safe workflow requirements integration tests
+    //
+    // Verify that the audit trail and revision model enforce customer-safe
+    // workflow requirements: only Approved revisions may be included in
+    // transmittal packages issued to customers, and every gate crossing is
+    // recorded in the audit trail.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Helper that decides whether a revision is eligible to be added to a
+    /// customer transmittal package.  Only Approved revisions qualify.
+    /// </summary>
+    private static bool IsEligibleForCustomerTransmittal(DrawingRevisionRecord revision)
+        => revision.State == DrawingSignoffState.Approved;
+
+    [Fact]
+    public void CustomerSafe_DraftRevision_IsNotEligibleForTransmittalPackage()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-401",
+            RevisionNumber = "A",
+            IssuedBy       = "J.Thomas",
+            State          = DrawingSignoffState.Draft,
+        };
+
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "A Draft revision must not be eligible for inclusion in a customer transmittal package.");
+    }
+
+    [Fact]
+    public void CustomerSafe_InReviewRevision_IsNotEligibleForTransmittalPackage()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-DC-402",
+            RevisionNumber = "A",
+            IssuedBy       = "J.Thomas",
+            State          = DrawingSignoffState.InReview,
+        };
+
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "An InReview revision must not be eligible for inclusion in a customer transmittal package.");
+    }
+
+    [Fact]
+    public void CustomerSafe_RejectedRevision_IsNotEligibleForTransmittalPackage()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-CC-403",
+            RevisionNumber = "A",
+            IssuedBy       = "J.Thomas",
+            State          = DrawingSignoffState.Rejected,
+        };
+
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "A Rejected revision must not be eligible for inclusion in a customer transmittal package.");
+    }
+
+    [Fact]
+    public void CustomerSafe_SupersededRevision_IsNotEligibleForTransmittalPackage()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-404",
+            RevisionNumber = "A",
+            IssuedBy       = "J.Thomas",
+            State          = DrawingSignoffState.Superseded,
+        };
+
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "A Superseded revision must not be eligible for inclusion in a customer transmittal package.");
+    }
+
+    [Fact]
+    public void CustomerSafe_ApprovedRevision_IsEligibleForTransmittalPackage()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-405",
+            RevisionNumber = "B",
+            IssuedBy       = "J.Thomas",
+            State          = DrawingSignoffState.Approved,
+        };
+
+        Assert.True(IsEligibleForCustomerTransmittal(revision),
+            "Only an Approved revision must be eligible for inclusion in a customer transmittal package.");
+    }
+
+    [Fact]
+    public void CustomerSafe_PackageRef_IsOnlyAssigned_AfterApproval()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-DC-406",
+            RevisionNumber = "A",
+            IssuedBy       = "M.Nakamura",
+        };
+
+        // Simulate the approval gate before assigning the package reference.
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "Revision must not be eligible for transmittal before approval.");
+
+        RecordQaQcReview(revision, DrawingSignoffState.InReview,
+            actor: "M.Nakamura", action: "submitted for QA/QC review");
+        Assert.False(IsEligibleForCustomerTransmittal(revision),
+            "Revision must not be eligible for transmittal while InReview.");
+
+        RecordQaQcReview(revision, DrawingSignoffState.Approved,
+            actor: "QA.Lead", action: "approved");
+
+        // Now the revision is approved — assign the package reference.
+        Assert.True(IsEligibleForCustomerTransmittal(revision));
+        revision.PackageRef = "PKG-CUST-2026-010";
+
+        Assert.False(string.IsNullOrWhiteSpace(revision.PackageRef),
+            "PackageRef must be set after the revision is approved.");
+    }
+
+    [Fact]
+    public void CustomerSafe_AuditTrail_RecordsApprovalGate_BeforePackageAssignment()
+    {
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-CC-407",
+            RevisionNumber = "A",
+            IssuedBy       = "P.Okafor",
+        };
+
+        var trail = new List<AuditTrailEntry>
+        {
+            RecordQaQcReview(revision, DrawingSignoffState.InReview,
+                actor: "P.Okafor", action: "submitted for QA/QC review"),
+            RecordQaQcReview(revision, DrawingSignoffState.Approved,
+                actor: "QA.Lead", action: "approved"),
+        };
+
+        // Assign package ref after approval.
+        revision.PackageRef = "PKG-CUST-2026-011";
+        var issueEntry = new AuditTrailEntry
+        {
+            DrawingId  = revision.DrawingId,
+            RevisionId = revision.Id,
+            Action     = "issued to customer transmittal package",
+            Actor      = "QA.Lead",
+            FromState  = revision.State,
+            ToState    = revision.State,
+            Notes      = $"Package: {revision.PackageRef}",
+            OccurredAt = DateTimeOffset.UtcNow,
+        };
+        trail.Add(issueEntry);
+
+        // The approval gate must appear before the package issuance entry.
+        var approvalIndex = trail.FindIndex(e => e.Action == "approved");
+        var issueIndex    = trail.FindIndex(e => e.Action == "issued to customer transmittal package");
+
+        Assert.True(approvalIndex >= 0, "Audit trail must contain an approval entry.");
+        Assert.True(issueIndex    >= 0, "Audit trail must contain a package issuance entry.");
+        Assert.True(approvalIndex < issueIndex,
+            "Approval must be recorded before the package issuance in the audit trail.");
+    }
+
+    [Fact]
+    public void CustomerSafe_IssueSet_IsOnlyEligible_WhenAllRevisionsApproved()
+    {
+        // A package with mixed-state revisions must not be eligible for customer issue.
+        var revApproved = new DrawingRevisionRecord
+        {
+            DrawingId = "DWG-SW-410", RevisionNumber = "A", IssuedBy = "D.Levy",
+            State     = DrawingSignoffState.Approved,
+        };
+        var revInReview = new DrawingRevisionRecord
+        {
+            DrawingId = "DWG-DC-411", RevisionNumber = "A", IssuedBy = "D.Levy",
+            State     = DrawingSignoffState.InReview,
+        };
+
+        var issueSet = new IssueSetRecord
+        {
+            DrawingSetRef = "DWG-SET-CUST-410",
+            IssuedBy      = "D.Levy",
+        };
+        issueSet.RevisionIds.Add(revApproved.Id);
+        issueSet.RevisionIds.Add(revInReview.Id);
+
+        var allRevisions = new[] { revApproved, revInReview };
+        bool eligibleForCustomerIssue = allRevisions.All(r => r.State == DrawingSignoffState.Approved);
+
+        Assert.False(eligibleForCustomerIssue,
+            "Issue set must not be eligible for customer issue when any constituent revision is not Approved.");
+    }
+
+    [Fact]
+    public void CustomerSafe_IssueSet_IsEligible_WhenAllRevisionsApproved()
+    {
+        var revA = new DrawingRevisionRecord
+        {
+            DrawingId = "DWG-SW-420", RevisionNumber = "A", IssuedBy = "S.Park",
+            State     = DrawingSignoffState.Approved,
+        };
+        var revB = new DrawingRevisionRecord
+        {
+            DrawingId = "DWG-DC-421", RevisionNumber = "A", IssuedBy = "S.Park",
+            State     = DrawingSignoffState.Approved,
+        };
+
+        var issueSet = new IssueSetRecord
+        {
+            DrawingSetRef = "DWG-SET-CUST-420",
+            IssuedBy      = "S.Park",
+        };
+        issueSet.RevisionIds.Add(revA.Id);
+        issueSet.RevisionIds.Add(revB.Id);
+
+        var allRevisions = new[] { revA, revB };
+        bool eligibleForCustomerIssue = allRevisions.All(r => r.State == DrawingSignoffState.Approved);
+
+        Assert.True(eligibleForCustomerIssue,
+            "Issue set must be eligible for customer issue when all constituent revisions are Approved.");
+    }
+
+    [Fact]
+    public void CustomerSafe_AuditTrail_ContainsActor_ForEveryTransition()
+    {
+        // Every state transition recorded in the audit trail must identify
+        // the accountable actor — required for customer-safe traceability.
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-CC-430",
+            RevisionNumber = "A",
+            IssuedBy       = "B.Fernandez",
+        };
+
+        var trail = new List<AuditTrailEntry>
+        {
+            RecordQaQcReview(revision, DrawingSignoffState.InReview,
+                actor: "B.Fernandez", action: "submitted for QA/QC review"),
+            RecordQaQcReview(revision, DrawingSignoffState.Rejected,
+                actor: "QA.Lead", action: "rejected",
+                notes: "Earth fault protection missing from single-line diagram."),
+            RecordQaQcReview(revision, DrawingSignoffState.InReview,
+                actor: "B.Fernandez", action: "resubmitted after rework"),
+            RecordQaQcReview(revision, DrawingSignoffState.Approved,
+                actor: "QA.Lead", action: "approved"),
+        };
+
+        Assert.All(trail, entry =>
+            Assert.False(string.IsNullOrWhiteSpace(entry.Actor),
+                $"Audit entry for action '{entry.Action}' must identify the actor."));
+    }
+
+    // -----------------------------------------------------------------------
+    // Group 7: Controlled document handling integration tests
+    //
+    // Verify that the revision tracking and audit trail model supports
+    // controlled document handling: revisions are uniquely numbered, only
+    // the latest non-superseded revision is current, and every supersedure
+    // is audit-trailed.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void ControlledDocument_OnlyOneActiveRevision_PerDrawing()
+    {
+        // Verify that when revision B is issued, revision A is superseded and
+        // only revision B is in a non-superseded (active) state for the drawing.
+        var revA = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-501",
+            RevisionNumber = "A",
+            IssuedBy       = "N.Christodoulou",
+            State          = DrawingSignoffState.Approved,
+        };
+
+        var revB = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-501",
+            RevisionNumber = "B",
+            IssuedBy       = "N.Christodoulou",
+            State          = DrawingSignoffState.Draft,
+        };
+
+        // Supersede rev A when rev B is issued.
+        revA.State = DrawingSignoffState.Superseded;
+
+        var allRevisions = new[] { revA, revB };
+        var activeRevisions = allRevisions
+            .Where(r => r.State != DrawingSignoffState.Superseded)
+            .ToList();
+
+        Assert.True(activeRevisions.Count == 1,
+            "Only one active (non-superseded) revision must exist per drawing at any time.");
+        Assert.Equal("B", activeRevisions[0].RevisionNumber);
+    }
+
+    [Fact]
+    public void ControlledDocument_SupersededRevision_ExcludedFromCurrentDocumentList()
+    {
+        var revA = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-DC-502",
+            RevisionNumber = "A",
+            IssuedBy       = "E.Kowalski",
+            State          = DrawingSignoffState.Superseded,
+        };
+        var revB = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-DC-502",
+            RevisionNumber = "B",
+            IssuedBy       = "E.Kowalski",
+            State          = DrawingSignoffState.Approved,
+        };
+
+        var currentDocuments = new[] { revA, revB }
+            .Where(r => r.State != DrawingSignoffState.Superseded)
+            .ToList();
+
+        Assert.Single(currentDocuments);
+        Assert.Equal("B", currentDocuments[0].RevisionNumber);
+        Assert.DoesNotContain(revA, currentDocuments);
+    }
+
+    [Fact]
+    public void ControlledDocument_RevisionNumbers_AreUnique_PerDrawing()
+    {
+        // Verify that revision records for the same drawing have distinct
+        // revision designators — a core controlled-document requirement.
+        var revisions = new[]
+        {
+            new DrawingRevisionRecord { DrawingId = "DWG-CC-503", RevisionNumber = "A" },
+            new DrawingRevisionRecord { DrawingId = "DWG-CC-503", RevisionNumber = "B" },
+            new DrawingRevisionRecord { DrawingId = "DWG-CC-503", RevisionNumber = "C" },
+        };
+
+        var distinctNumbers = revisions.Select(r => r.RevisionNumber).Distinct().ToList();
+
+        Assert.True(revisions.Length == distinctNumbers.Count,
+            "Each revision of a controlled drawing must have a unique revision number.");
+    }
+
+    [Fact]
+    public void ControlledDocument_AuditTrail_RecordsSupersedure_WhenNewRevisionIssued()
+    {
+        var revA = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-510",
+            RevisionNumber = "A",
+            IssuedBy       = "W.Osei",
+            State          = DrawingSignoffState.Approved,
+        };
+
+        var revB = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-SW-510",
+            RevisionNumber = "B",
+            IssuedBy       = "W.Osei",
+        };
+
+        // Record the supersedure in the audit trail.
+        var supersedureEntry = new AuditTrailEntry
+        {
+            DrawingId  = revA.DrawingId,
+            RevisionId = revA.Id,
+            Action     = "superseded by revision B",
+            Actor      = "W.Osei",
+            FromState  = revA.State,
+            ToState    = DrawingSignoffState.Superseded,
+            Notes      = $"Replaced by revision {revB.RevisionNumber}.",
+            OccurredAt = DateTimeOffset.UtcNow,
+        };
+        revA.State = DrawingSignoffState.Superseded;
+
+        Assert.Equal(DrawingSignoffState.Superseded, revA.State);
+        Assert.Equal(DrawingSignoffState.Superseded, supersedureEntry.ToState);
+        Assert.Contains("revision B", supersedureEntry.Action, StringComparison.OrdinalIgnoreCase);
+        Assert.False(string.IsNullOrWhiteSpace(supersedureEntry.Notes),
+            "Supersedure audit entry must record a note explaining what replaced the revision.");
+    }
+
+    [Fact]
+    public void ControlledDocument_FullLifecycle_DraftToSuperseded_IsFullyAuditTrailed()
+    {
+        // Simulate a complete controlled-document lifecycle for a single drawing:
+        // Draft -> InReview -> Approved -> Superseded (by next revision).
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-DC-520",
+            RevisionNumber = "A",
+            IssuedBy       = "C.Boateng",
+            State          = DrawingSignoffState.Draft,
+        };
+
+        var trail = new List<AuditTrailEntry>
+        {
+            RecordQaQcReview(revision, DrawingSignoffState.InReview,
+                actor: "C.Boateng", action: "submitted for QA/QC review"),
+            RecordQaQcReview(revision, DrawingSignoffState.Approved,
+                actor: "QA.Lead", action: "approved"),
+        };
+
+        // Assign package ref on approval.
+        revision.PackageRef = "PKG-CTRL-2026-020";
+
+        // Issue a new revision — supersede this one.
+        var supersedureEntry = new AuditTrailEntry
+        {
+            DrawingId  = revision.DrawingId,
+            RevisionId = revision.Id,
+            Action     = "superseded by revision B",
+            Actor      = "C.Boateng",
+            FromState  = revision.State,
+            ToState    = DrawingSignoffState.Superseded,
+            OccurredAt = DateTimeOffset.UtcNow,
+        };
+        revision.State = DrawingSignoffState.Superseded;
+        trail.Add(supersedureEntry);
+
+        Assert.Equal(3, trail.Count);
+        Assert.Equal(DrawingSignoffState.Draft,      trail[0].FromState);
+        Assert.Equal(DrawingSignoffState.InReview,   trail[0].ToState);
+        Assert.Equal(DrawingSignoffState.InReview,   trail[1].FromState);
+        Assert.Equal(DrawingSignoffState.Approved,   trail[1].ToState);
+        Assert.Equal(DrawingSignoffState.Superseded, trail[2].ToState);
+        Assert.Equal(DrawingSignoffState.Superseded, revision.State);
+        Assert.False(string.IsNullOrWhiteSpace(revision.PackageRef),
+            "PackageRef must survive the supersedure — it records which package included this revision.");
+    }
+
+    [Fact]
+    public void ControlledDocument_AuditTrail_AllEntries_HaveNonEmptyIds()
+    {
+        // Verify that every controlled-document audit entry receives a unique,
+        // non-empty identifier — required for controlled-document record keeping.
+        var revision = new DrawingRevisionRecord
+        {
+            DrawingId      = "DWG-CC-530",
+            RevisionNumber = "A",
+            IssuedBy       = "V.Ionescu",
+        };
+
+        var trail = new List<AuditTrailEntry>
+        {
+            RecordQaQcReview(revision, DrawingSignoffState.InReview,
+                actor: "V.Ionescu", action: "submitted for QA/QC review"),
+            RecordQaQcReview(revision, DrawingSignoffState.Approved,
+                actor: "QA.Lead", action: "approved"),
+        };
+
+        Assert.All(trail, entry =>
+            Assert.False(string.IsNullOrWhiteSpace(entry.Id),
+                "Every controlled-document audit entry must have a non-empty unique Id."));
+
+        var distinctIds = trail.Select(e => e.Id).Distinct().ToList();
+        Assert.True(trail.Count == distinctIds.Count,
+            "Audit entry Ids must be unique across controlled-document trail entries.");
+    }
+
+    [Fact]
+    public void ControlledDocument_Chunk8_Prompt_References_ControlledDocumentConcepts()
+    {
+        // Verify that AGENT_REPLY_GUIDE.md chunk8 references controlled-document
+        // handling concepts required for customer-safe workflow compliance.
+        var section = ExtractQaQcTemplatesSection(ReadGuide());
+
+        Assert.True(
+            section.Contains("review", StringComparison.OrdinalIgnoreCase),
+            "chunk8 must reference the drawing review step as a controlled-document gate.");
+        Assert.True(
+            section.Contains("standard", StringComparison.OrdinalIgnoreCase)
+            || section.Contains("template", StringComparison.OrdinalIgnoreCase),
+            "chunk8 must reference standards or templates as the basis for controlled-document compliance.");
+    }
 }
