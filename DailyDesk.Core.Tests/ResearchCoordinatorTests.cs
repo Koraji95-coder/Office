@@ -4,6 +4,12 @@ using Xunit;
 
 namespace DailyDesk.Core.Tests;
 
+/// <summary>
+/// Integration tests for ResearchCoordinator domain logic — watchlist validation,
+/// lookup, mutation helpers, and persistence through OperatorMemoryStore (JSON-file
+/// fallback, no LiteDB) so the tests run safely in CI without database contention.
+/// </summary>
+[Collection("CoordinatorTests")]
 public sealed class ResearchCoordinatorTests
 {
     // -------------------------------------------------------------------------
@@ -341,5 +347,227 @@ public sealed class ResearchCoordinatorTests
         };
 
         Assert.False(watchlist.IsDue);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_IsDue_WhenOverdue_IsTrue()
+    {
+        var watchlist = new ResearchWatchlist
+        {
+            IsEnabled = true,
+            Frequency = "Daily",
+            LastRunAt = DateTimeOffset.Now.AddDays(-3), // ran 3 days ago, daily = overdue
+        };
+
+        Assert.True(watchlist.IsDue);
+    }
+
+    // -------------------------------------------------------------------------
+    // ResearchWatchlist.DueSummary
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ResearchWatchlist_DueSummary_NeverRun_ReturnsNeverRun()
+    {
+        var watchlist = new ResearchWatchlist { LastRunAt = null };
+
+        Assert.Equal("never run", watchlist.DueSummary);
+    }
+
+    [Fact]
+    public void ResearchWatchlist_DueSummary_AfterRun_ContainsFrequencyAndDates()
+    {
+        var runAt = new DateTimeOffset(2025, 6, 1, 10, 30, 0, TimeSpan.Zero);
+        var watchlist = new ResearchWatchlist
+        {
+            Frequency = "Weekly",
+            LastRunAt = runAt,
+        };
+
+        var summary = watchlist.DueSummary;
+
+        Assert.Contains("Weekly", summary, StringComparison.Ordinal);
+        Assert.Contains("2025-06-01", summary, StringComparison.Ordinal);
+    }
+
+    // -------------------------------------------------------------------------
+    // UpdateWatchlistLastRunAt — edge cases
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void UpdateWatchlistLastRunAt_NoMatchingId_AllEntriesReturnUnchanged()
+    {
+        var watchlists = new List<ResearchWatchlist>
+        {
+            MakeWatchlist("w1", "Topic A", "query A"),
+            MakeWatchlist("w2", "Topic B", "query B"),
+        };
+
+        var updated = ResearchCoordinator.UpdateWatchlistLastRunAt(
+            watchlists, "nonexistent", DateTimeOffset.UtcNow
+        );
+
+        Assert.All(updated, item => Assert.Null(item.LastRunAt));
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: SaveWatchlistsAsync with empty list
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SaveWatchlistsAsync_EmptyList_ReturnsStateWithNoWatchlists()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"research-coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var memoryStore = new OperatorMemoryStore(tempDir, db: null);
+            var coordinator = new ResearchCoordinator(memoryStore);
+
+            var state = await coordinator.SaveWatchlistsAsync([]);
+
+            Assert.Empty(state.Watchlists);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: full workflow — save, update LastRunAt, reload
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task FullWorkflow_SaveAndUpdate_ReloadReflectsLastRunAt()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"research-coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var memoryStore = new OperatorMemoryStore(tempDir, db: null);
+            var coordinator = new ResearchCoordinator(memoryStore);
+
+            var initial = new List<ResearchWatchlist>
+            {
+                MakeWatchlist("wf-1", "Transformer Protection", "transformer protection standards"),
+                MakeWatchlist("wf-2", "Arc Flash", "arc flash incident energy"),
+            };
+
+            // Save initial state
+            await coordinator.SaveWatchlistsAsync(initial);
+
+            // Simulate running watchlist wf-1 and updating LastRunAt
+            var runAt = DateTimeOffset.UtcNow;
+            var loaded = await coordinator.LoadMemoryStateAsync();
+            var updated = ResearchCoordinator.UpdateWatchlistLastRunAt(
+                loaded.Watchlists, "wf-1", runAt
+            );
+            await coordinator.SaveWatchlistsAsync(updated);
+
+            // Reload and verify
+            var reloaded = await coordinator.LoadMemoryStateAsync();
+            var wf1 = reloaded.Watchlists.First(item =>
+                item.Id.Equals("wf-1", StringComparison.OrdinalIgnoreCase));
+            var wf2 = reloaded.Watchlists.First(item =>
+                item.Id.Equals("wf-2", StringComparison.OrdinalIgnoreCase));
+
+            Assert.NotNull(wf1.LastRunAt);
+            Assert.Null(wf2.LastRunAt);
+            Assert.Equal("Transformer Protection", wf1.Topic);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: DueWatchlists reflects only overdue enabled entries
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task LoadMemoryStateAsync_DueWatchlists_ContainsOverdueEnabledOnly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"research-coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var memoryStore = new OperatorMemoryStore(tempDir, db: null);
+            var coordinator = new ResearchCoordinator(memoryStore);
+
+            var watchlists = new List<ResearchWatchlist>
+            {
+                new()
+                {
+                    Id = "due-1",
+                    Topic = "Overdue Enabled",
+                    Query = "query",
+                    IsEnabled = true,
+                    Frequency = "Daily",
+                    LastRunAt = DateTimeOffset.Now.AddDays(-5), // overdue
+                },
+                new()
+                {
+                    Id = "not-due-1",
+                    Topic = "Recent Enabled",
+                    Query = "query",
+                    IsEnabled = true,
+                    Frequency = "Weekly",
+                    LastRunAt = DateTimeOffset.Now.AddHours(-1), // ran recently
+                },
+                new()
+                {
+                    Id = "disabled-1",
+                    Topic = "Overdue Disabled",
+                    Query = "query",
+                    IsEnabled = false,
+                    Frequency = "Daily",
+                    LastRunAt = DateTimeOffset.Now.AddDays(-5), // overdue but disabled
+                },
+            };
+
+            await coordinator.SaveWatchlistsAsync(watchlists);
+            var state = await coordinator.LoadMemoryStateAsync();
+
+            Assert.Single(state.DueWatchlists);
+            Assert.Equal("due-1", state.DueWatchlists[0].Id);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cancellation
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SaveWatchlistsAsync_PreCancelledToken_ThrowsOperationCancelled()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"research-coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var memoryStore = new OperatorMemoryStore(tempDir, db: null);
+            var coordinator = new ResearchCoordinator(memoryStore);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var watchlists = new List<ResearchWatchlist>
+            {
+                MakeWatchlist("w1", "Cancel Test", "cancel query"),
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => coordinator.SaveWatchlistsAsync(watchlists, cts.Token)
+            );
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
     }
 }
