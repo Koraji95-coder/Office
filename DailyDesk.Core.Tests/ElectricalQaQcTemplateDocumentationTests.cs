@@ -8,9 +8,9 @@ namespace DailyDesk.Core.Tests;
 /// QA/QC Templates" section).
 ///
 /// The tests are structured in four groups:
-///   1. Section presence — verify the section header and template URL exist.
-///   2. Section 1.13 mandatory categories — verify all seven categories are documented.
-///   3. Workflow phase table — verify the five-phase workflow integration table is present.
+///   1. Section presence — verify the section header, template URL, and section 1.13 reference.
+///   2. Section 1.13 mandatory categories — verify all seven categories are documented in one pass.
+///   3. Workflow phase table — verify all five workflow phases appear.
 ///   4. Prompt patterns — verify the prompt pattern entries cover the required scope.
 /// </summary>
 public sealed class ElectricalQaQcTemplateDocumentationTests
@@ -47,7 +47,7 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
 
     /// <summary>
     /// Extracts the body of the "Electrical Construction QA/QC Templates" section
-    /// from AGENT_REPLY_GUIDE.md.
+    /// from AGENT_REPLY_GUIDE.md (up to the next top-level heading).
     /// </summary>
     private static string ExtractElectricalQaQcSection(string guide)
     {
@@ -70,14 +70,14 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
     public void AgentReplyGuide_Exists()
     {
         var path = GetAgentReplyGuidePath();
-        Assert.True(File.Exists(path), $"AGENT_REPLY_GUIDE.md must exist at DailyDesk/AGENT_REPLY_GUIDE.md; not found at: {path}");
+        Assert.True(File.Exists(path),
+            $"AGENT_REPLY_GUIDE.md must exist at DailyDesk/AGENT_REPLY_GUIDE.md; not found at: {path}");
     }
 
     [Fact]
     public void AgentReplyGuide_ContainsElectricalConstructionQaQcTemplatesSection()
     {
-        var guide = ReadGuide();
-        Assert.Contains("## Electrical Construction QA/QC Templates", guide);
+        Assert.Contains("## Electrical Construction QA/QC Templates", ReadGuide());
     }
 
     [Fact]
@@ -85,114 +85,26 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains(
-            "wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/media/watercare-media-library/electrical-standards/qa_templates_for_electrical_construction_standards.pdf",
+            "wslpwstoreprd.blob.core.windows.net/kentico-media-libraries-prod/watercarepublicweb/"
+            + "media/watercare-media-library/electrical-standards/"
+            + "qa_templates_for_electrical_construction_standards.pdf",
             section);
     }
 
     [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ReferencesSection113()
+    public void AgentReplyGuide_ElectricalQaQcSection_ReferencesSection113WithMandatoryCategoriesSubheading()
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains("1.13", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_MentionsMandatoryTests()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("mandatory", section, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsSection113MandatoryCategoriesSubheading()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains("Section 1.13 Mandatory Test Categories", section);
     }
 
     // =========================================================================
-    // Group 2 – Section 1.13 mandatory categories
+    // Group 2 – Section 1.13 mandatory categories (all seven in one pass)
     // =========================================================================
 
     [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory1_GeneralElectricalInstallation()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("General Electrical Installation", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory1_EarthingContinuity()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("earthing continuity", section, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory1_InsulationResistance()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("insulation resistance", section, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory2_CablesAndConduit()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Cables and Conduit", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory3_Switchboards()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Switchboards", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory3_DistributionCentres()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Distribution Centres", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory3_ControlCentres()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Control Centres", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory4_MotorsAndDrives()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Motors and Drives", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory5_LightingAndSmallPower()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Lighting and Small Power", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory6_InstrumentationAndControlWiring()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Instrumentation and Control Wiring", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsCategory7_EarthingAndBondingSystems()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Earthing and Bonding Systems", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ListsAllSevenCategories()
+    public void AgentReplyGuide_ElectricalQaQcSection_ListsAllSevenMandatoryCategories()
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
 
@@ -201,6 +113,8 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
             "General Electrical Installation",
             "Cables and Conduit",
             "Switchboards",
+            "Distribution Centres",
+            "Control Centres",
             "Motors and Drives",
             "Lighting and Small Power",
             "Instrumentation and Control Wiring",
@@ -208,48 +122,47 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
         };
 
         foreach (var category in requiredCategories)
-        {
             Assert.Contains(category, section);
-        }
+    }
+
+    [Fact]
+    public void AgentReplyGuide_ElectricalQaQcSection_ContainsKeyMandatoryTestTerms()
+    {
+        var section = ExtractElectricalQaQcSection(ReadGuide());
+
+        // Representative technical terms that must appear in the category table rows.
+        var requiredTerms = new[]
+        {
+            "earthing continuity",
+            "insulation resistance",
+            "sign-off record",
+        };
+
+        foreach (var term in requiredTerms)
+            Assert.Contains(term, section, StringComparison.OrdinalIgnoreCase);
     }
 
     // =========================================================================
-    // Group 3 – Workflow phase table
+    // Group 3 – Workflow phase table (all five phases in one pass)
     // =========================================================================
 
     [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsWorkflowIntegrationSubheading()
+    public void AgentReplyGuide_ElectricalQaQcSection_WorkflowIntegration_ListsAllFivePhases()
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains("Workflow Integration", section);
-    }
 
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_WorkflowTable_ContainsSchematicDesignPhase()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Schematic Design", section);
-    }
+        var requiredPhases = new[]
+        {
+            "Schematic Design",
+            "Design Development",
+            "Issued-for-Construction",
+            "Construction",
+            "Commissioning",
+        };
 
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_WorkflowTable_ContainsIssuedForConstructionPhase()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Issued-for-Construction", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_WorkflowTable_ContainsConstructionAndInstallationPhase()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Construction", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_WorkflowTable_ContainsCommissioningAndHandoverPhase()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("Commissioning", section);
+        foreach (var phase in requiredPhases)
+            Assert.Contains(phase, section);
     }
 
     // =========================================================================
@@ -257,34 +170,32 @@ public sealed class ElectricalQaQcTemplateDocumentationTests
     // =========================================================================
 
     [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsPromptPatternFor113Review()
+    public void AgentReplyGuide_ElectricalQaQcSection_ContainsBothPromptPatterns()
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains("Prompt Pattern For 1.13 QA/QC Review", section);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_FullReviewPrompt_ContainsAllSevenCategoryKeywords()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
-        // The full-review prompt should name all seven categories so the agent
-        // generates a complete pass/fail checklist without ambiguity.
-        Assert.Contains("cables and conduit", section, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("motors and drives", section, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("earthing and bonding", section, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_ContainsPromptPatternForCategorySpecificReview()
-    {
-        var section = ExtractElectricalQaQcSection(ReadGuide());
         Assert.Contains("Category-Specific Review", section);
     }
 
     [Fact]
-    public void AgentReplyGuide_ElectricalQaQcSection_CategoryPrompt_MentionsSignOffRecord()
+    public void AgentReplyGuide_ElectricalQaQcSection_FullReviewPrompt_NamesAllSevenCategoryGroups()
     {
         var section = ExtractElectricalQaQcSection(ReadGuide());
-        Assert.Contains("sign-off record", section, StringComparison.OrdinalIgnoreCase);
+
+        // The full-review prompt must enumerate all seven categories so the agent
+        // generates a complete pass/fail checklist without ambiguity.
+        var promptCategories = new[]
+        {
+            "general electrical installation",
+            "cables and conduit",
+            "switchboards",
+            "motors and drives",
+            "lighting and small power",
+            "instrumentation and control wiring",
+            "earthing and bonding",
+        };
+
+        foreach (var cat in promptCategories)
+            Assert.Contains(cat, section, StringComparison.OrdinalIgnoreCase);
     }
 }
