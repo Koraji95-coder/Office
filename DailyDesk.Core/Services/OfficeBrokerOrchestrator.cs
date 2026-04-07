@@ -52,6 +52,7 @@ public sealed class OfficeBrokerOrchestrator
     // Phase 6: Semantic Kernel agent orchestration
     private readonly OfficeKernelFactory _kernelFactory;
     private readonly Dictionary<string, DeskAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<OfficeBrokerOrchestrator> _logger;
 
     private bool _initialized;
     private DateTimeOffset _lastRefreshAt = DateTimeOffset.Now;
@@ -71,6 +72,7 @@ public sealed class OfficeBrokerOrchestrator
     public OfficeBrokerOrchestrator(OfficeBrokerRuntimeMetadata brokerMetadata, ILoggerFactory? loggerFactory = null)
     {
         var lf = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger = lf.CreateLogger<OfficeBrokerOrchestrator>();
         _brokerMetadata = brokerMetadata;
         _officeRootPath = ResolveOfficeRootPath(AppContext.BaseDirectory);
         var settingsRoot = Path.Combine(_officeRootPath, "DailyDesk");
@@ -219,7 +221,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            report.Ollama = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+            _logger.LogError(ex, "Ollama health check failed.");
+            report.Ollama = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Ollama health check failed. See server logs for details." };
         }
 
         // Python
@@ -232,7 +235,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            report.Python = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+            _logger.LogError(ex, "Python health check failed.");
+            report.Python = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Python health check failed. See server logs for details." };
         }
 
         // LiteDB
@@ -244,7 +248,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            report.LiteDB = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+            _logger.LogError(ex, "LiteDB health check failed.");
+            report.LiteDB = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Database health check failed. See server logs for details." };
         }
 
         // Job worker — check for stuck jobs as a signal of worker health
@@ -273,7 +278,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            report.JobWorker = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = ex.Message };
+            _logger.LogError(ex, "Job worker health check failed.");
+            report.JobWorker = new SubsystemHealth { Status = HealthStatus.Unavailable, Detail = "Job worker health check failed. See server logs for details." };
         }
 
         // Compute overall status
@@ -2698,7 +2704,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception exception)
         {
-            var failureSummary = $"Follow-through failed: {exception.Message}";
+            _logger.LogError(exception, "Follow-through failed for suggestion '{SuggestionId}'.", suggestion.Id);
+            var failureSummary = "Follow-through failed. See server logs for details.";
             _operatorMemoryState = await _operatorMemoryStore.UpdateSuggestionExecutionAsync(
                 suggestion.Id,
                 "failed",
@@ -3643,7 +3650,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            stepResults.Add(new DailyRunStepResult { Step = "RefreshState", Success = false, Error = ex.Message });
+            _logger.LogError(ex, "Daily run step 'RefreshState' failed.");
+            stepResults.Add(new DailyRunStepResult { Step = "RefreshState", Success = false, Error = "An unexpected error occurred. See server logs for details." });
         }
 
         // Step 2: Run ML pipeline
@@ -3654,7 +3662,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            stepResults.Add(new DailyRunStepResult { Step = "MLPipeline", Success = false, Error = ex.Message });
+            _logger.LogError(ex, "Daily run step 'MLPipeline' failed.");
+            stepResults.Add(new DailyRunStepResult { Step = "MLPipeline", Success = false, Error = "An unexpected error occurred. See server logs for details." });
         }
 
         // Step 3: Export Suite artifacts
@@ -3665,7 +3674,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            stepResults.Add(new DailyRunStepResult { Step = "ExportArtifacts", Success = false, Error = ex.Message });
+            _logger.LogError(ex, "Daily run step 'ExportArtifacts' failed.");
+            stepResults.Add(new DailyRunStepResult { Step = "ExportArtifacts", Success = false, Error = "An unexpected error occurred. See server logs for details." });
         }
 
         // Step 4: Knowledge indexing
@@ -3676,7 +3686,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            stepResults.Add(new DailyRunStepResult { Step = "KnowledgeIndex", Success = false, Error = ex.Message });
+            _logger.LogError(ex, "Daily run step 'KnowledgeIndex' failed.");
+            stepResults.Add(new DailyRunStepResult { Step = "KnowledgeIndex", Success = false, Error = "An unexpected error occurred. See server logs for details." });
         }
 
         // Step 5: Generate operator suggestions based on ML results
@@ -3708,7 +3719,8 @@ public sealed class OfficeBrokerOrchestrator
         }
         catch (Exception ex)
         {
-            stepResults.Add(new DailyRunStepResult { Step = "OperatorSuggestions", Success = false, Error = ex.Message });
+            _logger.LogError(ex, "Daily run step 'OperatorSuggestions' failed.");
+            stepResults.Add(new DailyRunStepResult { Step = "OperatorSuggestions", Success = false, Error = "An unexpected error occurred. See server logs for details." });
         }
 
         summary.CompletedAt = DateTimeOffset.Now;

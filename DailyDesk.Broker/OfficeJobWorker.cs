@@ -103,8 +103,8 @@ public sealed class OfficeJobWorker : BackgroundService
         }
         catch (Exception ex)
         {
-            _orchestrator.JobStore.MarkFailed(job.Id, ex.Message);
-            _logger.LogWarning(ex, "Job {JobId} failed.", job.Id);
+            _orchestrator.JobStore.MarkFailed(job.Id, "An unexpected error occurred. See server logs for details.");
+            _logger.LogError(ex, "Job {JobId} failed with an unhandled exception.", job.Id);
         }
     }
 
