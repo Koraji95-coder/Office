@@ -237,6 +237,18 @@ def _load_scoring_model_metrics() -> dict[str, Any] | None:
         return None
 
 
+def _load_analytics_model_metrics() -> dict[str, Any] | None:
+    """Load analytics-model-metrics.json if it exists; returns None otherwise."""
+    try:
+        metrics_path = os.path.join(_resolve_state_root(), "ml-artifacts", "analytics-model-metrics.json")
+        if os.path.exists(metrics_path):
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
 def main() -> None:
     try:
         raw = _read_input()
@@ -264,6 +276,10 @@ def main() -> None:
         scoring_model_metrics = _load_scoring_model_metrics()
         if scoring_model_metrics is not None:
             artifacts["scoringModelMetrics"] = scoring_model_metrics
+
+        analytics_model_metrics = _load_analytics_model_metrics()
+        if analytics_model_metrics is not None:
+            artifacts["analyticsModelMetrics"] = analytics_model_metrics
 
         print(json.dumps(artifacts, ensure_ascii=False))
     except Exception:
