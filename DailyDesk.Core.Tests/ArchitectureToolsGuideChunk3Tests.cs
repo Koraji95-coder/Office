@@ -329,4 +329,94 @@ public sealed class ArchitectureToolsGuideChunk3Tests
             "The following REFACTOR-PRESSURE.md file paths violate the relative-path requirement:\n"
             + string.Join("\n", violations));
     }
+
+    // -----------------------------------------------------------------------
+    // Group 4: Expanded chunk-3 structure — canonical source, navigation,
+    // priority tiers, and how-to guidance
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_ReferencesRefactorPressureDocument()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("REFACTOR-PRESSURE.md", StringComparison.Ordinal),
+            "Chunk 3 must reference the canonical source document 'REFACTOR-PRESSURE.md'.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_HasNavigationSubsection()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.Contains("### Navigation", chunk3, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_HasCanonicalSourceSubsection()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("### Canonical source", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("Canonical source", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 must include a 'Canonical source' subsection describing where the authoritative record lives.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_HasNoteFormatSubsection()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("### Note format", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("Note format", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 must include a 'Note format' subsection describing the required fields in a pressure note.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_DescribesAllPriorityTiers()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.Contains("High", chunk3, StringComparison.Ordinal);
+        Assert.Contains("Medium", chunk3, StringComparison.Ordinal);
+        Assert.Contains("Low", chunk3, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_DescribesHowToAddANote()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("How to add", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("add a note", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 must describe how to add a new refactor pressure note.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_DescribesHowToResolveANote()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("How to resolve", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("resolve a note", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 must describe how to resolve and archive a pressure note.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_MentionsResolvedArchive()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("archive", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("Resolved Pressure", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 must mention the Resolved Pressure archive so developers know where to move completed notes.");
+    }
+
+    [Fact]
+    public void ArchitectureToolsGuide_Chunk3_NavigationStepsMentionDeveloperPortal()
+    {
+        var chunk3 = ExtractChunk3(ReadGuide());
+        Assert.True(
+            chunk3.Contains("Developer Portal", StringComparison.OrdinalIgnoreCase)
+            || chunk3.Contains("developer portal", StringComparison.OrdinalIgnoreCase),
+            "Chunk 3 Navigation subsection must mention the Developer Portal as the entry point.");
+    }
 }

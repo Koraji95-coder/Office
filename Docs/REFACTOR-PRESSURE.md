@@ -126,36 +126,11 @@ After confirming no active callers use `?sync=true`:
 
 ---
 
-### 5. PHASES-ROADMAP.md — Stale Phase Status
-
-| | |
-|---|---|
-| **File** | `Docs/PHASES-ROADMAP.md` |
-| **Phase introduced** | N/A — documentation-only |
-
-**What it does now:**
-The roadmap status table shows Phase 4 (Observability & Health Monitoring) and Phase 5 (Semantic Search) as not started. Phase 6 through Phase 9 are marked complete.
-
-**Why it is under pressure:**
-- AI agents and contributors use the roadmap to understand what exists and what does not. Stale status creates misdirected work — agents may re-implement health monitoring or semantic search thinking they are greenfield tasks.
-- `CURRENT-STATE.md` fully documents Phase 5 (semantic search, Qdrant, knowledge indexing) but the roadmap does not reflect this.
-
-**Refactor direction:**
-Update the status table in `PHASES-ROADMAP.md`:
-- Phase 4 → ✅ Complete (health monitoring endpoints, `JobRetentionWorker`, `ProcessRunner.CheckPythonAsync`, `PingAsync` on `IModelProvider`).
-- Phase 5 → ✅ Complete (EmbeddingService, VectorStoreService, KnowledgeIndexStore, semantic context builder).
-
-Add a brief "what was done" summary for Phase 4 and Phase 5 consistent with the existing Phase 3–9 format.
-
-**Prerequisite:** None. Documentation-only change.
-
----
-
 ## Low Pressure
 
 These areas are well-understood technical debt that does not need immediate action but should be tracked.
 
-### 6. Store JSON Export — Dropbox Compatibility Holdover
+### 5. Store JSON Export — Dropbox Compatibility Holdover
 
 | | |
 |---|---|
@@ -180,7 +155,7 @@ Once LiteDB has been proven stable across multiple workstations:
 
 ---
 
-### 7. WPF MainViewModel — Partial Class Growth
+### 6. WPF MainViewModel — Partial Class Growth
 
 | | |
 |---|---|
@@ -226,3 +201,4 @@ Keep a record of pressure areas that have been resolved so contributors understa
 | No scheduled automation | Phase 8 | Added cron-style `JobSchedulerStore` + `JobSchedulerWorker` |
 | WPF client blocking on ML calls | Phase 9 | Added `JobPollingService` with async poll loop |
 | Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs` and `StudyValidators.cs`; deleted root-level `Validators.cs` |
+| PHASES-ROADMAP.md stale phase status | Tech Debt (chunk issue) | Updated status table: Phase 4 → ✅ Complete (health monitoring, JobRetentionWorker, PingAsync); Phase 5 → ✅ Complete (EmbeddingService, VectorStoreService, KnowledgeIndexStore) |
