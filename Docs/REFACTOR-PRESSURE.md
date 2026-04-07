@@ -52,7 +52,7 @@ Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordin
 | **Phase introduced** | Phase 1 (grew through Phase 9) |
 
 **What it does now:**
-All 30+ API endpoints are defined inline in `Program.cs`. Shared infrastructure (request records, service registration, middleware, and logging) is mixed with endpoint handler logic in the same file. Request record types are defined at the top of `Program.cs` while their corresponding validators live in the separate `Validators.cs` file, which means navigating between a record definition and its validation rules requires crossing two files.
+All 30+ API endpoints are defined inline in `Program.cs`. Shared infrastructure (request records, service registration, middleware, and logging) is mixed with endpoint handler logic in the same file. Request record types are defined at the top of `Program.cs` while their corresponding validators live in the `DailyDesk.Broker/Validators/` folder, which means navigating between a record definition and its validation rules requires crossing files.
 
 **Why it is under pressure:**
 - Finding a specific endpoint requires searching through 1,000+ lines.
@@ -208,32 +208,6 @@ Keep `MainViewModel` as a shell that navigates between desk ViewModels. This mir
 
 ---
 
-### 8. Validators.cs — Flat File vs. Convention
-
-| | |
-|---|---|
-| **File** | `DailyDesk.Broker/Validators.cs` |
-| **Phase introduced** | Phase 1 (grew through Phase 9) |
-| **Convention** | `CONVENTIONS.md` specifies `DailyDesk.Broker/Validators/` folder |
-
-**What it does now:**
-All broker FluentValidation validators live in a single `Validators.cs` file at the root of the broker project.
-
-**Why it is under pressure:**
-- `CONVENTIONS.md` specifies validators should be in `DailyDesk.Broker/Validators/` as a folder. The current flat file diverges from the stated convention.
-- As more endpoints are added, a single `Validators.cs` grows in the same way that `Program.cs` does.
-
-**Refactor direction:**
-Split `Validators.cs` into a `Validators/` folder with one file per domain:
-- `Validators/ChatValidators.cs`
-- `Validators/StudyValidators.cs`
-- `Validators/MLValidators.cs`
-- `Validators/ScheduleValidators.cs`
-
-**Prerequisite:** None. Low-risk rename-and-split. No behavior change.
-
----
-
 ## Resolved Pressure (Archive)
 
 Keep a record of pressure areas that have been resolved so contributors understand why certain patterns were adopted.
@@ -251,3 +225,4 @@ Keep a record of pressure areas that have been resolved so contributors understa
 | Text-only document extraction | Phase 7 | Added Docling pipeline with table and figure extraction |
 | No scheduled automation | Phase 8 | Added cron-style `JobSchedulerStore` + `JobSchedulerWorker` |
 | WPF client blocking on ML calls | Phase 9 | Added `JobPollingService` with async poll loop |
+| Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs` and `StudyValidators.cs`; deleted root-level `Validators.cs` |
