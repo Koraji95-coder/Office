@@ -10,6 +10,7 @@
       - Health-Check          : Pings Ollama every 15 minutes and alerts Discord if down.
       - Daily-Brief           : Sends a morning brief via Ollama to Discord at 07:00.
       - Repo-Scan-Issues      : Scans repos for gaps and suggests new issues every 6 hours.
+      - Office-ML-Retrain     : Retrains the PR scoring ML model nightly at 02:00.
 
     Run this script once from an elevated PowerShell prompt.
     Re-running is safe — existing tasks are removed and re-created.
@@ -249,7 +250,39 @@ Register-OfficeTask `
     -Description "Scans both repos for coverage gaps and suggests new issues every 6 hours."
 
 # ──────────────────────────────────────────────
-# 7. ML Retrain Analytics — nightly at 02:30
+# 7. ML Retrain — nightly at 02:00
+# ──────────────────────────────────────────────
+$retrainTrigger = New-ScheduledTaskTrigger -Daily -At "02:00"
+$retrainScript = Join-Path $ScriptsDir "scoring\retrain.py"
+$repoRoot = Split-Path -Parent $ScriptsDir
+
+if ($pythonOk) {
+    $retrainAction = New-ScheduledTaskAction `
+        -Execute "cmd.exe" `
+        -Argument "/C conda activate $CondaEnv && python `"$retrainScript`"" `
+        -WorkingDirectory $repoRoot
+} else {
+    $retrainAction = New-ScheduledTaskAction `
+        -Execute "python" `
+        -Argument "`"$retrainScript`"" `
+        -WorkingDirectory $repoRoot
+}
+
+$retrainSettings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+
+Register-OfficeTask `
+    -Name "Office-ML-Retrain" `
+    -Trigger $retrainTrigger `
+    -Action $retrainAction `
+    -Description "Retrains the PR scoring GradientBoosting model nightly from accumulated decision memory. Saves model to State/ml-artifacts/." `
+    -Settings $retrainSettings
+
+# ──────────────────────────────────────────────
+# 8. ML Retrain Analytics — nightly at 02:30
 # ──────────────────────────────────────────────
 $trainingHistoryPath = Join-Path $env:USERPROFILE "Dropbox\SuiteWorkspace\Office\State\training-history.json"
 $analyticsRetrainTrigger = New-ScheduledTaskTrigger -Daily -At "02:30"
