@@ -5872,12 +5872,23 @@ public sealed class OfficeBrokerLogicTests
     // ═══════════════════════════════════════════════════════════════════════
     //  Integration Tests: PDF QA/QC Template Application from Specified URL
     //  Verifies the system correctly references and applies the QA/QC template
-    //  from the Watercare PDF as documented in chunk 3 of the research checklist:
+    //  from the Watercare PDF as documented in the Watercare source section of:
     //  Knowledge/Research/20260324-000659-electrical-drawing-qa-workflow-
     //  standards-review-checklist.md
     // ═══════════════════════════════════════════════════════════════════════
 
-    // --- Group A: Chunk 3 source-reference verification (reads actual file) ---
+    /// <summary>
+    /// Extracts the Watercare source section from the research markdown by splitting on
+    /// level-3 headings (###) and returning the section whose body contains the Watercare
+    /// blob domain.  Returns null if the section cannot be found.
+    /// </summary>
+    private static string? ExtractWatercareSourceSection(string markdownContent)
+    {
+        var sections = markdownContent.Split("\n### ", StringSplitOptions.RemoveEmptyEntries);
+        return sections.FirstOrDefault(s => s.Contains(WatercareQaQcPdfDomain, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // --- Group A: Watercare source-reference verification (reads actual file) ---
 
     [Fact]
     public void PdfQaQcTemplate_ResearchMarkdown_ContainsWatercareQaQcUrl()
@@ -5897,7 +5908,7 @@ public sealed class OfficeBrokerLogicTests
     }
 
     [Fact]
-    public void PdfQaQcTemplate_ResearchMarkdown_Chunk3_HasWatercareAsSourceDomain()
+    public void PdfQaQcTemplate_ResearchMarkdown_WatercareSection_HasCorrectDomain()
     {
         var repoRoot = FindRepoRoot();
         Assert.NotNull(repoRoot);
@@ -5908,12 +5919,15 @@ public sealed class OfficeBrokerLogicTests
             "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md"
         );
 
+        Assert.True(File.Exists(markdownPath), $"Expected markdown file at: {markdownPath}");
         var content = File.ReadAllText(markdownPath);
-        Assert.Contains(WatercareQaQcPdfDomain, content, StringComparison.Ordinal);
+        var section = ExtractWatercareSourceSection(content);
+        Assert.NotNull(section);
+        Assert.Contains(WatercareQaQcPdfDomain, section, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PdfQaQcTemplate_ResearchMarkdown_Chunk3_SearchSnippet_ReferencesSection113AndSwitchboards()
+    public void PdfQaQcTemplate_ResearchMarkdown_WatercareSection_SearchSnippet_ReferencesSection113AndSwitchboards()
     {
         var repoRoot = FindRepoRoot();
         Assert.NotNull(repoRoot);
@@ -5924,10 +5938,13 @@ public sealed class OfficeBrokerLogicTests
             "20260324-000659-electrical-drawing-qa-workflow-standards-review-checklist.md"
         );
 
+        Assert.True(File.Exists(markdownPath), $"Expected markdown file at: {markdownPath}");
         var content = File.ReadAllText(markdownPath);
-        // The chunk 3 search snippet explicitly mentions section 1.13 and Switchboards
-        Assert.Contains("1.13", content, StringComparison.Ordinal);
-        Assert.Contains("Switchboards", content, StringComparison.OrdinalIgnoreCase);
+        var section = ExtractWatercareSourceSection(content);
+        Assert.NotNull(section);
+        // The search snippet inside the Watercare section explicitly mentions section 1.13 and Switchboards
+        Assert.Contains("1.13", section, StringComparison.Ordinal);
+        Assert.Contains("Switchboards", section, StringComparison.OrdinalIgnoreCase);
     }
 
     // --- Group B: PDF template application from URL ---
@@ -5942,29 +5959,30 @@ public sealed class OfficeBrokerLogicTests
         Assert.Equal(".pdf", Path.GetExtension(fileName), StringComparer.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void PdfQaQcTemplate_KindInference_FromUrlFileName_IsPdf()
-    {
-        // KnowledgeImportService sets Kind = extension.TrimStart('.').ToUpperInvariant()
-        var uri = new Uri(WatercareQaQcPdfUrl);
-        var fileName = Path.GetFileName(uri.LocalPath);
-        var kind = Path.GetExtension(fileName).TrimStart('.').ToUpperInvariant();
-
-        Assert.Equal("PDF", kind);
-    }
-
-    [Fact]
-    public void PdfQaQcTemplate_UrlPath_ContainsElectricalStandardsSegment()
+    [Theory]
+    [InlineData("kind", "PDF")]
+    [InlineData("path-segment", "electrical-standards")]
+    [InlineData("path-segment", "kentico-media-libraries-prod")]
+    public void PdfQaQcTemplate_UrlDerivedMetadata_MatchesExpectedValues(string validationType, string expectedValue)
     {
         var uri = new Uri(WatercareQaQcPdfUrl);
-        Assert.Contains("electrical-standards", uri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
-    }
 
-    [Fact]
-    public void PdfQaQcTemplate_UrlPath_ContainsKenticoMediaLibrariesContainer()
-    {
-        var uri = new Uri(WatercareQaQcPdfUrl);
-        Assert.Contains("kentico-media-libraries-prod", uri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
+        switch (validationType)
+        {
+            case "kind":
+                // KnowledgeImportService sets Kind = extension.TrimStart('.').ToUpperInvariant()
+                var fileName = Path.GetFileName(uri.LocalPath);
+                var kind = Path.GetExtension(fileName).TrimStart('.').ToUpperInvariant();
+                Assert.Equal(expectedValue, kind);
+                break;
+
+            case "path-segment":
+                Assert.Contains(expectedValue, uri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(validationType), validationType, "Unsupported validation type.");
+        }
     }
 
     [Fact]
@@ -6015,18 +6033,29 @@ public sealed class OfficeBrokerLogicTests
             Topics = ["switchboard", "distribution", "earthing", "cables", "motors", "lighting", "instrumentation"],
         };
 
-        Assert.Contains("switchboard", doc.Topics);
-        Assert.Contains("earthing", doc.Topics);
-        Assert.Contains("cables", doc.Topics);
-        Assert.Contains("motors", doc.Topics);
-        Assert.Contains("lighting", doc.Topics);
-        Assert.Contains("instrumentation", doc.Topics);
+        var expectedTopics = new[]
+        {
+            "switchboard",
+            "distribution",
+            "earthing",
+            "cables",
+            "motors",
+            "lighting",
+            "instrumentation",
+        };
+
+        Assert.Equal(expectedTopics.Length, doc.Topics.Count);
+        foreach (var expectedTopic in expectedTopics)
+        {
+            Assert.Contains(expectedTopic, doc.Topics);
+        }
     }
 
     [Fact]
     public async Task PdfQaQcTemplate_MockFetch_Returns200_WithPdfContentType()
     {
         var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        response.Content = new System.Net.Http.ByteArrayContent([]);
         response.Content.Headers.ContentType =
             new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
 
