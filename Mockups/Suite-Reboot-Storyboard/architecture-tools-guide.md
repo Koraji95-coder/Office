@@ -96,4 +96,55 @@ Both tools live in the Developer Portal's Architecture and code group. Neither i
 
 ## Refactor pressure notes
 
-The third item in the Architecture and code group is **Refactor pressure notes**. These are short, developer-authored notes that flag areas of the codebase that have accumulated technical debt or have known extension points. Refactor pressure notes are not automated — they are written by developers during code review or after a session in the repo coach. Notes link to a source file or orchestrator method and include a one-line description of the pressure and a suggested next action.
+The third item in the Architecture and code group is **Refactor pressure notes**. These are short, developer-authored notes that flag areas of the codebase that have accumulated technical debt or have known extension points. Refactor pressure notes are not automated — they are written by developers during code review or after a session in the repo coach. Notes link to a source file or orchestrator method and include a description of the pressure, the suggested next action (refactor direction), and the prerequisite for acting.
+
+### Navigation
+
+1. Open **Developer Portal** from Runtime Control or the Suite sidebar.
+2. Locate the **Architecture and code** group (bottom-center of the launcher grid).
+3. Click **Refactor pressure notes** to open the tool-detail page.
+4. The tool-detail page lists all active notes grouped by priority (High, Medium, Low) with links to the canonical source document.
+5. Use the priority filter to focus on High pressure items first.
+
+### Canonical source
+
+The authoritative record of all refactor pressure notes is `Docs/REFACTOR-PRESSURE.md`. Every note in the portal view mirrors an entry in that document. To add, update, or resolve a note, edit `REFACTOR-PRESSURE.md` directly. The portal tool-detail page is a read-oriented view of the same content and does not auto-generate from source code.
+
+### Note format
+
+Each pressure note is a numbered entry under one of the priority sections and contains the following required sections:
+
+| Section | Contents |
+|---------|----------|
+| **File** or **Files** | Repo-relative path(s) to the affected source file(s) |
+| **Phase introduced** | The phase or PR that first created the pressure |
+| **What it does now** | A factual description of the current behavior |
+| **Why it is under pressure** | Bullet-point list of specific reasons the area creates friction or risk |
+| **Refactor direction** | The recommended approach for resolving the pressure — the suggested next action |
+| **Prerequisite** | Work that must be complete before the refactor can proceed safely |
+
+### Priority tiers
+
+Notes are grouped into three priority tiers based on their impact on development velocity:
+
+| Tier | Meaning |
+|------|---------|
+| **High** | Actively slows new feature development or increases regression risk. Address before the next major feature phase. |
+| **Medium** | Adds maintenance overhead but does not block current development. Schedule for the next cleanup sprint. |
+| **Low** | Well-understood technical debt with a clear resolution path. Track but defer until the trigger condition is met. |
+
+### How to add a note
+
+1. Open `Docs/REFACTOR-PRESSURE.md`.
+2. Choose the correct priority section (High, Medium, or Low) based on the tier definitions above.
+3. Add a new numbered entry using the next available sequential number.
+4. Fill in all required sections: **File/Files**, **Phase introduced**, **What it does now**, **Why it is under pressure**, **Refactor direction**, and **Prerequisite**.
+5. Commit the change with a message such as `docs: add refactor pressure note for <area>`.
+
+### How to resolve a note
+
+1. Complete the work described in the entry's **Refactor direction** section.
+2. In `Docs/REFACTOR-PRESSURE.md`, remove the entry from the active section.
+3. Add a row to the **Resolved Pressure** archive table at the bottom of the document, recording the area, the phase or PR it was resolved in, and a one-line summary of the resolution.
+4. Renumber remaining active entries to maintain sequential order.
+5. If the resolution corresponds to a new phase, mark that phase complete in `PHASES-ROADMAP.md`.

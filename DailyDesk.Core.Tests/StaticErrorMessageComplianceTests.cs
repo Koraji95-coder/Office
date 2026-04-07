@@ -45,11 +45,12 @@ public sealed class StaticErrorMessageComplianceTests : IClassFixture<BrokerWebA
     }
 
     /// <summary>
-    /// All 29 broker endpoints that have a <c>Results.Problem()</c> catch block as documented
-    /// in <c>Docs/stack-trace-exposure-remediation.md</c>.  Each row contains:
+    /// All broker endpoints that have a <c>Results.Problem()</c> catch block as documented
+    /// in <c>Docs/stack-trace-exposure-remediation.md</c> and CONVENTIONS.md Pattern 4.
+    /// Each row contains:
     ///   [0] HTTP method (string)
     ///   [1] Request path (string)
-    ///   [2] Optional JSON request body (string?, null for GET endpoints)
+    ///   [2] Optional JSON request body (string?, null for GET/DELETE endpoints)
     /// </summary>
     public static IEnumerable<object?[]> AllEndpointsWithResultsProblem =>
     [
@@ -101,6 +102,28 @@ public sealed class StaticErrorMessageComplianceTests : IClassFixture<BrokerWebA
         // --- Knowledge ---
         new object?[] { "GET",  "/api/knowledge/index-status",     null },
         new object?[] { "POST", "/api/knowledge/search",           """{"Query":"compliance test search","TopK":5}""" },
+
+        // --- Jobs ---
+        new object?[] { "GET",    "/api/jobs",                          null },
+        new object?[] { "GET",    "/api/jobs/metrics",                  null },
+        new object?[] { "GET",    "/api/jobs/nonexistent-job-id",       null },
+        new object?[] { "GET",    "/api/jobs/nonexistent-job-id/result",null },
+        new object?[] { "DELETE", "/api/jobs/nonexistent-job-id",       null },
+
+        // --- Schedules ---
+        new object?[] { "GET",    "/api/schedules",                                                                         null },
+        new object?[] { "POST",   "/api/schedules",                     """{"Name":"s","JobType":"analytics","CronExpression":"0 * * * *"}""" },
+        new object?[] { "PUT",    "/api/schedules/nonexistent-sched-id","""{"Name":"updated"}""" },
+        new object?[] { "DELETE", "/api/schedules/nonexistent-sched-id",null },
+
+        // --- Daily Run ---
+        new object?[] { "GET",    "/api/daily-run/latest",              null },
+
+        // --- Workflows ---
+        new object?[] { "GET",    "/api/workflows",                     null },
+        new object?[] { "POST",   "/api/workflows",                     """{"Name":"w","Steps":[{"JobType":"analytics"}]}""" },
+        new object?[] { "POST",   "/api/workflows/nonexistent-wf-id/run",null },
+        new object?[] { "DELETE", "/api/workflows/nonexistent-wf-id",   null },
     ];
 
     /// <summary>
