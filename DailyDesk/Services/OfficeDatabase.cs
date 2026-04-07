@@ -23,7 +23,10 @@ public sealed class OfficeDatabase : IDisposable
         Directory.CreateDirectory(root);
 
         var dbPath = Path.Combine(root, "office.db");
-        _db = new LiteDatabase($"Filename={dbPath};Connection=shared");
+        // Use a dedicated BsonMapper per instance to avoid parallel-init race conditions on
+        // BsonMapper.Global when multiple OfficeDatabase instances are created concurrently
+        // (e.g. during test runs where multiple test fixtures start simultaneously).
+        _db = new LiteDatabase($"Filename={dbPath};Connection=shared", new BsonMapper());
 
         EnsureIndexes();
     }
