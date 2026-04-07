@@ -40,4 +40,4 @@ $entry = @{
 $memory = @($memory) + $entry
 $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
 
-Write-Host "Logged REJECTED: $($pr.title) — Reason: $reason"
+Write-Host "Logged REJECTED: $($pr.title) -- Reason: $reason"

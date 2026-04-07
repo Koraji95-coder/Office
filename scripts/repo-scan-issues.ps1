@@ -71,7 +71,7 @@ $context
         }
 
         $payload = @{
-            content = "<@$userId> **AI Issue Suggestions** — Run ``Approve-Issues 1 2 3`` to create."
+            content = "<@$userId> **AI Issue Suggestions** -- Run ``Approve-Issues 1 2 3`` to create."
             embeds  = $embeds
         }
 
@@ -80,7 +80,7 @@ $context
     }
     else {
         $body = @{
-            content = "<@$userId> **AI Issue Suggestions** — Could not auto-parse. Create issues manually.`n`n$content"
+            content = "<@$userId> **AI Issue Suggestions** -- Could not auto-parse. Create issues manually.`n`n$content"
         } | ConvertTo-Json -EscapeHandling EscapeNonAscii
 
         Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json" -Body $body
@@ -88,7 +88,7 @@ $context
 }
 catch {
     $errBody = @{
-        content = "<@$userId> **Repo Scan Failed** — $(Get-Date -Format 'HH:mm') — $($_.Exception.Message)"
+        content = "<@$userId> **Repo Scan Failed** -- $(Get-Date -Format 'HH:mm') -- $($_.Exception.Message)"
     } | ConvertTo-Json -EscapeHandling EscapeNonAscii
 
     Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json" -Body $errBody

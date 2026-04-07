@@ -13,13 +13,13 @@ try {
     $content = $brief.message.content
 
     $body = @{
-        content = "<@$userId> ☀️ **Daily Brief — $(Get-Date -Format 'yyyy-MM-dd HH:mm')**`n`n$content`n`n---`n_Sent from Ollama on Dustin_"
+        content = "<@$userId> ☀️ **Daily Brief -- $(Get-Date -Format 'yyyy-MM-dd HH:mm')**`n`n$content`n`n---`n_Sent from Ollama on Dustin_"
     } | ConvertTo-Json -EscapeHandling EscapeNonAscii
 
     Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json" -Body $body
 }
 catch {
     $errBody = @{
-        content = "<@$userId> 🔴 **Daily Brief Failed** — $(Get-Date -Format 'yyyy-MM-dd HH:mm')`n`n
+        content = "<@$userId> 🔴 **Daily Brief Failed** -- $(Get-Date -Format 'yyyy-MM-dd HH:mm')`n`n
 
 

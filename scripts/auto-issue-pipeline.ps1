@@ -35,8 +35,8 @@ try {
         exit 0
     }
 
-    $allowOffice = if ($officeAiCount -lt 20) { "You MAY suggest Office issues. ($officeAiCount/20 open)" } else { "Do NOT suggest Office issues — at cap ($officeAiCount/20)." }
-    $allowSuite = if ($suiteAiCount -lt 20) { "You MAY suggest Suite issues. ($suiteAiCount/20 open)" } else { "Do NOT suggest Suite issues — at cap ($suiteAiCount/20)." }
+    $allowOffice = if ($officeAiCount -lt 20) { "You MAY suggest Office issues. ($officeAiCount/20 open)" } else { "Do NOT suggest Office issues -- at cap ($officeAiCount/20)." }
+    $allowSuite = if ($suiteAiCount -lt 20) { "You MAY suggest Suite issues. ($suiteAiCount/20 open)" } else { "Do NOT suggest Suite issues -- at cap ($suiteAiCount/20)." }
 } catch {
     Write-Host "Failed to fetch existing issues: $($_.Exception.Message)"
     exit 1
@@ -98,7 +98,7 @@ Rules:
 - $allowSuite
 - Do NOT duplicate any existing issue below.
 - Focus on: test coverage gaps, missing docs, technical debt, CI/CD hardening, or developer experience improvements.
-- The issue must be specific and actionable — not vague.
+- The issue must be specific and actionable -- not vague.
 - Use the CODE CONTEXT below to make your suggestion based on REAL code you can see.
 - Each issue should target a DIFFERENT area of the codebase.
 
@@ -151,7 +151,7 @@ Respond ONLY with valid JSON. No markdown, no explanation:
         $result = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/issues" `
             -Method POST -Headers $headers -ContentType "application/json" -Body $issueBody
 
-        Write-Host "Created: $repo#$($result.number) — $($issue.title)"
+        Write-Host "Created: $repo#$($result.number) -- $($issue.title)"
 
         # Assign to Copilot
         $assignBody = '{"assignees":["copilot-swe-agent[bot]"]}'
