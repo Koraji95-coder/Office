@@ -19,6 +19,7 @@ Falls back to heuristic output if scikit-learn is not installed.
 
 import json
 import math
+import os
 import sys
 from datetime import datetime, timezone
 from typing import Any
@@ -293,17 +294,38 @@ def _heuristic_analytics(
     }
 
 
+def _state_root() -> str:
+    """Resolve the Office state root directory."""
+    env = os.environ.get("OFFICE_STATE_ROOT", "")
+    if env:
+        return env
+    return os.path.join(os.path.expanduser("~"), "Dropbox", "SuiteWorkspace", "Office", "State")
+
+
+def _load_persisted_model(filename: str) -> Any:
+    """Attempt to load a persisted joblib model. Returns the model or None."""
+    try:
+        import joblib
+        model_path = os.path.join(_state_root(), "ml-artifacts", filename)
+        if os.path.exists(model_path):
+            return joblib.load(model_path)
+    except Exception:
+        pass
+    return None
+
+
 def _sklearn_analytics(
     topic_accuracy: dict[str, dict[str, Any]],
     operator_decisions: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Full ML analytics using scikit-learn."""
+    """Full ML analytics using scikit-learn. Loads persisted models when available."""
     import numpy as np
     from sklearn.cluster import KMeans
     from sklearn.ensemble import GradientBoostingClassifier
     from sklearn.preprocessing import StandardScaler
 
     heuristic = _heuristic_analytics(topic_accuracy, operator_decisions)
+    model_source = "ephemeral"
 
     # --- Topic clustering ---
     topic_clusters: list[dict[str, Any]] = []
@@ -329,9 +351,35 @@ def _sklearn_analytics(
         scaler = StandardScaler()
         scaled = scaler.fit_transform(features)
 
-        n_clusters = min(3, len(topics_list))
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(scaled)
+        # Try loading persisted clustering model (expects 4 features — use first 4 cols)
+        persisted_cluster = _load_persisted_model("topic-cluster-model.joblib")
+        if persisted_cluster is not None:
+            try:
+                persisted_kmeans = persisted_cluster.get("kmeans")
+                persisted_scaler = persisted_cluster.get("scaler")
+                # The persisted model uses 4 features; build compatible feature matrix
+                compat_features = np.array(
+                    [
+                        [
+                            topic_accuracy[t]["accuracy"],
+                            float(topic_accuracy[t]["total"]),
+                            heuristic["forgettingCurves"].get(t, {}).get("stability_days", 3.0),
+                            30.0,  # days_since placeholder for inference
+                        ]
+                        for t in topics_list
+                    ]
+                )
+                compat_scaled = persisted_scaler.transform(compat_features)
+                labels = persisted_kmeans.predict(compat_scaled)
+                model_source = "persisted"
+            except Exception:
+                n_clusters = min(3, len(topics_list))
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+                labels = kmeans.fit_predict(scaled)
+        else:
+            n_clusters = min(3, len(topics_list))
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(scaled)
 
         cluster_groups: dict[int, list[str]] = {}
         for topic, label in zip(topics_list, labels):
@@ -369,26 +417,77 @@ def _sklearn_analytics(
         ]
 
         if len(valid_decisions) >= 5:
-            recent_window = valid_decisions[-20:]
-            approve_ratio = sum(
-                1 for d in recent_window if d["status"] == "accepted"
-            ) / len(recent_window)
-            reject_ratio = sum(
-                1 for d in recent_window if d["status"] == "rejected"
-            ) / len(recent_window)
+            # Try persisted operator pattern model for classification
+            persisted_op_clf = _load_persisted_model("operator-pattern-model.joblib")
+            if persisted_op_clf is not None:
+                try:
+                    from datetime import timezone as _tz
+                    now = datetime.now(_tz.utc)
+                    op_features = []
+                    for i, d in enumerate(valid_decisions):
+                        ts_str = d.get("decidedAt") or d.get("timestamp") or ""
+                        if ts_str:
+                            try:
+                                age_days = (now - _parse_iso(ts_str)).total_seconds() / 86400
+                            except Exception:
+                                age_days = 30.0
+                        else:
+                            age_days = 30.0
+                        position_ratio = i / max(len(valid_decisions) - 1, 1)
+                        op_features.append([age_days, position_ratio, float(i)])
 
-            if approve_ratio > 0.7:
-                operator_pattern["pattern"] = "high-trust"
-            elif reject_ratio > 0.5:
-                operator_pattern["pattern"] = "cautious"
-            elif approve_ratio > 0.4 and reject_ratio < 0.3:
-                operator_pattern["pattern"] = "balanced"
+                    preds = persisted_op_clf.predict(np.array(op_features, dtype=np.float64))
+                    label_map = {0: "accepted", 1: "rejected", 2: "deferred"}
+                    dominant = max(set(preds.tolist()), key=list(preds).count)
+                    pattern_label = label_map.get(int(dominant), "balanced")
+                    pattern_map = {
+                        "accepted": "high-trust",
+                        "rejected": "cautious",
+                        "deferred": "selective",
+                    }
+                    operator_pattern["pattern"] = pattern_map.get(pattern_label, "balanced")
+                    model_source = "persisted"
+                except Exception:
+                    # Fall back to heuristic pattern detection
+                    recent_window = valid_decisions[-20:]
+                    approve_ratio = sum(
+                        1 for d in recent_window if d["status"] == "accepted"
+                    ) / len(recent_window)
+                    reject_ratio = sum(
+                        1 for d in recent_window if d["status"] == "rejected"
+                    ) / len(recent_window)
+                    if approve_ratio > 0.7:
+                        operator_pattern["pattern"] = "high-trust"
+                    elif reject_ratio > 0.5:
+                        operator_pattern["pattern"] = "cautious"
+                    elif approve_ratio > 0.4 and reject_ratio < 0.3:
+                        operator_pattern["pattern"] = "balanced"
+                    else:
+                        operator_pattern["pattern"] = "selective"
             else:
-                operator_pattern["pattern"] = "selective"
+                recent_window = valid_decisions[-20:]
+                approve_ratio = sum(
+                    1 for d in recent_window if d["status"] == "accepted"
+                ) / len(recent_window)
+                reject_ratio = sum(
+                    1 for d in recent_window if d["status"] == "rejected"
+                ) / len(recent_window)
+
+                if approve_ratio > 0.7:
+                    operator_pattern["pattern"] = "high-trust"
+                elif reject_ratio > 0.5:
+                    operator_pattern["pattern"] = "cautious"
+                elif approve_ratio > 0.4 and reject_ratio < 0.3:
+                    operator_pattern["pattern"] = "balanced"
+                else:
+                    operator_pattern["pattern"] = "selective"
 
     # --- Readiness prediction with gradient boosting + Bayesian confidence ---
     readiness_breakdown = heuristic["readinessBreakdown"]
     if len(topic_accuracy) >= 3:
+        # Try persisted readiness predictor for enhanced predictions
+        persisted_readiness = _load_persisted_model("readiness-predictor.joblib")
+
         for entry in readiness_breakdown:
             topic = entry["topic"]
             data = topic_accuracy.get(topic, {})
@@ -402,7 +501,8 @@ def _sklearn_analytics(
 
             # Add forgetting curve info
             fc = heuristic["forgettingCurves"].get(topic, {})
-            entry["stabilityDays"] = fc.get("stability_days", 3.0)
+            stability = fc.get("stability_days", 3.0)
+            entry["stabilityDays"] = stability
 
             # Add plateau detection
             plateau = heuristic["plateauStatus"].get(topic, {})
@@ -420,6 +520,28 @@ def _sklearn_analytics(
             else:
                 entry["trend"] = entry["readiness"]
                 entry["improving"] = False
+
+            # Enhance readiness with persisted model prediction if available
+            if persisted_readiness is not None and len(attempts) >= 1:
+                try:
+                    from datetime import timezone as _tz
+                    now = datetime.now(_tz.utc)
+                    timestamps = [_parse_iso(a["timestamp"]) for a in attempts if a.get("timestamp")]
+                    days_gap = 1.0
+                    if timestamps:
+                        last = max(timestamps)
+                        days_gap = max(0.0, (now - last).total_seconds() / 86400)
+                    features = np.array(
+                        [[data["accuracy"], float(data["total"]), stability, days_gap]],
+                        dtype=np.float64,
+                    )
+                    predicted_readiness = float(persisted_readiness.predict(features)[0])
+                    entry["predictedNextReadiness"] = round(
+                        max(0.0, min(1.0, predicted_readiness)), 3
+                    )
+                    model_source = "persisted"
+                except Exception:
+                    pass
 
     # --- Adaptive schedule with ML-weighted priorities + forgetting curves ---
     schedule = heuristic["adaptiveSchedule"]
@@ -449,6 +571,7 @@ def _sklearn_analytics(
 
     result = heuristic.copy()
     result["engine"] = "sklearn"
+    result["model_source"] = model_source
     result["topicClusters"] = topic_clusters
     result["operatorPattern"] = operator_pattern
     result["readinessBreakdown"] = readiness_breakdown

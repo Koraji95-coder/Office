@@ -18,6 +18,7 @@ All artifacts are deterministic and review-first (matching Suite's design philos
 """
 
 import json
+import os
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -210,6 +211,26 @@ def _build_watchdog_baseline(
     }
 
 
+def _state_root() -> str:
+    """Resolve the Office state root directory."""
+    env = os.environ.get("OFFICE_STATE_ROOT", "")
+    if env:
+        return env
+    return os.path.join(os.path.expanduser("~"), "Dropbox", "SuiteWorkspace", "Office", "State")
+
+
+def _load_analytics_model_metrics() -> dict[str, Any] | None:
+    """Load analytics-model-metrics.json if it exists; returns None otherwise."""
+    try:
+        metrics_path = os.path.join(_state_root(), "ml-artifacts", "analytics-model-metrics.json")
+        if os.path.exists(metrics_path):
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
 def main() -> None:
     try:
         raw = _read_input()
@@ -233,6 +254,10 @@ def main() -> None:
                 _build_watchdog_baseline(analytics, forecast),
             ],
         }
+
+        analytics_model_metrics = _load_analytics_model_metrics()
+        if analytics_model_metrics is not None:
+            artifacts["analyticsModelMetrics"] = analytics_model_metrics
 
         print(json.dumps(artifacts, ensure_ascii=False))
     except Exception:
