@@ -253,6 +253,9 @@ def main() -> None:
     try:
         raw = _read_input()
         payload = json.loads(raw) if raw.strip() else {}
+    except FileNotFoundError:
+        print(json.dumps({"ok": False, "error": "Input file not found."}))
+        return
     except json.JSONDecodeError:
         print(json.dumps({"ok": False, "error": "Invalid JSON input."}))
         return

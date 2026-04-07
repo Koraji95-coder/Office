@@ -30,6 +30,7 @@ _STATIC_UNEXPECTED_ERROR = (
     "An unexpected error occurred. See server logs for details."
 )
 _STATIC_JSON_ERROR = "Invalid JSON input."
+_STATIC_FILE_NOT_FOUND_ERROR = "Input file not found."
 
 _MINIMAL_VALID_INPUT = json.dumps(
     {
@@ -152,7 +153,58 @@ class TestUnexpectedExceptionPath(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Group 3: Happy path / valid input
+# Group 3: FileNotFoundError path
+# ---------------------------------------------------------------------------
+class TestFileNotFoundErrorPath(unittest.TestCase):
+    """main() must return static 'Input file not found.' when the input file is missing."""
+
+    def _run_with_file_not_found(self) -> dict:
+        """Simulate _read_input() raising FileNotFoundError and return parsed stdout JSON."""
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("/some/missing/file")):
+            captured = StringIO()
+            with patch("sys.stdout", captured):
+                _module.main()
+        output = captured.getvalue().strip()
+        return json.loads(output)
+
+    def test_file_not_found_returns_ok_false(self):
+        result = self._run_with_file_not_found()
+        self.assertFalse(result["ok"])
+
+    def test_file_not_found_returns_static_error_string(self):
+        result = self._run_with_file_not_found()
+        self.assertEqual(result["error"], _STATIC_FILE_NOT_FOUND_ERROR)
+
+    def test_file_not_found_error_has_no_path_details(self):
+        """The error value must not leak the file path."""
+        result = self._run_with_file_not_found()
+        self.assertNotIn("/some/missing/file", result["error"])
+
+    def test_file_not_found_error_is_static_string(self):
+        """The error value must be a static string, not a dynamic exception message."""
+        result = self._run_with_file_not_found()
+        self.assertNotIn("FileNotFoundError", result["error"])
+        self.assertNotIn("No such file", result["error"])
+
+    def test_file_not_found_no_traceback_in_response(self):
+        """No traceback details must appear in the JSON response."""
+        result = self._run_with_file_not_found()
+        self.assertNotIn("Traceback", json.dumps(result))
+
+    def test_file_not_found_response_is_valid_json(self):
+        """The response must be parseable JSON with the correct structure."""
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("/missing")):
+            captured = StringIO()
+            with patch("sys.stdout", captured):
+                _module.main()
+        output = captured.getvalue().strip()
+        result = json.loads(output)
+        self.assertIn("ok", result)
+        self.assertIn("error", result)
+
+
+# ---------------------------------------------------------------------------
+# Group 4: Happy path / valid input
 # ---------------------------------------------------------------------------
 class TestHappyPath(unittest.TestCase):
     """Valid inputs must produce ok=True with all four artifact types."""
