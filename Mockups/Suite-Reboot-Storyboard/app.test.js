@@ -1155,27 +1155,13 @@ describe('Developer Portal tool-detail — graduation and staging panels (develo
         expect(panel.querySelector('.panel-copy').textContent).toContain('packaging potential');
     });
 
-    it('"Future product fit" panel includes "High operator leverage"', () => {
+    it('"Future product fit" panel includes all three productization criteria', () => {
         const panel = getPanelByEyebrow('Future product fit');
         const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
             (el) => el.textContent.trim()
         );
         expect(texts).toContain('High operator leverage');
-    });
-
-    it('"Future product fit" panel includes "Strong automation story"', () => {
-        const panel = getPanelByEyebrow('Future product fit');
-        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
-            (el) => el.textContent.trim()
-        );
         expect(texts).toContain('Strong automation story');
-    });
-
-    it('"Future product fit" panel includes "Needs workflow evidence"', () => {
-        const panel = getPanelByEyebrow('Future product fit');
-        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
-            (el) => el.textContent.trim()
-        );
         expect(texts).toContain('Needs workflow evidence');
     });
 
