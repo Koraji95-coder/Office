@@ -1133,6 +1133,52 @@ describe('Developer Portal tool-detail — graduation and staging panels (develo
         expect(getPanelByEyebrow('Future product fit')).not.toBeNull();
     });
 
+    it('"Future product fit" panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+
+    it('"Future product fit" panel lists three productization criteria', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('"Future product fit" panel title is "Monetization signal"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        expect(panel.querySelector('.panel-title').textContent.trim()).toBe('Monetization signal');
+    });
+
+    it('"Future product fit" panel description mentions packaging potential', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        expect(panel.querySelector('.panel-copy').textContent).toContain('packaging potential');
+    });
+
+    it('"Future product fit" panel includes "High operator leverage"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('High operator leverage');
+    });
+
+    it('"Future product fit" panel includes "Strong automation story"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Strong automation story');
+    });
+
+    it('"Future product fit" panel includes "Needs workflow evidence"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Needs workflow evidence');
+    });
+
     it('renders the "Proof inputs" panel', () => {
         expect(getPanelByEyebrow('Proof inputs')).not.toBeNull();
     });
