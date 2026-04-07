@@ -12,7 +12,7 @@ function Safe-Pull {
     $repoName = Split-Path $RepoPath -Leaf
 
     if (-not (Test-Path "$RepoPath\.git")) {
-        return "$repoName | SKIPPED — not a git repo"
+        return "$repoName | SKIPPED -- not a git repo"
     }
 
     Push-Location $RepoPath
@@ -34,21 +34,21 @@ function Safe-Pull {
         if ($stashed) {
             $popResult = git stash pop 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0) {
-                # Stash pop conflicted — drop it and log
+                # Stash pop conflicted -- drop it and log
                 git checkout -- . 2>&1 | Out-Null
                 git stash drop 2>&1 | Out-Null
-                return "$repoName | PULLED but stash pop CONFLICTED — local changes dropped. $pullResult"
+                return "$repoName | PULLED but stash pop CONFLICTED -- local changes dropped. $pullResult"
             }
         }
 
         if ($pullSuccess) {
             $shortLog = ($pullResult -split "`n" | Select-Object -First 2) -join " "
-            return "$repoName | OK — $shortLog"
+            return "$repoName | OK -- $shortLog"
         } else {
-            return "$repoName | PULL FAILED (ff-only) — $pullResult"
+            return "$repoName | PULL FAILED (ff-only) -- $pullResult"
         }
     } catch {
-        return "$repoName | ERROR — $($_.Exception.Message)"
+        return "$repoName | ERROR -- $($_.Exception.Message)"
     } finally {
         Pop-Location
     }

@@ -13,7 +13,7 @@
       - Office-ML-Retrain     : Retrains the PR scoring ML model nightly at 02:00.
 
     Run this script once from an elevated PowerShell prompt.
-    Re-running is safe — existing tasks are removed and re-created.
+    Re-running is safe -- existing tasks are removed and re-created.
 
 .PARAMETER ScriptsRoot
     Path to the Office/scripts directory. Defaults to the directory containing this script.
@@ -75,7 +75,7 @@ function Register-OfficeTask {
             Write-Host "  Removed existing: $Name" -ForegroundColor DarkGray
         }
     } catch {
-        # Task doesn't exist — that's fine
+        # Task doesn't exist -- that's fine
     }
 
     $taskSettings = if ($Settings) { $Settings } else {
@@ -153,7 +153,7 @@ if (-not $env:GITHUB_TOKEN) {
 Write-Host ""
 
 # ──────────────────────────────────────────────
-# 1. RAG Nightly Reindex — every 90 minutes
+# 1. RAG Nightly Reindex -- every 90 minutes
 # ──────────────────────────────────────────────
 $ragTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 90)
 $ragAction = New-ScheduledTaskAction `
@@ -168,7 +168,7 @@ Register-OfficeTask `
     -Description "Re-indexes Office and Suite repos into the ChromaDB RAG database every 90 minutes."
 
 # ──────────────────────────────────────────────
-# 2. Auto-PR-Review — every 30 minutes
+# 2. Auto-PR-Review -- every 30 minutes
 # ──────────────────────────────────────────────
 $prTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 30)
 $prAction = New-ScheduledTaskAction `
@@ -183,7 +183,7 @@ Register-OfficeTask `
     -Description "Reviews Copilot PRs, runs the scoring preprocessor, and auto-merges high-confidence PRs."
 
 # ──────────────────────────────────────────────
-# 3. AI Auto Pipeline — every 3 hours
+# 3. AI Auto Pipeline -- every 3 hours
 # ──────────────────────────────────────────────
 $issueTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 3)
 $issueAction = New-ScheduledTaskAction `
@@ -198,7 +198,7 @@ Register-OfficeTask `
     -Description "Creates AI-suggested GitHub issues using Ollama + RAG context every 3 hours."
 
 # ──────────────────────────────────────────────
-# 4. Health Check — every 15 minutes
+# 4. Health Check -- every 15 minutes
 # ──────────────────────────────────────────────
 $healthTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 15)
 $healthAction = New-ScheduledTaskAction `
@@ -220,7 +220,7 @@ Register-OfficeTask `
     -Settings $healthSettings
 
 # ──────────────────────────────────────────────
-# 5. Daily Brief — every morning at 07:00
+# 5. Daily Brief -- every morning at 07:00
 # ──────────────────────────────────────────────
 $briefTrigger = New-ScheduledTaskTrigger -Daily -At "07:00"
 $briefAction = New-ScheduledTaskAction `
@@ -235,7 +235,7 @@ Register-OfficeTask `
     -Description "Sends a morning daily brief via Ollama to the Discord webhook at 07:00."
 
 # ──────────────────────────────────────────────
-# 6. Repo Scan Issues — every 6 hours
+# 6. Repo Scan Issues -- every 6 hours
 # ──────────────────────────────────────────────
 $scanTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 6)
 $scanAction = New-ScheduledTaskAction `
@@ -250,7 +250,7 @@ Register-OfficeTask `
     -Description "Scans both repos for coverage gaps and suggests new issues every 6 hours."
 
 # ──────────────────────────────────────────────
-# 7. ML Retrain — nightly at 02:00
+# 7. ML Retrain -- nightly at 02:00
 # ──────────────────────────────────────────────
 $retrainTrigger = New-ScheduledTaskTrigger -Daily -At "02:00"
 $retrainScript = Join-Path $ScriptsDir "scoring\retrain.py"
@@ -282,7 +282,7 @@ Register-OfficeTask `
     -Settings $retrainSettings
 
 # ──────────────────────────────────────────────
-# 8. ML Retrain Analytics — nightly at 02:30
+# 8. ML Retrain Analytics -- nightly at 02:30
 # ──────────────────────────────────────────────
 $trainingHistoryPath = Join-Path $env:USERPROFILE "Dropbox\SuiteWorkspace\Office\State\training-history.json"
 $analyticsRetrainTrigger = New-ScheduledTaskTrigger -Daily -At "02:30"

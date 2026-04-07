@@ -1,5 +1,5 @@
 # ============================================================
-# AUTO-PR-REVIEW v2 — Phase 1 Scoring Engine
+# AUTO-PR-REVIEW v2 -- Phase 1 Scoring Engine
 # ============================================================
 
 # Ensure Ollama has a model loaded
@@ -253,7 +253,7 @@ $ragContext
 $mergeHistoryContext
 $overlapContext
 
-SCORING RULES — follow these strictly:
+SCORING RULES -- follow these strictly:
 - 9-10: Exceptional. Clean code, good tests, no issues, adds real value. Rare.
 - 7-8: Good. Minor issues but solid contribution. Most decent PRs land here.
 - 5-6: Mediocre. Missing tests, incomplete, or questionable approach.
@@ -266,7 +266,7 @@ Provide your review:
 1. **Verdict**: APPROVE, REQUEST_CHANGES, or NEEDS_DISCUSSION
 2. **Summary**: 2-3 sentences on what this PR does
 3. **Concerns**: Any issues found (or "None")
-4. **Quality**: Rate 1-10 using the scoring rules above — be honest, not generous
+4. **Quality**: Rate 1-10 using the scoring rules above -- be honest, not generous
 "@
 
             $chatBody = @{
@@ -289,7 +289,7 @@ Provide your review:
             if ($review -match "(\d+)\s*/\s*10") { $score = [int]$Matches[1] }
 
             # ========== SCORING TIERS ==========
-            # Verdict from LLM always wins — tiers only decide merge behavior
+            # Verdict from LLM always wins -- tiers only decide merge behavior
             $ghReviewEvent = "COMMENT"
             $tierAction = ""
 
@@ -321,7 +321,7 @@ Provide your review:
             # Submit GitHub PR review
             try {
                 $reviewBody = @{
-                    body  = "## Auto-Review (Ollama) — Score: $score/10`n`n$review$overlapNote`n`n---`n*Automated review powered by qwen3:14b + RAG context | Scoring Engine v2*"
+                    body  = "## Auto-Review (Ollama) -- Score: $score/10`n`n$review$overlapNote`n`n---`n*Automated review powered by qwen3:14b + RAG context | Scoring Engine v2*"
                     event = $ghReviewEvent
                 } | ConvertTo-Json -Compress
                 Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" -Method POST -Headers $headers -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($reviewBody)) | Out-Null
@@ -361,18 +361,18 @@ Provide your review:
                     Write-Host "$mergeStatus on $repoShort#$($pr.number)"
                 }
             } elseif ($tierAction -eq "manual-merge") {
-                $mergeStatus = "Score $score/10 — approved, needs manual merge"
+                $mergeStatus = "Score $score/10 -- approved, needs manual merge"
                 Write-Host "MANUAL: $repoShort#$($pr.number) - $mergeStatus"
             } elseif ($tierAction -eq "request-changes") {
-                $mergeStatus = "Score $score/10 — changes requested"
+                $mergeStatus = "Score $score/10 -- changes requested"
                 Write-Host "CHANGES: $repoShort#$($pr.number) - $mergeStatus"
             } elseif ($tierAction -eq "needs-attention") {
-                $mergeStatus = "Score $score/10 — needs attention, not approved"
+                $mergeStatus = "Score $score/10 -- needs attention, not approved"
                 Write-Host "ATTENTION: $repoShort#$($pr.number) - $mergeStatus"
             } elseif ($tierAction -eq "auto-close") {
                 try {
                     Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Method PATCH -Headers $headers -ContentType "application/json" -Body '{"state":"closed"}' | Out-Null
-                    $mergeStatus = "Score $score/10 — auto-closed (low quality)"
+                    $mergeStatus = "Score $score/10 -- auto-closed (low quality)"
                     Write-Host "CLOSED: $repoShort#$($pr.number) - $mergeStatus"
 
                     if (Test-Path $memoryFile) { $memory = Get-Content $memoryFile | ConvertFrom-Json } else { $memory = @() }
