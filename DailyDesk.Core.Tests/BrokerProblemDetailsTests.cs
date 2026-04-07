@@ -27,6 +27,7 @@ namespace DailyDesk.Core.Tests;
 ///      in local dev environments where the dependencies ARE reachable the same endpoints may
 ///      return 200, in which case the test verifies the 200 response shape instead.
 /// </summary>
+[Collection("BrokerIntegrationTests")]
 public sealed class BrokerProblemDetailsTests : IClassFixture<BrokerWebApplicationFactory>
 {
     private readonly BrokerWebApplicationFactory _factory;
