@@ -435,6 +435,56 @@ Return a short fit-gap summary and one recommendation.
 Ignore CRM, invoicing, and general PM features.
 ```
 
+## Best Reply Patterns For Approval Routing and Workflow Fit
+
+Use these patterns when validating approval routing, issue-set handling, audit trail compliance,
+and overall workflow fit for electrical drafting production control.
+
+### Revision Tracking Alignment
+
+```text
+Use Suite as background context only.
+Verify that the revision tracking workflow aligns with the approval routing requirements.
+Return: revision states, transition rules, approval gates, and compliance gaps.
+Focus only on revision-to-approval alignment.
+```
+
+### Issue-Set Handling
+
+```text
+Use Suite as background context only.
+Describe how issue sets are grouped, submitted, and tracked through the approval workflow.
+Return: issue-set states, approval gates, rejection paths, and resubmission rules.
+Exclude CRM, billing, and general PM scope.
+```
+
+### Audit Trail Compliance
+
+```text
+Research audit trail requirements for electrical drafting approval workflows.
+Return: required audit fields, actor accountability, state transition records, and timestamp requirements.
+Verify compliance against revision tracking and issue-set approval steps.
+Ignore features unrelated to approval and signoff audit.
+```
+
+### Approval Routing Verification
+
+```text
+Use Suite as background context only.
+Verify the approval routing workflow covers all required signoff states and transitions.
+Return: routing rules, signoff accountabilities, escalation paths, and workflow fit gaps.
+Focus on fit with electrical drafting production control requirements.
+```
+
+### Workflow Fit Assessment
+
+```text
+Research workflow fit for electrical drafting production control tools.
+Return: revision tracking fit, issue-set handling fit, audit trail fit, approval routing fit, and AutoCAD integration fit.
+Return a fit-gap summary per category and one overall recommendation.
+Ignore CRM, invoicing, and general PM features.
+```
+
 ## Best Reply Patterns For Research
 
 If the answer needs current web facts, say so directly.
