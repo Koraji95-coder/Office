@@ -387,7 +387,17 @@ public sealed class OralDefenseService
             || lower.Contains("protection")
             || lower.Contains("standard")
             || lower.Contains("voltage")
-            || lower.Contains("operator");
+            || lower.Contains("operator")
+            || lower.Contains("insulation")
+            || lower.Contains("megger")
+            || lower.Contains("earthing")
+            || lower.Contains("bonding")
+            || lower.Contains("resistance")
+            || lower.Contains("continuity")
+            || lower.Contains("calibration")
+            || lower.Contains("relay")
+            || lower.Contains("overload")
+            || lower.Contains("rotation");
 
         var items = new List<DefenseRubricItem>
         {
