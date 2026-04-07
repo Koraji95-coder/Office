@@ -38,7 +38,7 @@ $context
 "@
 
     $chatBody = @{
-        model    = "mistral:7b"
+        model    = "qwen3:14b"
         messages = @(@{ role = "user"; content = $prompt })
         stream   = $false
     } | ConvertTo-Json -Depth 3
@@ -93,3 +93,4 @@ catch {
 
     Invoke-RestMethod -Uri $webhook -Method POST -ContentType "application/json" -Body $errBody
 }
+
