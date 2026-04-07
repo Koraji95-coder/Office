@@ -4,6 +4,7 @@ using Xunit;
 
 namespace DailyDesk.Core.Tests;
 
+[Collection("CoordinatorTests")]
 public sealed class StudySessionCoordinatorTests
 {
     // -------------------------------------------------------------------------
@@ -365,6 +366,317 @@ public sealed class StudySessionCoordinatorTests
 
         Assert.NotNull(profile);
         Assert.NotEmpty(profile.CurrentNeed);
+    }
+
+    // -------------------------------------------------------------------------
+    // Chunk 1: standalone construction
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void StudySessionCoordinator_CanBeConstructedWithoutOrchestrator()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var coordinator = new StudySessionCoordinator(
+                new TrainingStore(tempDir, db: null),
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+            Assert.NotNull(coordinator);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: SaveDefenseAttemptAsync persists to TrainingStore
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SaveDefenseAttemptAsync_PersistsAttemptAndReturnsSummary()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var trainingStore = new TrainingStore(tempDir, db: null);
+            var coordinator = new StudySessionCoordinator(
+                trainingStore,
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            var defenseAttempt = new OralDefenseAttemptRecord
+            {
+                Title = "Grounding Defense",
+                Topic = "grounding",
+                Prompt = "Explain the difference between grounding and bonding.",
+                Answer = "Grounding connects equipment to earth; bonding connects conductive parts.",
+                GenerationSource = "test",
+                CompletedAt = DateTimeOffset.Now,
+                TotalScore = 16,
+                MaxScore = 20,
+                Summary = "Strong understanding of core concepts.",
+            };
+
+            var summary = await coordinator.SaveDefenseAttemptAsync(defenseAttempt);
+
+            Assert.Single(summary.RecentDefenseAttempts);
+            Assert.Equal("grounding", summary.RecentDefenseAttempts[0].Topic);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveDefenseAttemptAsync_MultipleAttempts_AccumulatesHistory()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var coordinator = new StudySessionCoordinator(
+                new TrainingStore(tempDir, db: null),
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            for (var i = 0; i < 3; i++)
+            {
+                await coordinator.SaveDefenseAttemptAsync(new OralDefenseAttemptRecord
+                {
+                    Title = $"Defense {i}",
+                    Topic = $"topic-{i}",
+                    Prompt = "Describe protection zone coverage.",
+                    Answer = "Sample answer.",
+                    CompletedAt = DateTimeOffset.Now,
+                    TotalScore = 14 + i,
+                    MaxScore = 20,
+                    Summary = "Acceptable.",
+                });
+            }
+
+            var finalSummary = await new TrainingStore(tempDir, db: null).LoadSummaryAsync();
+            Assert.Equal(3, finalSummary.RecentDefenseAttempts.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: full practice workflow round-trip
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task PracticeWorkflow_ScoreAndSave_ReflectsSummaryCorrectly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var coordinator = new StudySessionCoordinator(
+                new TrainingStore(tempDir, db: null),
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            var test = BuildTest(4);
+            var answers = new[]
+            {
+                Answer(0, "A"), // correct
+                Answer(1, "B"), // wrong
+                Answer(2, "A"), // correct
+                Answer(3, "A"), // correct
+            };
+
+            var correctCount = StudySessionCoordinator.ScoreAnswers(test, answers);
+            Assert.Equal(3, correctCount);
+
+            var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correctCount);
+            var summary = await coordinator.SavePracticeAttemptAsync(attempt);
+
+            Assert.Equal(1, summary.TotalAttempts);
+            Assert.Equal(4, summary.TotalQuestions);
+            Assert.Equal(3, summary.CorrectAnswers);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: scoring workflow — ScoreAnswers → BuildAttemptRecord → summary
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ScoringWorkflow_PerfectScore_SummaryAndResultSummaryAreConsistent()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var coordinator = new StudySessionCoordinator(
+                new TrainingStore(tempDir, db: null),
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            var test = BuildTest(5);
+            var answers = Enumerable.Range(0, 5).Select(i => Answer(i, "A")).ToArray();
+
+            var correctCount = StudySessionCoordinator.ScoreAnswers(test, answers);
+            var resultSummary = StudySessionCoordinator.BuildPracticeResultSummary(correctCount, test.Questions.Count);
+            var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correctCount);
+            var historySummary = await coordinator.SavePracticeAttemptAsync(attempt);
+
+            // Scoring, summary text, and persisted history must all agree on correctCount
+            Assert.Equal(5, correctCount);
+            Assert.Contains("5/5", resultSummary, StringComparison.Ordinal);
+            Assert.Equal(5, historySummary.CorrectAnswers);
+            Assert.Equal(1, historySummary.TotalAttempts);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ScoringWorkflow_ZeroScore_SummaryAndHistoryAgree()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var coordinator = new StudySessionCoordinator(
+                new TrainingStore(tempDir, db: null),
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            var test = BuildTest(3);
+            // Answer all wrong
+            var answers = Enumerable.Range(0, 3).Select(i => Answer(i, "B")).ToArray();
+
+            var correctCount = StudySessionCoordinator.ScoreAnswers(test, answers);
+            var resultSummary = StudySessionCoordinator.BuildPracticeResultSummary(correctCount, test.Questions.Count);
+            var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correctCount);
+            var historySummary = await coordinator.SavePracticeAttemptAsync(attempt);
+
+            Assert.Equal(0, correctCount);
+            Assert.Contains("0/3", resultSummary, StringComparison.Ordinal);
+            Assert.Equal(0, historySummary.CorrectAnswers);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration: combined practice + defense + reflection workflow
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task CombinedWorkflow_PracticeDefenseReflection_AllPersistIndependently()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var trainingStore = new TrainingStore(tempDir, db: null);
+            var coordinator = new StudySessionCoordinator(
+                trainingStore,
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            // Practice
+            var test = BuildTest(2);
+            var correct = StudySessionCoordinator.ScoreAnswers(test, [Answer(0, "A"), Answer(1, "B")]);
+            var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correct);
+            await coordinator.SavePracticeAttemptAsync(attempt);
+
+            // Defense
+            await coordinator.SaveDefenseAttemptAsync(new OralDefenseAttemptRecord
+            {
+                Title = "Protection Defense",
+                Topic = "protection",
+                Prompt = "Describe arc-flash boundaries.",
+                Answer = "Limited, restricted, and prohibited approach boundaries...",
+                CompletedAt = DateTimeOffset.Now,
+                TotalScore = 18,
+                MaxScore = 20,
+                Summary = "Excellent response.",
+            });
+
+            // Reflection
+            await coordinator.SaveReflectionAsync(new SessionReflectionRecord
+            {
+                Mode = "Defense",
+                Focus = "protection",
+                Reflection = "Need to review arc-flash labels more carefully.",
+                CompletedAt = DateTimeOffset.Now,
+            });
+
+            var finalSummary = await trainingStore.LoadSummaryAsync();
+            Assert.Equal(1, finalSummary.TotalAttempts);
+            Assert.Single(finalSummary.RecentDefenseAttempts);
+            Assert.Single(finalSummary.RecentReflections);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // LearningProfile rebuild — with history
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task BuildLearningProfile_AfterPractice_ReturnsPersonalizedProfile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"coord-test-{Guid.NewGuid()}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var trainingStore = new TrainingStore(tempDir, db: null);
+            var coordinator = new StudySessionCoordinator(
+                trainingStore,
+                new OralDefenseService(new ThrowingModelProvider(), "test-model"),
+                new LearningProfileService()
+            );
+
+            // Score a test so history is non-empty
+            var test = BuildTest(2);
+            var correct = StudySessionCoordinator.ScoreAnswers(test, [Answer(0, "A"), Answer(1, "B")]);
+            var attempt = StudySessionCoordinator.BuildAttemptRecord(test, correct);
+            var historySummary = await coordinator.SavePracticeAttemptAsync(attempt);
+
+            var profile = coordinator.BuildLearningProfile(
+                new LearningLibrary { Documents = [] },
+                historySummary,
+                new SuiteSnapshot()
+            );
+
+            Assert.NotNull(profile);
+            Assert.NotEmpty(profile.CurrentNeed);
+            Assert.NotEmpty(profile.CoachingRules);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
     }
 
     // -------------------------------------------------------------------------
