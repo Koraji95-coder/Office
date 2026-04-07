@@ -325,7 +325,7 @@ def _sklearn_analytics(
     from sklearn.preprocessing import StandardScaler
 
     heuristic = _heuristic_analytics(topic_accuracy, operator_decisions)
-    model_source = "ephemeral"
+    persisted_sources: set[str] = set()
 
     # --- Topic clustering ---
     topic_clusters: list[dict[str, Any]] = []
@@ -364,14 +364,19 @@ def _sklearn_analytics(
                             topic_accuracy[t]["accuracy"],
                             float(topic_accuracy[t]["total"]),
                             heuristic["forgettingCurves"].get(t, {}).get("stability_days", 3.0),
-                            30.0,  # days_since placeholder for inference
+                            float(
+                                (datetime.now(timezone.utc) - max(
+                                    (_parse_iso(a["timestamp"]) for a in topic_accuracy[t].get("attempts", []) if a.get("timestamp")),
+                                    default=datetime.now(timezone.utc),
+                                )).total_seconds() / 86400
+                            ),
                         ]
                         for t in topics_list
                     ]
                 )
                 compat_scaled = persisted_scaler.transform(compat_features)
                 labels = persisted_kmeans.predict(compat_scaled)
-                model_source = "persisted"
+                persisted_sources.add("cluster")
             except Exception:
                 n_clusters = min(3, len(topics_list))
                 kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
@@ -421,8 +426,7 @@ def _sklearn_analytics(
             persisted_op_clf = _load_persisted_model("operator-pattern-model.joblib")
             if persisted_op_clf is not None:
                 try:
-                    from datetime import timezone as _tz
-                    now = datetime.now(_tz.utc)
+                    now = datetime.now(timezone.utc)
                     op_features = []
                     for i, d in enumerate(valid_decisions):
                         ts_str = d.get("decidedAt") or d.get("timestamp") or ""
@@ -446,7 +450,7 @@ def _sklearn_analytics(
                         "deferred": "selective",
                     }
                     operator_pattern["pattern"] = pattern_map.get(pattern_label, "balanced")
-                    model_source = "persisted"
+                    persisted_sources.add("operator")
                 except Exception:
                     # Fall back to heuristic pattern detection
                     recent_window = valid_decisions[-20:]
@@ -524,8 +528,7 @@ def _sklearn_analytics(
             # Enhance readiness with persisted model prediction if available
             if persisted_readiness is not None and len(attempts) >= 1:
                 try:
-                    from datetime import timezone as _tz
-                    now = datetime.now(_tz.utc)
+                    now = datetime.now(timezone.utc)
                     timestamps = [_parse_iso(a["timestamp"]) for a in attempts if a.get("timestamp")]
                     days_gap = 1.0
                     if timestamps:
@@ -539,7 +542,7 @@ def _sklearn_analytics(
                     entry["predictedNextReadiness"] = round(
                         max(0.0, min(1.0, predicted_readiness)), 3
                     )
-                    model_source = "persisted"
+                    persisted_sources.add("readiness")
                 except Exception:
                     pass
 
@@ -571,7 +574,7 @@ def _sklearn_analytics(
 
     result = heuristic.copy()
     result["engine"] = "sklearn"
-    result["model_source"] = model_source
+    result["model_source"] = "persisted" if persisted_sources else "ephemeral"
     result["topicClusters"] = topic_clusters
     result["operatorPattern"] = operator_pattern
     result["readinessBreakdown"] = readiness_breakdown

@@ -20,6 +20,9 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
+# Precomputed constant: -ln(0.5) used in stability estimation
+_LN_2 = math.log(2.0)
+
 
 # ---------------------------------------------------------------------------
 # State root resolution
@@ -118,7 +121,7 @@ def _compute_stability_days(attempts: list[dict[str, Any]]) -> float:
     for i in range(1, len(timed)):
         gap_days = (timed[i]["time"] - timed[i - 1]["time"]).total_seconds() / 86400
         if timed[i]["correct"] and gap_days > 0.1:
-            implied_s = gap_days / max(0.1, -math.log(0.5))
+            implied_s = gap_days / max(0.1, _LN_2)
             stability_estimates.append(implied_s)
 
     if not stability_estimates:
