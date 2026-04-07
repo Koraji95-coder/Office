@@ -344,7 +344,7 @@ def _ml_historical_score(pr_data, full_memory, area) -> tuple[int, str]:
         if os.path.exists(model_path):
             clf = joblib.load(model_path)
             model_source = "persisted"
-    except Exception:
+    except (ImportError, OSError, ValueError, TypeError):
         clf = None
         model_source = "ephemeral"
 
