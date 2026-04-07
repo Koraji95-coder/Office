@@ -3,9 +3,12 @@ Scikit-learn based learning analytics engine for DailyDesk.
 
 Analyzes training history to:
 - Cluster weak topics and identify knowledge gaps
-- Predict readiness scores for each topic area
+- Predict readiness scores for each topic area using gradient boosting
 - Generate adaptive study schedules using spaced repetition with ML optimization
 - Classify operator decision patterns (approve/reject/defer tendencies)
+- Model forgetting curves per topic to optimize review intervals (NEW)
+- Compute Bayesian confidence intervals on readiness estimates (NEW)
+- Detect mastery plateaus and recommend breakthrough strategies (NEW)
 
 Input: JSON on stdin with training_history, operator_memory, and learning_profile
 Output: JSON on stdout with analytics results
@@ -15,6 +18,7 @@ Falls back to heuristic output if scikit-learn is not installed.
 """
 
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from typing import Any
@@ -61,6 +65,135 @@ def _compute_topic_accuracy(attempts: list[dict[str, Any]]) -> dict[str, dict[st
         topic_data["accuracy"] = topic_data["correct"] / total if total > 0 else 0.0
 
     return topics
+
+
+def _compute_forgetting_curve(attempts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Estimate forgetting curve parameters for a topic's attempts.
+
+    Uses the Ebbinghaus forgetting curve model: R = e^(-t/S)
+    where R is retention, t is time since last review, S is stability.
+
+    Returns stability estimate and predicted retention at various intervals.
+    """
+    if len(attempts) < 2:
+        return {"stability_days": 3.0, "predicted_retention": {}}
+
+    # Sort by timestamp
+    timed = []
+    for a in attempts:
+        ts = a.get("timestamp", "")
+        if ts:
+            timed.append({"time": _parse_iso(ts), "correct": a.get("correct", False)})
+    timed.sort(key=lambda x: x["time"])
+
+    if len(timed) < 2:
+        return {"stability_days": 3.0, "predicted_retention": {}}
+
+    # Estimate stability from inter-review intervals and success rates
+    intervals = []
+    for i in range(1, len(timed)):
+        gap_days = (timed[i]["time"] - timed[i - 1]["time"]).total_seconds() / 86400
+        if gap_days > 0:
+            intervals.append({
+                "gap_days": gap_days,
+                "retained": timed[i]["correct"],
+            })
+
+    if not intervals:
+        return {"stability_days": 3.0, "predicted_retention": {}}
+
+    # Fit stability: for each interval where we have a success after gap,
+    # stability S = -t / ln(R). Estimate R from recent accuracy.
+    recent_accuracy = sum(1 for a in timed[-5:] if a["correct"]) / min(len(timed), 5)
+    if recent_accuracy <= 0:
+        recent_accuracy = 0.1
+
+    # Weighted average of implied stability from successful recalls after gaps
+    stability_estimates = []
+    for iv in intervals:
+        if iv["retained"] and iv["gap_days"] > 0.1:
+            # If recalled after gap_days, stability >= gap_days / -ln(threshold)
+            # Use a conservative retention threshold of 0.5
+            implied_s = iv["gap_days"] / max(0.1, -math.log(0.5))
+            stability_estimates.append(implied_s)
+
+    if stability_estimates:
+        # Use median for robustness
+        stability_estimates.sort()
+        stability = stability_estimates[len(stability_estimates) // 2]
+    else:
+        # Default: short stability for topics with no successful delayed recalls
+        stability = 1.5
+
+    # Clamp to reasonable range
+    stability = max(0.5, min(90.0, stability))
+
+    # Predict retention at standard intervals
+    predicted = {}
+    for days in [1, 3, 7, 14, 30]:
+        retention = math.exp(-days / stability)
+        predicted[f"{days}d"] = round(retention, 3)
+
+    return {
+        "stability_days": round(stability, 1),
+        "predicted_retention": predicted,
+    }
+
+
+def _bayesian_confidence(correct: int, total: int, prior_alpha: float = 1.0, prior_beta: float = 1.0) -> dict[str, float]:
+    """Compute Bayesian posterior for topic accuracy using Beta-Binomial model.
+
+    Returns mean, lower/upper 90% credible interval bounds.
+    Prior: Beta(alpha, beta) — default uniform Beta(1,1).
+    """
+    alpha = prior_alpha + correct
+    beta = prior_beta + (total - correct)
+    mean = alpha / (alpha + beta)
+
+    # 90% credible interval using normal approximation for Beta
+    variance = (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1))
+    std = math.sqrt(variance)
+    z90 = 1.645  # 90% CI
+
+    lower = max(0.0, mean - z90 * std)
+    upper = min(1.0, mean + z90 * std)
+
+    return {
+        "mean": round(mean, 3),
+        "lower_90": round(lower, 3),
+        "upper_90": round(upper, 3),
+        "samples": total,
+    }
+
+
+def _detect_plateau(attempts: list[dict[str, Any]], window: int = 10) -> dict[str, Any]:
+    """Detect if a topic's accuracy has plateaued (no improvement over recent window)."""
+    if len(attempts) < window:
+        return {"plateaued": False, "reason": "Insufficient data"}
+
+    # Split into first half and second half of the window
+    recent = attempts[-window:]
+    first_half = recent[: window // 2]
+    second_half = recent[window // 2:]
+
+    first_acc = sum(1 for a in first_half if a.get("correct", False)) / len(first_half)
+    second_acc = sum(1 for a in second_half if a.get("correct", False)) / len(second_half)
+
+    improvement = second_acc - first_acc
+    if abs(improvement) < 0.05 and first_acc < 0.85:
+        return {
+            "plateaued": True,
+            "accuracy": round(second_acc, 3),
+            "recommendation": "Switch to oral defense or apply-style practice to break plateau",
+        }
+    elif improvement < -0.1:
+        return {
+            "plateaued": False,
+            "regressing": True,
+            "accuracy": round(second_acc, 3),
+            "recommendation": "Regression detected — schedule immediate review",
+        }
+    return {"plateaued": False}
 
 
 def _heuristic_analytics(
@@ -116,6 +249,15 @@ def _heuristic_analytics(
             d["accuracy"] for d in topic_accuracy.values()
         ) / len(topic_accuracy)
 
+    # Compute enhanced analytics for each topic
+    forgetting_curves = {}
+    bayesian_estimates = {}
+    plateau_status = {}
+    for topic, data in topic_accuracy.items():
+        forgetting_curves[topic] = _compute_forgetting_curve(data.get("attempts", []))
+        bayesian_estimates[topic] = _bayesian_confidence(data["correct"], data["total"])
+        plateau_status[topic] = _detect_plateau(data.get("attempts", []))
+
     return {
         "ok": True,
         "engine": "heuristic",
@@ -145,6 +287,9 @@ def _heuristic_analytics(
             }
             for topic, data in topic_accuracy.items()
         ],
+        "forgettingCurves": forgetting_curves,
+        "bayesianEstimates": bayesian_estimates,
+        "plateauStatus": plateau_status,
     }
 
 
@@ -164,6 +309,8 @@ def _sklearn_analytics(
     topic_clusters: list[dict[str, Any]] = []
     if len(topic_accuracy) >= 3:
         topics_list = list(topic_accuracy.keys())
+
+        # Enhanced feature set for clustering — include forgetting curve stability
         features = np.array(
             [
                 [
@@ -171,6 +318,9 @@ def _sklearn_analytics(
                     topic_accuracy[t]["total"],
                     topic_accuracy[t]["correct"],
                     len(topic_accuracy[t].get("attempts", [])),
+                    heuristic["forgettingCurves"].get(t, {}).get("stability_days", 3.0),
+                    heuristic["bayesianEstimates"].get(t, {}).get("upper_90", 0.5)
+                    - heuristic["bayesianEstimates"].get(t, {}).get("lower_90", 0.5),
                 ]
                 for t in topics_list
             ]
@@ -191,11 +341,15 @@ def _sklearn_analytics(
             avg_accuracy = np.mean(
                 [topic_accuracy[t]["accuracy"] for t in cluster_topics]
             )
+            avg_stability = np.mean(
+                [heuristic["forgettingCurves"].get(t, {}).get("stability_days", 3.0) for t in cluster_topics]
+            )
             topic_clusters.append(
                 {
                     "clusterId": cluster_id,
                     "topics": cluster_topics,
                     "averageAccuracy": round(float(avg_accuracy), 3),
+                    "averageStability": round(float(avg_stability), 1),
                     "label": "weak"
                     if avg_accuracy < 0.5
                     else "developing"
@@ -232,13 +386,30 @@ def _sklearn_analytics(
             else:
                 operator_pattern["pattern"] = "selective"
 
-    # --- Readiness prediction with gradient boosting ---
+    # --- Readiness prediction with gradient boosting + Bayesian confidence ---
     readiness_breakdown = heuristic["readinessBreakdown"]
     if len(topic_accuracy) >= 3:
         for entry in readiness_breakdown:
             topic = entry["topic"]
             data = topic_accuracy.get(topic, {})
             attempts = data.get("attempts", [])
+
+            # Add Bayesian credible interval
+            bayes = heuristic["bayesianEstimates"].get(topic, {})
+            entry["bayesianMean"] = bayes.get("mean", entry["readiness"])
+            entry["credibleIntervalLower"] = bayes.get("lower_90", 0.0)
+            entry["credibleIntervalUpper"] = bayes.get("upper_90", 1.0)
+
+            # Add forgetting curve info
+            fc = heuristic["forgettingCurves"].get(topic, {})
+            entry["stabilityDays"] = fc.get("stability_days", 3.0)
+
+            # Add plateau detection
+            plateau = heuristic["plateauStatus"].get(topic, {})
+            entry["plateaued"] = plateau.get("plateaued", False)
+            if plateau.get("recommendation"):
+                entry["plateauRecommendation"] = plateau["recommendation"]
+
             if len(attempts) >= 3:
                 recent = attempts[-5:]
                 trend = sum(1 for a in recent if a.get("correct", False)) / len(
@@ -250,12 +421,22 @@ def _sklearn_analytics(
                 entry["trend"] = entry["readiness"]
                 entry["improving"] = False
 
-    # --- Adaptive schedule with ML-weighted priorities ---
+    # --- Adaptive schedule with ML-weighted priorities + forgetting curves ---
     schedule = heuristic["adaptiveSchedule"]
     for item in schedule:
         topic = item["topic"]
         data = topic_accuracy.get(topic, {})
         attempts = data.get("attempts", [])
+
+        # Use forgetting curve to set optimal review interval.
+        # R = e^(-t/S) => solve for t when R = 0.6: t = S * ln(1/0.6)
+        fc = heuristic["forgettingCurves"].get(topic, {})
+        stability = fc.get("stability_days", 3.0)
+        if stability > 0:
+            optimal_interval = max(1, int(stability * math.log(1.0 / 0.6)))
+            item["intervalDays"] = optimal_interval
+            item["forgettingCurveInterval"] = True
+
         if attempts:
             timestamps = [_parse_iso(a["timestamp"]) for a in attempts if a.get("timestamp")]
             if len(timestamps) >= 2:
