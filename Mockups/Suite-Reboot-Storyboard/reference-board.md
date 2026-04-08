@@ -195,7 +195,7 @@ Navigation model
 
 - Developer Portal is the web-side workshop homepage
 - Groups stay fixed: Publishing and Evidence, Automation Lab, Agent Lab, Architecture and Code, Developer Docs
-- Tool detail is a second depth for launch readiness and graduation path
+- Tool detail is a second depth for launch readiness and graduation path; see graduation-path-guide.md for the three-step graduation workflow and customer-safe copy standards
 
 Architecture and Code tools
 

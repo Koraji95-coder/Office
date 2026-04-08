@@ -1769,3 +1769,98 @@ describe('Runtime Control diagnostics — inspector design rules (runtime-contro
         expect(items).toContain('Safe actions');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Graduation path guide — customer-safe copy documentation consistency
+// Verifies that graduation-path-guide.md exists, references all three
+// workflow steps, and that its documented steps match what app.js renders.
+// ---------------------------------------------------------------------------
+describe('Graduation path guide — customer-safe copy documentation (graduation-path-guide.md)', () => {
+    let guideSource;
+
+    beforeAll(() => {
+        guideSource = fs.readFileSync(
+            path.join(__dirname, 'graduation-path-guide.md'),
+            'utf8'
+        );
+    });
+
+    it('graduation-path-guide.md exists and is non-empty', () => {
+        expect(guideSource).toBeTruthy();
+        expect(guideSource.length).toBeGreaterThan(0);
+    });
+
+    it('guide documents "Tighten customer-safe copy" as the first graduation step', () => {
+        expect(guideSource).toContain('Tighten customer-safe copy');
+    });
+
+    it('guide documents "Prove workflow value with operators" as the second graduation step', () => {
+        expect(guideSource).toContain('Prove workflow value with operators');
+    });
+
+    it('guide documents "Remove lab-only controls from the route" as the third graduation step', () => {
+        expect(guideSource).toContain('Remove lab-only controls from the route');
+    });
+
+    it('guide explains that productization is staged, not implied', () => {
+        expect(guideSource).toContain('Productization is staged, not implied');
+    });
+
+    it('guide defines customer-safe copy rules with a table', () => {
+        expect(guideSource).toContain('Customer-safe copy rules');
+    });
+
+    it('guide references the canonical graduation panel subtitle from app.js', () => {
+        // The subtitle used in the list() call in app.js is "Productization is staged, not implied."
+        expect(guideSource).toContain('Productization is staged, not implied');
+    });
+
+    it('guide documents route hygiene three-point check', () => {
+        expect(guideSource).toContain('One launch CTA');
+        expect(guideSource).toContain('One readiness summary');
+        expect(guideSource).toContain('One graduation story');
+    });
+
+    it('guide references reference-board.md for Developer Portal context', () => {
+        expect(guideSource).toContain('reference-board.md');
+    });
+
+    it('guide covers all three graduation steps in fixed order', () => {
+        const step1Index = guideSource.indexOf('Tighten customer-safe copy');
+        const step2Index = guideSource.indexOf('Prove workflow value with operators');
+        const step3Index = guideSource.indexOf('Remove lab-only controls from the route');
+        expect(step1Index).toBeLessThan(step2Index);
+        expect(step2Index).toBeLessThan(step3Index);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Graduation path storyboard — cross-check with documentation
+// Verifies that the three graduation steps rendered in app.js match the
+// three steps documented in graduation-path-guide.md exactly.
+// ---------------------------------------------------------------------------
+describe('Graduation path storyboard — cross-check with documentation (developer-portal:tool-detail)', () => {
+    let guideSource;
+
+    beforeAll(() => {
+        initApp('#developer-portal/tool-detail');
+        guideSource = fs.readFileSync(
+            path.join(__dirname, 'graduation-path-guide.md'),
+            'utf8'
+        );
+    });
+
+    it('every step rendered in the "Graduation path" panel is documented in graduation-path-guide.md', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        const renderedSteps = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        for (const step of renderedSteps) {
+            expect(guideSource).toContain(step);
+        }
+    });
+
+    it('"Proof inputs" panel customer-safe review state is covered by the guide', () => {
+        expect(guideSource).toContain('customer-safe review state');
+    });
+});
