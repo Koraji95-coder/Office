@@ -1,4 +1,5 @@
 using DailyDesk.Services;
+using FluentValidation;
 using Microsoft.Extensions.Logging;
 
 namespace DailyDesk.Broker;
@@ -57,6 +58,12 @@ internal static class KnowledgeEndpoints
 
         app.MapPost("/api/knowledge/search", async (KnowledgeSearchRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
         {
+            var validation = new KnowledgeSearchRequestValidator().Validate(request);
+            if (!validation.IsValid)
+            {
+                return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+            }
+
             try
             {
                 var searchService = new DailyDesk.Services.KnowledgeSearchService(
@@ -112,3 +119,13 @@ internal sealed record LibraryImportRequest(IReadOnlyList<string>? Paths);
 
 // Phase 9: Knowledge search request record
 internal sealed record KnowledgeSearchRequest(string Query, int TopK = 5);
+
+internal sealed class KnowledgeSearchRequestValidator : AbstractValidator<KnowledgeSearchRequest>
+{
+    public KnowledgeSearchRequestValidator()
+    {
+        RuleFor(x => x.Query)
+            .NotEmpty()
+            .WithMessage("Query is required.");
+    }
+}

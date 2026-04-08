@@ -308,11 +308,11 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task BrokerInboxQueue_EmptySuggestionId_Returns400WithSingleErrorField()
+    public async Task BrokerInboxQueue_EmptySuggestionId_Returns400WithFluentValidationErrors()
     {
-        // POST /api/inbox/queue has no FluentValidation.  An empty SuggestionId passes
-        // request binding and reaches OfficeBrokerOrchestrator.QueueSuggestionAsync,
-        // which throws ArgumentException("Suggestion id is required.").
+        // POST /api/inbox/queue now has FluentValidation via InboxQueueRequestValidator.
+        // An empty SuggestionId is caught by the validator before reaching the orchestrator,
+        // returning 400 with { errors: ["SuggestionId is required."] }.
         var response = await _client.PostAsJsonAsync(
             "/api/inbox/queue",
             new { SuggestionId = "" }
@@ -322,12 +322,12 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
         var json = await response.Content.ReadFromJsonAsync<JsonObject>();
         Assert.NotNull(json);
         Assert.True(
-            json!.ContainsKey("error"),
-            "ArgumentException from orchestrator must produce { error: message } with singular 'error' field"
+            json!.ContainsKey("errors"),
+            "FluentValidation must produce { errors: [...] } with plural 'errors' field"
         );
         Assert.False(
-            json.ContainsKey("errors"),
-            "ArgumentException must not produce the FluentValidation 'errors' array"
+            json.ContainsKey("error"),
+            "FluentValidation response must not use the singular 'error' field"
         );
     }
 

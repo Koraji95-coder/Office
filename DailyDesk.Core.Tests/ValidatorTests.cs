@@ -180,7 +180,8 @@ public class MLValidatorTests
 
 public class OperatorValidatorTests
 {
-    private readonly InboxResolveRequestValidator _validator = new();
+    private readonly InboxResolveRequestValidator _resolveValidator = new();
+    private readonly InboxQueueRequestValidator _queueValidator = new();
 
     // InboxResolveRequestValidator — valid request
 
@@ -190,7 +191,7 @@ public class OperatorValidatorTests
     [InlineData("rejected")]
     public void InboxResolveRequestValidator_ValidStatus_IsValid(string status)
     {
-        var result = _validator.Validate(new InboxResolveRequest("sg-001", status, null, null));
+        var result = _resolveValidator.Validate(new InboxResolveRequest("sg-001", status, null, null));
         Assert.True(result.IsValid);
     }
 
@@ -200,7 +201,7 @@ public class OperatorValidatorTests
     [InlineData("REJECTED")]
     public void InboxResolveRequestValidator_ValidStatusMixedCase_IsValid(string status)
     {
-        var result = _validator.Validate(new InboxResolveRequest("sg-001", status, null, null));
+        var result = _resolveValidator.Validate(new InboxResolveRequest("sg-001", status, null, null));
         Assert.True(result.IsValid);
     }
 
@@ -211,7 +212,7 @@ public class OperatorValidatorTests
     [InlineData("   ")]
     public void InboxResolveRequestValidator_EmptyOrWhitespaceSuggestionId_FailsWithRequiredMessage(string suggestionId)
     {
-        var result = _validator.Validate(new InboxResolveRequest(suggestionId, "accepted", null, null));
+        var result = _resolveValidator.Validate(new InboxResolveRequest(suggestionId, "accepted", null, null));
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.ErrorMessage == "SuggestionId is required.");
     }
@@ -223,7 +224,7 @@ public class OperatorValidatorTests
     [InlineData("   ")]
     public void InboxResolveRequestValidator_EmptyOrWhitespaceStatus_FailsWithRequiredMessage(string status)
     {
-        var result = _validator.Validate(new InboxResolveRequest("sg-001", status, null, null));
+        var result = _resolveValidator.Validate(new InboxResolveRequest("sg-001", status, null, null));
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.ErrorMessage == "Status is required.");
     }
@@ -236,9 +237,37 @@ public class OperatorValidatorTests
     [InlineData("pending")]
     public void InboxResolveRequestValidator_UnknownStatus_FailsWithKnownStatusesMessage(string status)
     {
-        var result = _validator.Validate(new InboxResolveRequest("sg-001", status, null, null));
+        var result = _resolveValidator.Validate(new InboxResolveRequest("sg-001", status, null, null));
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.ErrorMessage == "Status must be one of: accepted, deferred, rejected.");
+    }
+
+    // InboxQueueRequestValidator — valid suggestion ID
+
+    [Fact]
+    public void InboxQueueRequestValidator_NonEmptySuggestionId_IsValid()
+    {
+        var result = _queueValidator.Validate(new InboxQueueRequest("sg-001", null));
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void InboxQueueRequestValidator_WithApproveFirst_IsValid()
+    {
+        var result = _queueValidator.Validate(new InboxQueueRequest("sg-002", true));
+        Assert.True(result.IsValid);
+    }
+
+    // InboxQueueRequestValidator — invalid: empty / whitespace suggestion ID
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void InboxQueueRequestValidator_EmptyOrWhitespaceSuggestionId_FailsWithRequiredMessage(string suggestionId)
+    {
+        var result = _queueValidator.Validate(new InboxQueueRequest(suggestionId, null));
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == "SuggestionId is required.");
     }
 }
 
@@ -412,5 +441,38 @@ public class ScheduleValidatorTests
         var result = _createWorkflowValidator.Validate(new CreateWorkflowRequest("My workflow", null, policy, steps));
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.ErrorMessage == "FailurePolicy must be 'abort' or 'continue'.");
+    }
+}
+
+public class KnowledgeValidatorTests
+{
+    private readonly KnowledgeSearchRequestValidator _searchValidator = new();
+
+    // KnowledgeSearchRequestValidator — valid query
+
+    [Fact]
+    public void KnowledgeSearchRequestValidator_NonEmptyQuery_IsValid()
+    {
+        var result = _searchValidator.Validate(new KnowledgeSearchRequest("machine learning"));
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void KnowledgeSearchRequestValidator_NonEmptyQueryWithCustomTopK_IsValid()
+    {
+        var result = _searchValidator.Validate(new KnowledgeSearchRequest("neural networks", 10));
+        Assert.True(result.IsValid);
+    }
+
+    // KnowledgeSearchRequestValidator — invalid: empty / whitespace query
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void KnowledgeSearchRequestValidator_EmptyOrWhitespaceQuery_FailsWithRequiredMessage(string query)
+    {
+        var result = _searchValidator.Validate(new KnowledgeSearchRequest(query));
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == "Query is required.");
     }
 }

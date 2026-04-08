@@ -66,6 +66,12 @@ internal static class OperatorEndpoints
 
         app.MapPost("/api/inbox/queue", async (InboxQueueRequest request, OfficeBrokerOrchestrator orchestrator, CancellationToken ct) =>
         {
+            var validation = new InboxQueueRequestValidator().Validate(request);
+            if (!validation.IsValid)
+            {
+                return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+            }
+
             try
             {
                 var suggestion = await orchestrator.QueueSuggestionAsync(
@@ -160,6 +166,16 @@ internal sealed record InboxResolveRequest(
 );
 internal sealed record InboxQueueRequest(string SuggestionId, bool? ApproveFirst);
 internal sealed record OfficeHistoryResetRequest(bool? ClearTrainingHistory);
+
+internal sealed class InboxQueueRequestValidator : AbstractValidator<InboxQueueRequest>
+{
+    public InboxQueueRequestValidator()
+    {
+        RuleFor(x => x.SuggestionId)
+            .NotEmpty()
+            .WithMessage("SuggestionId is required.");
+    }
+}
 
 internal sealed class InboxResolveRequestValidator : AbstractValidator<InboxResolveRequest>
 {
