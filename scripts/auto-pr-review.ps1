@@ -149,7 +149,7 @@ foreach ($repo in $repos) {
             # ========== GATE 6B: Already has a review from us ==========
             try {
                 $existingReviews = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)/reviews" -Headers $headers
-                $ourReview = $existingReviews | Where-Object { $_.user.login -eq "Koraji95-coder" -and $_.body -match "Auto-Review" }
+                $ourReview = $existingReviews | Where-Object { $_.user.login -eq "Koraji95-coder" -and $_.body -match "Auto-Review" -and $_.state -ne "DISMISSED" }
                 if ($ourReview) {
                     Write-Host "SKIP: $repoShort#$($pr.number) - already reviewed (score locked)"
                     continue
@@ -220,8 +220,8 @@ foreach ($repo in $repos) {
             $diffHeaders = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3.diff" }
             $diff = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $diffHeaders
 
-            if ($diff.Length -gt 6000) {
-                $diff = $diff.Substring(0, 6000) + "`n... (truncated)"
+            if ($diff.Length -gt 14000) {
+                $diff = $diff.Substring(0, 14000) + "`n... (truncated)"
             }
 
             $ragContext = ""
@@ -248,6 +248,18 @@ foreach ($repo in $repos) {
                 $overlapContext = "`nFILE OVERLAP WARNINGS:`n" + ($overlapWarnings -join "`n")
             }
 
+            # Load conventions context
+            $conventionsContext = ""
+            try {
+                $conventionsPath = Join-Path (Split-Path $PSScriptRoot) "Docs" "CONVENTIONS.md"
+                if (Test-Path $conventionsPath) {
+                    $conventionsContext = Get-Content $conventionsPath -Raw
+                    if ($conventionsContext.Length -gt 3000) {
+                        $conventionsContext = $conventionsContext.Substring(0, 3000) + "`n... (truncated)"
+                    }
+                }
+            } catch {}
+
             $reviewPrompt = @"
 You are a strict senior code reviewer. You must be critical and honest. Do NOT rubber-stamp.
 
@@ -263,6 +275,9 @@ $ragContext
 $mergeHistoryContext
 $overlapContext
 
+REPOSITORY CONVENTIONS:
+$conventionsContext
+
 SCORING RULES -- follow these strictly:
 - 9-10: Exceptional. Clean code, good tests, no issues, adds real value. Rare.
 - 7-8: Good. Minor issues but solid contribution. Most decent PRs land here.
@@ -272,11 +287,14 @@ SCORING RULES -- follow these strictly:
 
 DUPLICATE CHECK: If this PR does the same thing as a recently merged PR listed above, score it 1-2 and verdict REQUEST_CHANGES.
 
-Provide your review:
-1. **Verdict**: APPROVE, REQUEST_CHANGES, or NEEDS_DISCUSSION
-2. **Summary**: 2-3 sentences on what this PR does
-3. **Concerns**: Any issues found (or "None")
-4. **Quality**: Rate 1-10 using the scoring rules above -- be honest, not generous
+You MUST respond with ONLY this JSON structure — no markdown, no extra text:
+{
+  "verdict": "APPROVE | REQUEST_CHANGES | NEEDS_DISCUSSION",
+  "score": <integer 1-10>,
+  "summary": "<2-3 sentences on what this PR does>",
+  "concerns": ["<concern 1>", "<concern 2>"],
+  "overlap_risk": "none | <description of overlap>"
+}
 "@
 
             $chatBody = @{
@@ -288,19 +306,37 @@ Provide your review:
             $response = Invoke-RestMethod -Uri "http://localhost:11434/api/chat" -Method POST -ContentType "application/json" -Body $chatBody
             $review = $response.message.content
 
-            # Determine verdict
-            $verdict = "UNKNOWN"
-            if ($review -match "REQUEST_CHANGES") { $verdict = "REQUEST_CHANGES" }
-            elseif ($review -match "NEEDS_DISCUSSION") { $verdict = "NEEDS_DISCUSSION" }
-            elseif ($review -match "APPROVE") { $verdict = "APPROVE" }
+            # Determine verdict and score -- try JSON parsing first (structured output)
+            $parsedJson = $null
+            try {
+                $parsedJson = $review | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+                Write-Host "JSON parse failed for $repoShort#$($pr.number) -- falling back to regex"
+            }
 
-            # Extract score -- try patterns in order of specificity
-            $score = 0
-            if      ($review -match "(\d+)\s*/\s*10")                              { $score = [int]$Matches[1] }
-            elseif  ($review -match "(\d+)\s+out\s+of\s+10")                       { $score = [int]$Matches[1] }
-            elseif  ($review -match "Quality[:\s]+(\d+)")                          { $score = [int]$Matches[1] }
-            elseif  ($review -match "Score[:\s]+(\d+)")                            { $score = [int]$Matches[1] }
-            elseif  ($review -match "(?:quality|score|rated?|rating)[:\s-]+(\d+)") { $score = [int]$Matches[1] }
+            if ($parsedJson) {
+                $verdict = $parsedJson.verdict
+                $score = [int]$parsedJson.score
+                # Normalize verdict strings
+                if ($verdict -match "REQUEST_CHANGES") { $verdict = "REQUEST_CHANGES" }
+                elseif ($verdict -match "NEEDS_DISCUSSION") { $verdict = "NEEDS_DISCUSSION" }
+                elseif ($verdict -match "APPROVE") { $verdict = "APPROVE" }
+                else { $verdict = "UNKNOWN" }
+            } else {
+                # Fallback to regex parsing for non-JSON responses
+                $verdict = "UNKNOWN"
+                if ($review -match "REQUEST_CHANGES") { $verdict = "REQUEST_CHANGES" }
+                elseif ($review -match "NEEDS_DISCUSSION") { $verdict = "NEEDS_DISCUSSION" }
+                elseif ($review -match "APPROVE") { $verdict = "APPROVE" }
+
+                # Extract score -- try patterns in order of specificity
+                $score = 0
+                if      ($review -match "(\d+)\s*/\s*10")                              { $score = [int]$Matches[1] }
+                elseif  ($review -match "(\d+)\s+out\s+of\s+10")                       { $score = [int]$Matches[1] }
+                elseif  ($review -match "Quality[:\s]+(\d+)")                          { $score = [int]$Matches[1] }
+                elseif  ($review -match "Score[:\s]+(\d+)")                            { $score = [int]$Matches[1] }
+                elseif  ($review -match "(?:quality|score|rated?|rating)[:\s-]+(\d+)") { $score = [int]$Matches[1] }
+            }
 
             # Clamp to valid range; treat out-of-range as parse failure (0)
             if ($score -lt 0 -or $score -gt 10) { $score = 0 }
@@ -317,10 +353,10 @@ Provide your review:
             if ($verdict -eq "REQUEST_CHANGES") {
                 $ghReviewEvent = "REQUEST_CHANGES"
                 $tierAction = "request-changes"
-            } elseif ($score -ge 8 -and $verdict -eq "APPROVE") {
+            } elseif ($score -ge 9 -and $verdict -eq "APPROVE") {
                 $ghReviewEvent = "APPROVE"
                 $tierAction = "auto-merge"
-            } elseif ($score -ge 6 -and $verdict -eq "APPROVE") {
+            } elseif ($score -ge 7 -and $verdict -eq "APPROVE") {
                 $ghReviewEvent = "APPROVE"
                 $tierAction = "manual-merge"
             } elseif ($score -ge 4) {
@@ -353,6 +389,25 @@ Provide your review:
             # ========== ACT ON TIER ==========
             $mergeStatus = ""
 
+            # Build training record for ML data export
+            $trainingRecord = @{
+                decision    = $tierAction
+                repo        = $repoShort
+                pr_number   = [int]$pr.number
+                title       = $pr.title
+                score       = $score
+                verdict     = $verdict
+                files       = $thisFiles
+                file_count  = $thisFiles.Count
+                additions   = [int]$freshPr.additions
+                deletions   = [int]$freshPr.deletions
+                model       = "qwen3:14b"
+                json_parsed = ($null -ne $parsedJson)
+                concerns    = if ($parsedJson) { $parsedJson.concerns } else { @() }
+                summary     = if ($parsedJson) { $parsedJson.summary } else { ($review -split "`n")[0..2] -join " " }
+                timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+            }
+
             if ($tierAction -eq "auto-merge" -and $verdict -eq "APPROVE") {
                 $mergeBody = @{ commit_title = "auto-merge: $($pr.title) [score $score/10]"; merge_method = "squash" } | ConvertTo-Json -Compress
                 try {
@@ -360,18 +415,9 @@ Provide your review:
                     Write-Host "AUTO-MERGED: $repoShort#$($pr.number) - score $score/10"
                     $mergeStatus = "Auto-merged"
 
-                    # Log to decision memory with file list
+                    # Log to decision memory
                     if (Test-Path $memoryFile) { $memory = Get-Content $memoryFile | ConvertFrom-Json } else { $memory = @() }
-                    $memory = @($memory) + @{
-                        decision  = "auto-merged"
-                        repo      = $repoShort
-                        pr_number = [int]$pr.number
-                        title     = $pr.title
-                        score     = $score
-                        files     = $thisFiles
-                        summary   = ($review -split "`n")[0..2] -join " "
-                        timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-                    }
+                    $memory = @($memory) + $trainingRecord
                     $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
                 } catch {
                     $sc = $_.Exception.Response.StatusCode
@@ -383,9 +429,19 @@ Provide your review:
             } elseif ($tierAction -eq "manual-merge") {
                 $mergeStatus = "Score $score/10 -- approved, needs manual merge"
                 Write-Host "MANUAL: $repoShort#$($pr.number) - $mergeStatus"
+
+                # Log to decision memory
+                if (Test-Path $memoryFile) { $memory = Get-Content $memoryFile | ConvertFrom-Json } else { $memory = @() }
+                $memory = @($memory) + $trainingRecord
+                $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
             } elseif ($tierAction -eq "request-changes") {
                 $mergeStatus = "Score $score/10 -- changes requested"
                 Write-Host "CHANGES: $repoShort#$($pr.number) - $mergeStatus"
+
+                # Log to decision memory
+                if (Test-Path $memoryFile) { $memory = Get-Content $memoryFile | ConvertFrom-Json } else { $memory = @() }
+                $memory = @($memory) + $trainingRecord
+                $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
             } elseif ($tierAction -eq "needs-attention") {
                 $mergeStatus = "Score $score/10 -- needs attention, not approved"
                 Write-Host "ATTENTION: $repoShort#$($pr.number) - $mergeStatus"
@@ -396,15 +452,7 @@ Provide your review:
                     Write-Host "CLOSED: $repoShort#$($pr.number) - $mergeStatus"
 
                     if (Test-Path $memoryFile) { $memory = Get-Content $memoryFile | ConvertFrom-Json } else { $memory = @() }
-                    $memory = @($memory) + @{
-                        decision  = "auto-closed"
-                        repo      = $repoShort
-                        pr_number = [int]$pr.number
-                        title     = $pr.title
-                        score     = $score
-                        files     = $thisFiles
-                        timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-                    }
+                    $memory = @($memory) + $trainingRecord
                     $memory | ConvertTo-Json -Depth 4 | Set-Content -Path $memoryFile -Encoding UTF8
                 } catch {
                     Write-Host "Failed to close $repoShort#$($pr.number)"
