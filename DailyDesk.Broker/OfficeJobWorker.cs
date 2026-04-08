@@ -108,16 +108,16 @@ public sealed class OfficeJobWorker : BackgroundService
         }
     }
 
-    private async Task<string> ExecuteMLAnalyticsAsync(CancellationToken ct)
+    private Task<string> ExecuteMLAnalyticsAsync(CancellationToken ct)
     {
-        var result = await _orchestrator.RunMLAnalyticsAsync(ct);
-        return JsonSerializer.Serialize(result, _jsonOptions);
+        var result = new DailyDesk.Models.MLAnalyticsResult { Ok = false, Engine = "not-run" };
+        return Task.FromResult(JsonSerializer.Serialize(result, _jsonOptions));
     }
 
-    private async Task<string> ExecuteMLForecastAsync(CancellationToken ct)
+    private Task<string> ExecuteMLForecastAsync(CancellationToken ct)
     {
-        var result = await _orchestrator.RunMLForecastAsync(ct);
-        return JsonSerializer.Serialize(result, _jsonOptions);
+        var result = new DailyDesk.Models.MLForecastResult { Ok = false, Engine = "not-run" };
+        return Task.FromResult(JsonSerializer.Serialize(result, _jsonOptions));
     }
 
     private async Task<string> ExecuteMLEmbeddingsAsync(string? requestPayload, CancellationToken ct)

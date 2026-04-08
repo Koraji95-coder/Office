@@ -27,12 +27,8 @@ public sealed class MLAnalyticsService
     private readonly object _pythonCheckLock = new();
 
     // Result cache
-    private MLAnalyticsResult? _cachedAnalytics;
-    private DateTimeOffset _analyticsCachedAt;
     private MLEmbeddingsResult? _cachedEmbeddings;
     private DateTimeOffset _embeddingsCachedAt;
-    private MLForecastResult? _cachedForecast;
-    private DateTimeOffset _forecastCachedAt;
 
     public MLAnalyticsService(
         ProcessRunner processRunner,
@@ -60,89 +56,6 @@ public sealed class MLAnalyticsService
         if (IsPythonAvailable())
             return "python";
         return "fallback";
-    }
-
-    public async Task<MLAnalyticsResult> RunLearningAnalyticsAsync(
-        IReadOnlyList<TrainingAttemptRecord> attempts,
-        IReadOnlyList<OperatorActivityRecord> decisions,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Check cache
-        if (_cachedAnalytics is not null && DateTimeOffset.Now - _analyticsCachedAt < _cacheTtl)
-        {
-            return _cachedAnalytics;
-        }
-
-        var input = new
-        {
-            trainingAttempts = attempts.Select(a => new
-            {
-                completedAt = a.CompletedAt.ToString("O"),
-                questions = a.Questions.Select(q => new
-                {
-                    topic = q.Topic,
-                    correct = q.Correct,
-                }).ToArray(),
-            }).ToArray(),
-            operatorDecisions = decisions.Select(d => new
-            {
-                status = d.EventType,
-                timestamp = d.OccurredAt.ToString("O"),
-            }).ToArray(),
-        };
-
-        // 1. Try ONNX (fastest, in-process)
-        if (_onnxEngine is not null)
-        {
-            var onnxResult = _onnxEngine.RunAnalytics(attempts, decisions);
-            if (onnxResult is not null)
-            {
-                CacheAnalytics(onnxResult);
-                return onnxResult;
-            }
-        }
-
-        // 2. Try Python script
-        if (IsPythonAvailable())
-        {
-            try
-            {
-                var result = await RunPythonScriptAsync<MLAnalyticsResult>(
-                    "ml_learning_analytics.py",
-                    input,
-                    cancellationToken
-                );
-
-                if (result is not null)
-                {
-                    CacheAnalytics(result);
-                    return result;
-                }
-            }
-            catch (Exception ex)
-            {
-                // Python failed — fall through to fallback with error reporting
-                var fallback = BuildFallbackAnalytics(attempts);
-                return new MLAnalyticsResult
-                {
-                    Ok = fallback.Ok,
-                    Engine = fallback.Engine,
-                    WeakTopics = fallback.WeakTopics,
-                    StrongTopics = fallback.StrongTopics,
-                    OverallReadiness = fallback.OverallReadiness,
-                    OperatorPattern = fallback.OperatorPattern,
-                    AdaptiveSchedule = fallback.AdaptiveSchedule,
-                    ReadinessBreakdown = fallback.ReadinessBreakdown,
-                    SklearnError = ex.Message,
-                };
-            }
-        }
-
-        // 3. Heuristic fallback
-        var fallbackResult = BuildFallbackAnalytics(attempts);
-        CacheAnalytics(fallbackResult);
-        return fallbackResult;
     }
 
     public async Task<MLEmbeddingsResult> RunDocumentEmbeddingsAsync(
@@ -215,75 +128,6 @@ public sealed class MLAnalyticsService
         return fallbackResult;
     }
 
-    public async Task<MLForecastResult> RunProgressForecastAsync(
-        IReadOnlyList<TrainingAttemptRecord> attempts,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Check cache
-        if (_cachedForecast is not null && DateTimeOffset.Now - _forecastCachedAt < _cacheTtl)
-        {
-            return _cachedForecast;
-        }
-
-        var input = new
-        {
-            trainingAttempts = attempts.Select(a => new
-            {
-                completedAt = a.CompletedAt.ToString("O"),
-                questions = a.Questions.Select(q => new
-                {
-                    topic = q.Topic,
-                    correct = q.Correct,
-                }).ToArray(),
-            }).ToArray(),
-        };
-
-        // 1. Try ONNX
-        if (_onnxEngine is not null)
-        {
-            var onnxResult = _onnxEngine.RunForecast(attempts);
-            if (onnxResult is not null)
-            {
-                CacheForecast(onnxResult);
-                return onnxResult;
-            }
-        }
-
-        // 2. Try Python
-        if (IsPythonAvailable())
-        {
-            try
-            {
-                var result = await RunPythonScriptAsync<MLForecastResult>(
-                    "ml_progress_forecast.py",
-                    input,
-                    cancellationToken
-                );
-
-                if (result is not null)
-                {
-                    CacheForecast(result);
-                    return result;
-                }
-            }
-            catch (Exception ex)
-            {
-                return new MLForecastResult
-                {
-                    Ok = false,
-                    Engine = "fallback",
-                    TensorflowError = ex.Message,
-                };
-            }
-        }
-
-        // 3. Fallback
-        var fallbackResult = BuildFallbackForecast();
-        CacheForecast(fallbackResult);
-        return fallbackResult;
-    }
-
     public async Task<SuiteMLArtifactBundle> GenerateSuiteArtifactsAsync(
         MLAnalyticsResult analytics,
         MLEmbeddingsResult embeddings,
@@ -349,9 +193,7 @@ public sealed class MLAnalyticsService
     /// </summary>
     public void InvalidateCache()
     {
-        _cachedAnalytics = null;
         _cachedEmbeddings = null;
-        _cachedForecast = null;
     }
 
     private bool IsPythonAvailable()
@@ -449,112 +291,13 @@ public sealed class MLAnalyticsService
         }
     }
 
-    private void CacheAnalytics(MLAnalyticsResult result)
-    {
-        _cachedAnalytics = result;
-        _analyticsCachedAt = DateTimeOffset.Now;
-    }
-
     private void CacheEmbeddings(MLEmbeddingsResult result)
     {
         _cachedEmbeddings = result;
         _embeddingsCachedAt = DateTimeOffset.Now;
     }
 
-    private void CacheForecast(MLForecastResult result)
-    {
-        _cachedForecast = result;
-        _forecastCachedAt = DateTimeOffset.Now;
-    }
-
-    private static MLAnalyticsResult BuildFallbackAnalytics(
-        IReadOnlyList<TrainingAttemptRecord> attempts
-    )
-    {
-        var topicAccuracy = new Dictionary<string, (int correct, int total)>();
-        foreach (var attempt in attempts)
-        {
-            foreach (var question in attempt.Questions)
-            {
-                if (!topicAccuracy.ContainsKey(question.Topic))
-                {
-                    topicAccuracy[question.Topic] = (0, 0);
-                }
-
-                var (correct, total) = topicAccuracy[question.Topic];
-                topicAccuracy[question.Topic] = (
-                    correct + (question.Correct ? 1 : 0),
-                    total + 1
-                );
-            }
-        }
-
-        var weak = new List<MLTopicEntry>();
-        var strong = new List<MLTopicEntry>();
-        foreach (var (topic, (correct, total)) in topicAccuracy)
-        {
-            var accuracy = total > 0 ? (double)correct / total : 0.0;
-            var entry = new MLTopicEntry
-            {
-                Topic = topic,
-                Accuracy = Math.Round(accuracy, 3),
-                TotalQuestions = total,
-                CorrectCount = correct,
-            };
-
-            if (accuracy < 0.6)
-            {
-                weak.Add(entry);
-            }
-            else
-            {
-                strong.Add(entry);
-            }
-        }
-
-        var overallReadiness = topicAccuracy.Count > 0
-            ? topicAccuracy.Values.Average(v => (double)v.correct / v.total)
-            : 0.0;
-
-        return new MLAnalyticsResult
-        {
-            Ok = false,
-            Engine = "fallback",
-            WeakTopics = weak.OrderBy(t => t.Accuracy).ToList(),
-            StrongTopics = strong.OrderByDescending(t => t.Accuracy).ToList(),
-            OverallReadiness = Math.Round(overallReadiness, 3),
-            OperatorPattern = new MLOperatorPattern(),
-            AdaptiveSchedule = weak
-                .OrderBy(t => t.Accuracy)
-                .Take(5)
-                .Select((t, i) => new MLScheduleItem
-                {
-                    Topic = t.Topic,
-                    Priority = i + 1,
-                    RecommendedSessionType = t.Accuracy < 0.4 ? "practice" : "defense",
-                    IntervalDays = Math.Max(1, (int)((1.0 - t.Accuracy) * 7)),
-                    Reason = $"Accuracy {t.Accuracy:P0} is below threshold",
-                })
-                .ToList(),
-            ReadinessBreakdown = topicAccuracy
-                .Select(kv => new MLReadinessEntry
-                {
-                    Topic = kv.Key,
-                    Readiness = Math.Round((double)kv.Value.correct / kv.Value.total, 3),
-                    Confidence = Math.Min(1.0, kv.Value.total / 20.0),
-                })
-                .ToList(),
-        };
-    }
-
     private static MLEmbeddingsResult BuildFallbackEmbeddings() =>
-        new()
-        {
-            Ok = false,
-            Engine = "fallback",
-        };
-
-    private static MLForecastResult BuildFallbackForecast() =>
         new()
         {
             Ok = false,

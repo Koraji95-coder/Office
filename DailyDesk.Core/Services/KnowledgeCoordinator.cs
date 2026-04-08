@@ -4,7 +4,7 @@ namespace DailyDesk.Services;
 
 /// <summary>
 /// Domain coordinator for knowledge operations: document indexing and context status retrieval.
-/// Extracted from OfficeBrokerOrchestrator per REFACTOR-PRESSURE.md.
+/// Extracted from OfficeBrokerOrchestrator per TECHNICAL-DEBT.md.
 /// </summary>
 public sealed class KnowledgeCoordinator
 {

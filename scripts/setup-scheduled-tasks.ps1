@@ -282,22 +282,6 @@ Register-OfficeTask `
     -Settings $retrainSettings
 
 # ──────────────────────────────────────────────
-# 8. ML Retrain Analytics -- nightly at 02:30
-# ──────────────────────────────────────────────
-$trainingHistoryPath = Join-Path $env:USERPROFILE "Dropbox\SuiteWorkspace\Office\State\training-history.json"
-$analyticsRetrainTrigger = New-ScheduledTaskTrigger -Daily -At "02:30"
-$analyticsRetrainAction = New-ScheduledTaskAction `
-    -Execute "python" `
-    -Argument "`"$(Join-Path $ScriptsRoot 'DailyDesk\Scripts\ml_retrain_analytics.py')`" --input `"$trainingHistoryPath`"" `
-    -WorkingDirectory $ScriptsRoot
-
-Register-OfficeTask `
-    -Name "Office-ML-Retrain-Analytics" `
-    -Trigger $analyticsRetrainTrigger `
-    -Action $analyticsRetrainAction `
-    -Description "Retrains the DailyDesk learning analytics models (topic clustering, readiness predictor, operator pattern) nightly at 02:30 from accumulated training history."
-
-# ──────────────────────────────────────────────
 # Summary
 # ──────────────────────────────────────────────
 Write-Host "`n=== Setup Complete ===" -ForegroundColor Cyan

@@ -6,7 +6,7 @@ using Xunit;
 namespace DailyDesk.Core.Tests;
 
 /// <summary>
-/// Tests that verify the endpoint organisation refactor described in REFACTOR-PRESSURE.md
+/// Tests that verify the endpoint organisation refactor described in TECHNICAL-DEBT.md
 /// entry "Broker Program.cs — All Endpoints in One File".
 ///
 /// The refactor extracted all 30+ inline endpoint handlers from <c>Program.cs</c> into eight
@@ -41,7 +41,6 @@ public sealed class EndpointOrganizationTests : IClassFixture<BrokerWebApplicati
     [
         new object[] { "HealthEndpoints",   "MapHealthEndpoints" },
         new object[] { "ChatEndpoints",     "MapChatEndpoints" },
-        new object[] { "StudyEndpoints",    "MapStudyEndpoints" },
         new object[] { "ResearchEndpoints", "MapResearchEndpoints" },
         new object[] { "OperatorEndpoints", "MapOperatorEndpoints" },
         new object[] { "MLEndpoints",       "MapMLEndpoints" },

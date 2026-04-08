@@ -82,54 +82,6 @@ public class ChatValidatorTests
     }
 }
 
-public class StudyValidatorTests
-{
-    private readonly StudyScoreDefenseRequestValidator _defenseValidator = new();
-    private readonly StudySaveReflectionRequestValidator _reflectionValidator = new();
-
-    // StudyScoreDefenseRequestValidator — valid answer
-
-    [Fact]
-    public void StudyScoreDefenseRequestValidator_NonEmptyAnswer_IsValid()
-    {
-        var result = _defenseValidator.Validate(new StudyScoreDefenseRequest("My answer"));
-        Assert.True(result.IsValid);
-    }
-
-    // StudyScoreDefenseRequestValidator — invalid: empty / whitespace answer
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void StudyScoreDefenseRequestValidator_EmptyOrWhitespaceAnswer_FailsWithRequiredMessage(string answer)
-    {
-        var result = _defenseValidator.Validate(new StudyScoreDefenseRequest(answer));
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.ErrorMessage == "Answer is required.");
-    }
-
-    // StudySaveReflectionRequestValidator — valid reflection
-
-    [Fact]
-    public void StudySaveReflectionRequestValidator_NonEmptyReflection_IsValid()
-    {
-        var result = _reflectionValidator.Validate(new StudySaveReflectionRequest("My reflection"));
-        Assert.True(result.IsValid);
-    }
-
-    // StudySaveReflectionRequestValidator — invalid: empty / whitespace reflection
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void StudySaveReflectionRequestValidator_EmptyOrWhitespaceReflection_FailsWithRequiredMessage(string reflection)
-    {
-        var result = _reflectionValidator.Validate(new StudySaveReflectionRequest(reflection));
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.ErrorMessage == "Reflection is required.");
-    }
-}
-
 public class MLValidatorTests
 {
     private readonly ResearchRunRequestValidator _researchValidator = new();

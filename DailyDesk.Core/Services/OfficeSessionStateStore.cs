@@ -141,7 +141,6 @@ public sealed class OfficeSessionStateStore
             ? "Mixed"
             : state.Difficulty.Trim();
         state.QuestionCount = Math.Clamp(state.QuestionCount, 3, 10);
-        state.ActiveDefenseScenario ??= new OralDefenseScenario();
         state.PracticeResultSummary = string.IsNullOrWhiteSpace(state.PracticeResultSummary)
             ? "No scored practice yet."
             : state.PracticeResultSummary.Trim();

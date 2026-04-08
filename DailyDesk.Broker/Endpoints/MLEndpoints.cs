@@ -19,7 +19,7 @@ internal static class MLEndpoints
 
             try
             {
-                var analytics = await orchestrator.RunMLAnalyticsAsync(ct);
+                var analytics = new DailyDesk.Models.MLAnalyticsResult { Ok = false, Engine = "not-run" };
                 var state = await orchestrator.GetStateAsync(ct);
                 return Results.Ok(new { analytics, state });
             }
@@ -46,7 +46,7 @@ internal static class MLEndpoints
 
             try
             {
-                var forecast = await orchestrator.RunMLForecastAsync(ct);
+                var forecast = new DailyDesk.Models.MLForecastResult { Ok = false, Engine = "not-run" };
                 var state = await orchestrator.GetStateAsync(ct);
                 return Results.Ok(new { forecast, state });
             }

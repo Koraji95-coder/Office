@@ -10,9 +10,6 @@ public sealed class OfficeWorkflowState
         "Protection, grounding, standards, drafting safety";
     public string PracticeDifficulty { get; set; } = "Mixed";
     public int PracticeQuestionCount { get; set; } = 6;
-    public PracticeTest? CurrentPracticeTest { get; set; }
-    public OralDefenseScenario? CurrentDefenseScenario { get; set; }
-    public DefenseEvaluation? LatestDefenseEvaluation { get; set; }
     public ResearchReport? LatestResearchReport { get; set; }
     public string LastScoredSessionMode { get; set; } = string.Empty;
     public string LastScoredSessionFocus { get; set; } = string.Empty;
