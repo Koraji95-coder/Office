@@ -377,6 +377,61 @@ Explain the progress trend and flag any plateaus or anomalies.
 Return one concrete next step.
 ```
 
+## Reference Library Control (Customer App — Project Detail)
+
+The Reference Library is a controlled, customer-safe documentation surface within the Customer App
+Project Detail view. It holds project-scoped reference content such as scope briefs, drawing
+standards packets, and submittal checklists. It is not a developer document store and must never
+expose architecture internals, agent memory, or repo hotspot content.
+
+### Workflow
+
+1. **Content gate** — Only documents classified as customer-safe are admitted. Developer docs,
+   architecture notes, and internal diagnostics are excluded at the content layer.
+2. **Project scope** — Each reference library is scoped to a single project. Documents do not
+   bleed across project boundaries.
+3. **Read-only access** — Customer-facing operators may read reference documents. They cannot
+   add, edit, or delete documents through the customer surface.
+4. **Package confirmation** — Before a transmittal package is released, the operator confirms the
+   reference set is complete. The "Confirm reference set" step in Package prep gates package
+   delivery on this check.
+5. **Visibility rule** — The reference library count is surfaced as a metric ("Reference library",
+   "12 docs", "controlled and customer-safe") so operators can see coverage at a glance without
+   opening individual documents.
+
+### Access Rules
+
+| Actor | Permission |
+|-------|------------|
+| Customer operator | Read reference docs scoped to their project |
+| Developer / internal operator | Write, curate, and remove reference docs |
+| Agent surfaces | Read-only; may cite reference docs in context |
+
+**Hard constraints:**
+
+- No developer terminology, architecture maps, or internal diagnostics may appear in the
+  Reference Library panel or metric.
+- Reference content must use project-facing language (scope, standards, checklists, submittals).
+- The dock item for the Reference set must always show "Ready" or "Needs attention" — never
+  a developer-specific state such as "Blocked" or "Running".
+- Customer trust states ("Ready", "Background", "Needs attention", "Unavailable") are the only
+  trust vocabulary permitted on the customer surface.
+
+### Best Prompts For Reference Library Context
+
+```text
+Use Suite as background context only.
+Explain what belongs in the Reference Library for a customer project.
+Return: permitted content types, exclusion rules, and how the reference set gates package delivery.
+Do not propose code changes yet.
+```
+
+```text
+Use Suite as background context only.
+Verify that the Reference Library panel for [project name] shows only customer-safe documents.
+Return: current document list, any items that violate access rules, and the corrective action.
+```
+
 ## Best Reply Patterns For Electrical Drafting Workflows
 
 Use these patterns when working on drawing review, revision control, issue sets, or approval routing for electrical production work.

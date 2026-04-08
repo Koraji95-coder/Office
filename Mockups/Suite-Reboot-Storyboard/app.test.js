@@ -1769,3 +1769,178 @@ describe('Runtime Control diagnostics — inspector design rules (runtime-contro
         expect(items).toContain('Safe actions');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Reference Library Control — metric alignment (customer-app:project-detail)
+// Verifies the "Reference library" metric correctly surfaces doc count and
+// customer-safe classification in the Project Detail view.
+// ---------------------------------------------------------------------------
+describe('Reference Library Control — metric alignment (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('renders a "Reference library" metric card', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Reference library'
+        );
+        expect(card).not.toBeUndefined();
+    });
+
+    it('shows the Reference library metric value as "12 docs"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Reference library'
+        );
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('12 docs');
+    });
+
+    it('shows the Reference library metric meta as "controlled and customer-safe"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Reference library'
+        );
+        expect(card.querySelector('.metric-meta').textContent.trim()).toBe(
+            'controlled and customer-safe'
+        );
+    });
+
+    it('renders four metric cards in total on the project-detail view', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Reference Library Control — panel content and access rules
+// (customer-app:project-detail)
+// Verifies the Reference Library panel renders with the correct eyebrow,
+// title, copy, item list, and layout enforcing customer-safe access rules.
+// ---------------------------------------------------------------------------
+describe('Reference Library Control — panel content and access rules (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('renders a "Reference library" panel on the project-detail stage', () => {
+        expect(getPanelByEyebrow('Reference library')).not.toBeNull();
+    });
+
+    it('shows the panel title "Customer-safe knowledge only"', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe('Customer-safe knowledge only');
+    });
+
+    it('shows the panel copy enforcing the customer-safe access rule', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const copy = panel.querySelector('.panel-copy');
+        expect(copy.textContent.trim()).toBe(
+            'Reference content stays useful without turning into developer docs.'
+        );
+    });
+
+    it('renders exactly three reference documents', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('includes "Project scope brief" as a reference document', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Project scope brief');
+    });
+
+    it('includes "Drawing standards packet" as a reference document', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Drawing standards packet');
+    });
+
+    it('includes "Submittal checklist" as a reference document', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Submittal checklist');
+    });
+
+    it('uses a key-list layout (not a row-list)', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Reference Library Control — project-detail overall structure
+// Verifies the customer-app:project-detail route title, stage, kicker,
+// lead panel, and dock items are rendered correctly.
+// ---------------------------------------------------------------------------
+describe('Reference Library Control — project-detail overall structure (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('sets the route title to "Project Detail"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Project Detail');
+    });
+
+    it('sets the route stage to "Structural detail"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('Structural detail');
+    });
+
+    it('sets the route kicker to include "Customer App"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Customer App');
+    });
+
+    it('renders the lead panel with eyebrow "Project depth"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Project depth');
+    });
+
+    it('renders "Review reference docs" as a lead panel action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions).toContain('Review reference docs');
+    });
+
+    it('renders the "Reference library" panel alongside sibling panels', () => {
+        expect(getPanelByEyebrow('Reference library')).not.toBeNull();
+        expect(getPanelByEyebrow('Milestones')).not.toBeNull();
+        expect(getPanelByEyebrow('Package prep')).not.toBeNull();
+    });
+
+    it('renders a "Reference set" dock item with state "Ready"', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const refSet = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Reference set'
+        );
+        expect(refSet).not.toBeUndefined();
+        const pill = refSet.querySelector('.status-pill');
+        expect(pill.classList.contains('status-pill-ready')).toBe(true);
+    });
+
+    it('inspector "Visible" section lists "Reference docs"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        expect(visibleSection).not.toBeUndefined();
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Reference docs');
+    });
+});
