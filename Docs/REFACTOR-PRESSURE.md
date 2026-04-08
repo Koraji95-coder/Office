@@ -39,7 +39,17 @@ Split into domain coordinators:
 
 Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordinators. The facade boundary means `Program.cs` endpoints do not change callers.
 
-**Prerequisite:** No blocking prerequisite. Wire `StudySessionCoordinator`, `ResearchCoordinator`, and `KnowledgeCoordinator` into `OfficeBrokerOrchestrator` the same way `MLPipelineCoordinator` was — constructor injection, then replace each direct implementation with a delegate call. Update existing tests that construct the orchestrator directly to pass the new coordinator dependencies.
+**Action steps:**
+1. In `OfficeBrokerOrchestrator.cs`, add a `StudySessionCoordinator studyCoordinator` constructor parameter and store it in a `_studyCoordinator` private field.
+2. Locate all study-session method bodies (`StartPracticeAsync`, `SubmitPracticeResponseAsync`, `RunDefenseAsync`, `RecordReflectionAsync`, `ScorePracticeSessionAsync`) and replace each implementation body with a single delegation call to the corresponding method on `_studyCoordinator`.
+3. Add a `ResearchCoordinator researchCoordinator` constructor parameter and `_researchCoordinator` field. Replace all research-job method bodies (`RunResearchJobAsync`, `SaveResearchReportAsync`, `GetWatchlistAsync`, and related helpers) with delegation calls to `_researchCoordinator`.
+4. Add a `KnowledgeCoordinator knowledgeCoordinator` constructor parameter and `_knowledgeCoordinator` field. Replace all knowledge-import and indexing method bodies (`ImportKnowledgeAsync`, `IndexKnowledgeAsync`, `BuildContextAsync`, and related helpers) with delegation calls to `_knowledgeCoordinator`.
+5. Remove any private service fields in `OfficeBrokerOrchestrator` that are now only referenced by the delegated coordinators (those fields belong in the coordinators, not the facade).
+6. Register `StudySessionCoordinator`, `ResearchCoordinator`, and `KnowledgeCoordinator` in the broker DI container (`Program.cs`) as singletons alongside `MLPipelineCoordinator`, then add them to `OfficeBrokerOrchestrator`'s service registration.
+7. Update all tests that construct `OfficeBrokerOrchestrator` directly (search for `new OfficeBrokerOrchestrator(`) to supply the new coordinator constructor arguments. Use the same builder helpers already present in `OrchestratorGraphIntegrationTests` as a reference.
+8. Run `OrchestratorGraphIntegrationTests` and the full test suite (`dotnet test DailyDesk.Core.Tests`). Expected: same pass count as before and no new failures.
+
+**Prerequisite:** No blocking prerequisite. Wire coordinators the same way `MLPipelineCoordinator` was wired — see its commit history as a reference pattern.
 
 ---
 
@@ -64,7 +74,11 @@ These areas add maintenance overhead but do not block current development.
 - `InvalidateCache()` must be called explicitly after a job completes, creating a coordination requirement between `OfficeJobWorker` and `MLAnalyticsService`.
 
 **Refactor direction:**
-Remove the in-memory TTL cache from `MLAnalyticsService`. Replace the three `_cached*` field groups with a single call to `MLResultStore.GetLatest*(type)` where callers currently access cached results. Keep the `InvalidateCache()` method as a no-op stub temporarily so call sites compile without change, then remove it once all callers are updated.
+1. Remove the `_cachedAnalytics`, `_cachedEmbeddings`, `_cachedForecast` fields and all TTL-management code (`_cacheTime`, `_cacheExpiry`) from `MLAnalyticsService`.
+2. At each read site that previously returned a cached value, replace it with a direct call to `MLResultStore.GetLatestAnalytics()`, `MLResultStore.GetLatestEmbeddings()`, or `MLResultStore.GetLatestForecast()` as appropriate.
+3. Replace `InvalidateCache()` with a no-op stub so all existing callers compile without change. Add a `// TODO: remove after all callers are updated` comment to the stub.
+4. Confirm that all ML endpoint integration tests still pass after the replacement.
+5. Search for all `InvalidateCache()` call sites (e.g., in `OfficeJobWorker`), remove them, then delete the no-op stub from `MLAnalyticsService`.
 
 **Prerequisite:** Confirm `MLResultStore` returns a non-null result for all three ML types after a job completes. Covered by existing Phase 3 integration tests.
 
