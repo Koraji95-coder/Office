@@ -60,29 +60,82 @@ Before proposing changes, it is important to recognize what the codebase already
 
 **Why not HtmlAgilityPack:** AngleSharp provides a full DOM with `querySelector` / `querySelectorAll` that matches browser behavior. HAP is lighter but more fragile for dynamic content patterns.
 
-### 1.3 FluentValidation for Broker Requests
+### 1.3 FluentValidation for Broker Requests ✅ COMPLETE
 
-**Scope:** `DailyDesk.Broker/Program.cs` request records.
+**Scope:** `DailyDesk.Broker/Endpoints/*.cs` request records.
 
-**What changes:**
-- Add `FluentValidation` NuGet to `DailyDesk.Broker.csproj`.
-- Create validators for request records that currently rely on orchestrator `ArgumentException` throws.
-- Call `validator.Validate()` at the top of each endpoint, returning `400 BadRequest` with structured error details.
-- Remove duplicated validation from orchestrator methods where the broker now handles it.
+**What changed:**
+- Added `FluentValidation` NuGet to `DailyDesk.Broker.csproj`.
+- Created validators for all request records that previously relied on orchestrator `ArgumentException` throws.
+- Called `validator.Validate()` at the top of each endpoint, returning `400 BadRequest` with structured error details.
+- Removed duplicated validation from orchestrator methods where the broker now handles it.
 
-**What stays the same:**
+**What stayed the same:**
 - Orchestrator state validation (`InvalidOperationException`) stays in the orchestrator.
 - Numeric clamping (`Math.Clamp`) stays in the orchestrator.
-- Request record definitions stay in `Program.cs` (can move later).
 
-**Target validators:**
-- `ChatRouteRequestValidator` — Route not empty, Route in known catalog.
-- `ChatSendRequestValidator` — Prompt not empty.
-- `StudyScoreDefenseRequestValidator` — Answer not empty.
-- `StudySaveReflectionRequestValidator` — Reflection not empty.
-- `ResearchRunRequestValidator` — Query not empty.
-- `WatchlistRunRequestValidator` — WatchlistId not empty.
-- `InboxResolveRequestValidator` — SuggestionId not empty, Status in `[accepted, deferred, rejected]`.
+**Validator structure:**
+
+Each validator is a `sealed` class inheriting `AbstractValidator<TRequest>` and is **co-located in the same `Endpoints/*.cs` file** as the request record it validates. No standalone `Validators/` directory — validators live next to their request records.
+
+```csharp
+// Example — ChatEndpoints.cs
+internal sealed record ChatRouteRequest(string Route);
+
+internal sealed class ChatRouteRequestValidator : AbstractValidator<ChatRouteRequest>
+{
+    public ChatRouteRequestValidator()
+    {
+        RuleFor(x => x.Route)
+            .NotEmpty()
+            .WithMessage("Route is required.")
+            .Must(route => OfficeRouteCatalog.KnownRoutes.Contains(
+                               route?.Trim(), StringComparer.OrdinalIgnoreCase))
+            .WithMessage($"Route must be one of: {string.Join(", ", OfficeRouteCatalog.KnownRoutes)}.");
+    }
+}
+```
+
+**Error handling workflow:**
+
+At the top of every protected endpoint handler, before any async orchestrator call:
+
+```csharp
+var validation = new ChatRouteRequestValidator().Validate(request);
+if (!validation.IsValid)
+{
+    return Results.BadRequest(new { errors = validation.Errors.Select(e => e.ErrorMessage) });
+}
+```
+
+On failure, the response is `400 Bad Request` with JSON body:
+
+```json
+{
+  "errors": ["Route is required."]
+}
+```
+
+Orchestrator exceptions (`ArgumentException`, `InvalidOperationException`) are still caught downstream and also map to `400 Bad Request`, but with a single `error` key rather than the `errors` array. This distinction lets callers differentiate input-format errors from business-logic errors.
+
+**Implemented validators:**
+
+| Validator | File | Rules |
+|-----------|------|-------|
+| `ChatRouteRequestValidator` | `ChatEndpoints.cs` | Route not empty; Route in `OfficeRouteCatalog.KnownRoutes` (case-insensitive). |
+| `ChatSendRequestValidator` | `ChatEndpoints.cs` | Prompt not empty. |
+| `StudyScoreDefenseRequestValidator` | `StudyEndpoints.cs` | Answer not empty. |
+| `StudySaveReflectionRequestValidator` | `StudyEndpoints.cs` | Reflection not empty. |
+| `ResearchRunRequestValidator` | `ResearchEndpoints.cs` | Query not empty. |
+| `WatchlistRunRequestValidator` | `ResearchEndpoints.cs` | WatchlistId not empty. |
+| `InboxResolveRequestValidator` | `OperatorEndpoints.cs` | SuggestionId not empty; Status in `[accepted, deferred, rejected]` (case-insensitive). |
+| `CreateScheduleRequestValidator` | `ScheduleEndpoints.cs` | Name, JobType, CronExpression not empty; CronExpression matches `"0/*/# # # #"` or `"every Nm/Nh"` pattern. |
+| `UpdateScheduleRequestValidator` | `ScheduleEndpoints.cs` | CronExpression valid when provided (optional field). |
+| `CreateWorkflowRequestValidator` | `ScheduleEndpoints.cs` | Name not empty; Steps not empty; each Step.JobType not empty; FailurePolicy in `[abort, continue]` when provided. |
+
+**Co-location convention enforced by tests:**
+
+`EndpointOrganizationTests.ValidatorTypes_AreDefinedInBrokerAssembly_CoLocatedWithEndpoints` asserts that every `AbstractValidator<T>` subclass in the broker assembly lives in the broker assembly (i.e., has been moved out of any standalone `Validators/` directory). `ValidatorsDirectory_DoesNotExist` asserts the old `DailyDesk.Broker/Validators/` directory no longer exists.
 
 ### 1.4 OllamaSharp Client Replacement
 
