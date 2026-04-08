@@ -45,7 +45,7 @@ def index_repos():
     all_docs = []
     all_metas = []
 
-    for repo in ["Office", "Suite"]:
+    for repo in ["Office"]:  # Suite excluded while building ML training base — will re-add with separate config
         repo_path = os.path.join(REPO_ROOT, repo)
         if not os.path.exists(repo_path):
             print(f"  Skipping {repo} - not found")

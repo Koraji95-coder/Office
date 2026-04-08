@@ -4,19 +4,13 @@ $ghToken = $env:GITHUB_TOKEN
 $headers = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3+json" }
 
 $officePRs = Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Office/pulls?state=open&per_page=10" -Headers $headers
-$suitePRs = Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Suite/pulls?state=open&per_page=10" -Headers $headers
 $officeIssues = Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Office/issues?state=open&per_page=20&labels=ai-suggested" -Headers $headers
-$suiteIssues = Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Suite/issues?state=open&per_page=20&labels=ai-suggested" -Headers $headers
 
 $officePRList = ($officePRs | ForEach-Object { "- [#$($_.number)]($($_.html_url)) $($_.title) $(if($_.draft){'(draft)'})" }) -join "`n"
-$suitePRList = ($suitePRs | ForEach-Object { "- [#$($_.number)]($($_.html_url)) $($_.title) $(if($_.draft){'(draft)'})" }) -join "`n"
 $officeIssueList = ($officeIssues | ForEach-Object { "- [#$($_.number)]($($_.html_url)) $($_.title)" }) -join "`n"
-$suiteIssueList = ($suiteIssues | ForEach-Object { "- [#$($_.number)]($($_.html_url)) $($_.title)" }) -join "`n"
 
 if (-not $officePRList) { $officePRList = "None" }
-if (-not $suitePRList) { $suitePRList = "None" }
 if (-not $officeIssueList) { $officeIssueList = "None" }
-if (-not $suiteIssueList) { $suiteIssueList = "None" }
 
 $payload = @{
     content = "<@$userId>"
@@ -26,9 +20,7 @@ $payload = @{
             color = 5793266
             fields = @(
                 @{ name = "Office PRs ($($officePRs.Count))"; value = $officePRList; inline = $false }
-                @{ name = "Suite PRs ($($suitePRs.Count))"; value = $suitePRList; inline = $false }
                 @{ name = "Office Issues ($($officeIssues.Count)/20)"; value = $officeIssueList; inline = $false }
-                @{ name = "Suite Issues ($($suiteIssues.Count)/20)"; value = $suiteIssueList; inline = $false }
             )
             footer = @{ text = "Requested via brief command" }
             timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")

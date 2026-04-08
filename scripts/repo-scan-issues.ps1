@@ -7,16 +7,12 @@ try {
     $headers = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3+json" }
 
     $officeIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Office/issues?state=open&per_page=10" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
-    $suiteIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Suite/issues?state=open&per_page=10" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
 
     $context = @"
 Here are the currently open issues:
 
 OFFICE REPO:
 $($officeIssues -join "`n")
-
-SUITE REPO:
-$($suiteIssues -join "`n")
 "@
 
     $prompt = @"
@@ -28,8 +24,7 @@ You are a technical project manager. Review the open issues above and suggest 1-
 
 For each suggestion, respond ONLY with valid JSON. No markdown, no explanation. Just a JSON array:
 [
-  { "repo": "Office", "title": "issue title here", "body": "description here" },
-  { "repo": "Suite", "title": "issue title here", "body": "description here" }
+  { "repo": "Office", "title": "issue title here", "body": "description here" }
 ]
 
 Do NOT suggest issues that already exist. Only suggest high-value work.
@@ -54,12 +49,15 @@ $context
 
         $colors = @{
             "Office" = 16744256
-            "Suite"  = 5793266
         }
 
         $embeds = @()
         for ($i = 0; $i -lt $suggestions.Count; $i++) {
             $s = $suggestions[$i]
+
+            # Suite excluded while building ML training base
+            if ($s.repo -eq "Suite") { continue }
+
             $repoColor = if ($colors.ContainsKey($s.repo)) { $colors[$s.repo] } else { 8421504 }
 
             $embeds += @{

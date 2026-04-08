@@ -1,10 +1,9 @@
 # RAG Re-Index with Safe Git Pull
-# Pulls latest from both repos, then re-indexes the codebase
+# Pulls latest from Office repo, then re-indexes the codebase
 $logFile = "$HOME\.office-rag-db\reindex.log"
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $repos = @(
-    "C:\Users\koraj\OneDrive\Documents\GitHub\Office",
-    "C:\Users\koraj\OneDrive\Documents\GitHub\Suite"
+    "C:\Users\koraj\OneDrive\Documents\GitHub\Office"
 )
 
 function Safe-Pull {
