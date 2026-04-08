@@ -128,6 +128,90 @@ public sealed class OfficeSessionStateStore
         }
     }
 
+    /// <summary>
+    /// Normalizes a <see cref="OfficeLiveSessionState"/> instance by applying default values
+    /// and validation rules to every field before the state is returned to callers or persisted.
+    /// </summary>
+    /// <remarks>
+    /// Called after every load (JSON and LiteDB paths), after every save, and during reset.
+    /// This ensures the application always operates on a fully-initialized, consistent state
+    /// regardless of how the data was persisted or whether fields are missing in older saves.
+    ///
+    /// Normalization rules applied (in order):
+    /// <list type="bullet">
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.CurrentRoute"/></term>
+    ///     <description>
+    ///       Passed through <see cref="OfficeRouteCatalog.NormalizeRoute"/>. Null, empty, or
+    ///       unrecognized values are replaced with <see cref="OfficeRouteCatalog.ChiefRoute"/>.
+    ///       Casing is normalized to the canonical lowercase route key.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.Focus"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to
+    ///       <c>"Protection, grounding, standards, drafting safety"</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.FocusReason"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to
+    ///       <c>"Set a focus manually or start from a review target to begin a guided session."</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.Difficulty"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to <c>"Mixed"</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.QuestionCount"/></term>
+    ///     <description>
+    ///       Clamped to the inclusive range [3, 10] using <see cref="Math.Clamp{T}"/>.
+    ///       Values below 3 are raised to 3; values above 10 are lowered to 10.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.ActiveDefenseScenario"/></term>
+    ///     <description>
+    ///       Null-coalesced to a new empty <see cref="OralDefenseScenario"/> instance,
+    ///       ensuring downstream code never encounters a null scenario object.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.PracticeResultSummary"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to <c>"No scored practice yet."</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.DefenseScoreSummary"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to
+    ///       <c>"No scored oral-defense answer yet."</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.DefenseFeedbackSummary"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to
+    ///       <c>"Score a typed answer to get rubric feedback and follow-up coaching."</c>.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OfficeLiveSessionState.ReflectionContextSummary"/></term>
+    ///     <description>
+    ///       Trimmed. If null or whitespace, defaults to
+    ///       <c>"Score a practice or defense session to save a reflection."</c>.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// </remarks>
+    /// <param name="state">The state object to normalize. Modified in place and returned.</param>
+    /// <returns>The same <paramref name="state"/> instance after normalization.</returns>
     private static OfficeLiveSessionState Normalize(OfficeLiveSessionState state)
     {
         state.CurrentRoute = OfficeRouteCatalog.NormalizeRoute(state.CurrentRoute);

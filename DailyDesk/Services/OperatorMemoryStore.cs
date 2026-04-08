@@ -488,6 +488,76 @@ public sealed class OperatorMemoryStore
         await File.WriteAllTextAsync(_storePath, json, cancellationToken);
     }
 
+    /// <summary>
+    /// Normalizes an <see cref="OperatorMemoryState"/> instance by applying default values,
+    /// deduplication logic, and null-coalescing rules to every field before the state is
+    /// returned to callers or persisted.
+    /// </summary>
+    /// <remarks>
+    /// Called after every load (JSON and LiteDB paths), after every mutation that returns the
+    /// updated state, and during reset. This ensures the application always operates on a
+    /// fully-initialized, consistent operator memory state regardless of how data was persisted
+    /// or whether optional fields are absent in older saves.
+    ///
+    /// The same normalization logic is reused during LiteDB migration: when JSON data is first
+    /// imported into LiteDB, it passes through this method before being written to the database.
+    ///
+    /// Normalization rules applied (in order):
+    /// <list type="bullet">
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.Policies"/></term>
+    ///     <description>
+    ///       If the collection is empty, it is replaced with the five default agent policies
+    ///       produced by <c>BuildDefaultPolicies()</c>: Chief of Staff, EE Mentor, Test Builder,
+    ///       Repo Coach, and Business Strategist. Existing policies are never overwritten so that
+    ///       user customizations are preserved across reloads.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.Watchlists"/></term>
+    ///     <description>
+    ///       If the collection is empty, it is replaced with the default watchlists produced by
+    ///       <c>BuildDefaultWatchlists()</c> (currently returns an empty list, so no seeding
+    ///       occurs). Existing watchlists are preserved whenever the collection is non-empty.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.Suggestions"/></term>
+    ///     <description>
+    ///       Null-coalesced to an empty list, then deduplicated by a semantic key built from
+    ///       each suggestion's role, action class, and title (via <c>BuildSuggestionSemanticKey</c>,
+    ///       case-insensitive). Within each duplicate group, the entry with the most recent
+    ///       <c>ExecutionUpdatedAt</c> (or <c>CreatedAt</c> if not yet executed) is kept. The
+    ///       surviving entries are then sorted by the same timestamp descending so the most
+    ///       recently active suggestions appear first.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.Activities"/></term>
+    ///     <description>Null-coalesced to an empty list.</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.DailyRuns"/></term>
+    ///     <description>Null-coalesced to an empty list.</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.DeskThreads"/></term>
+    ///     <description>
+    ///       Null-coalesced to an empty list, then, if still empty after null-coalescing,
+    ///       populated with the default desk threads produced by <c>BuildDefaultDeskThreads()</c>.
+    ///       Existing threads are preserved.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="OperatorMemoryState.Workflow"/></term>
+    ///     <description>
+    ///       Null-coalesced to a new empty <see cref="OfficeWorkflowState"/> instance, ensuring
+    ///       downstream code never encounters a null workflow object.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// </remarks>
+    /// <param name="state">The state object to normalize. Modified in place.</param>
     private static void NormalizeState(OperatorMemoryState state)
     {
         if (state.Policies.Count == 0)

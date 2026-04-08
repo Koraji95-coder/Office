@@ -75,13 +75,38 @@ All broker request types are `sealed record` with init-only properties. This mak
 
 **Where:** `OfficeSessionStateStore.Normalize()`, `OperatorMemoryStore.NormalizeState()`.
 
-Both stores normalize state after loading:
-- Default values for missing properties.
-- Route normalization via `OfficeRouteCatalog.NormalizeRoute()`.
-- Numeric clamping (`Math.Clamp`).
-- Legacy data migration (`HydrateLegacyPracticeAttempts`).
+Both stores normalize state after loading, after every save, and during reset. This
+guarantees that callers always receive a fully-initialized, consistent object regardless
+of whether fields are missing in an older persisted file.
 
-**Implication:** LiteDB migration (Phase 2) uses the same normalization logic. On first LiteDB load, data is imported from JSON and normalized.
+#### `OfficeSessionStateStore.Normalize()` — field rules
+
+| Field | Default value (when null / empty / out-of-range) | Rule |
+|---|---|---|
+| `CurrentRoute` | `OfficeRouteCatalog.ChiefRoute` (`"chief"`) | Passed through `OfficeRouteCatalog.NormalizeRoute()`. Null, empty, and unrecognized values map to `ChiefRoute`; casing is normalized to lowercase. |
+| `Focus` | `"Protection, grounding, standards, drafting safety"` | Null or whitespace → default; otherwise trimmed. |
+| `FocusReason` | `"Set a focus manually or start from a review target to begin a guided session."` | Null or whitespace → default; otherwise trimmed. |
+| `Difficulty` | `"Mixed"` | Null or whitespace → default; otherwise trimmed. |
+| `QuestionCount` | — | Clamped to **[3, 10]** via `Math.Clamp`. |
+| `ActiveDefenseScenario` | `new OralDefenseScenario()` | Null-coalesced; downstream code is guaranteed a non-null scenario. |
+| `PracticeResultSummary` | `"No scored practice yet."` | Null or whitespace → default; otherwise trimmed. |
+| `DefenseScoreSummary` | `"No scored oral-defense answer yet."` | Null or whitespace → default; otherwise trimmed. |
+| `DefenseFeedbackSummary` | `"Score a typed answer to get rubric feedback and follow-up coaching."` | Null or whitespace → default; otherwise trimmed. |
+| `ReflectionContextSummary` | `"Score a practice or defense session to save a reflection."` | Null or whitespace → default; otherwise trimmed. |
+
+#### `OperatorMemoryStore.NormalizeState()` — field rules
+
+| Field | Default / rule |
+|---|---|
+| `Policies` | If empty, replaced with **five default agent policies**: Chief of Staff, EE Mentor, Test Builder, Repo Coach, Business Strategist (via `BuildDefaultPolicies()`). Existing policies are never overwritten. |
+| `Watchlists` | If empty, replaced by `BuildDefaultWatchlists()` (currently returns `[]`, so no seeding occurs in practice). Existing watchlists are preserved. |
+| `Suggestions` | Null-coalesced to `[]`, then **deduplicated** by a semantic key (role + action class + title, case-insensitive) — newest entry per group is kept. Survivors are sorted by `ExecutionUpdatedAt ?? CreatedAt` descending. |
+| `Activities` | Null-coalesced to `[]`. |
+| `DailyRuns` | Null-coalesced to `[]`. |
+| `DeskThreads` | Null-coalesced to `[]`, then, if still empty, populated with default desk threads (via `BuildDefaultDeskThreads()`). Existing threads are preserved. |
+| `Workflow` | Null-coalesced to `new OfficeWorkflowState()`. |
+
+**Implication:** LiteDB migration (Phase 2) uses the same normalization logic. On first LiteDB load, data is imported from JSON and normalized before being written to the database.
 
 ### 9. Consistent Error Response Pattern
 
