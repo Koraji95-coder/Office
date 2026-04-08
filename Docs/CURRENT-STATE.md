@@ -172,7 +172,7 @@ Knowledge documents are indexed into a Qdrant vector database via Ollama-generat
 - `JobSchedulerStore` (LiteDB `job_schedules`) stores scheduled job definitions with interval, enabled flag, and last run time.
 - `JobSchedulerWorker : BackgroundService` checks schedules every minute and enqueues jobs via `OfficeJobStore`.
 - `daily-run` job type orchestrates state refresh → ML pipeline → artifact export → operator suggestions.
-- `WorkflowStore` (LiteDB `workflow_templates`) stores operator-defined workflow templates with 3 built-ins: "Daily Run", "Exam Prep", "Knowledge Refresh".
+- `WorkflowStore` (LiteDB `workflow_templates`) stores operator-defined workflow templates with 2 built-ins: "Daily Run", "Knowledge Refresh".
 - Endpoints: `/api/schedules` CRUD, `/api/daily-run/latest`, `/api/workflows` CRUD + `/api/workflows/{id}/run`.
 
 ### 18. WPF Client Async Integration (Phase 9)

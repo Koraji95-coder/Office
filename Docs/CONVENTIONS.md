@@ -55,8 +55,8 @@ if (string.IsNullOrWhiteSpace(prompt))
     throw new ArgumentException("Prompt is required.", nameof(prompt));
 
 // Pattern 3: Orchestrator state validation
-if (practiceTest is null)
-    throw new InvalidOperationException("No active practice test.");
+if (activeJob is null)
+    throw new InvalidOperationException("No active job.");
 
 // Pattern 4: Broker endpoint catch
 catch (ArgumentException ex)
@@ -117,7 +117,7 @@ Office/
 ├── DailyDesk.Core.Tests/   # xUnit tests
 ├── Docs/                   # Architecture docs, library decisions, conventions
 ├── Knowledge/              # Repo-owned seed knowledge
-└── Mockups/                # UI experiments
+└── schemas/                # Training feature schema (feature-v1.json)
 ```
 
 ### Where to Put New Code

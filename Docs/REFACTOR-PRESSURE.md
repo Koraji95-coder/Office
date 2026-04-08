@@ -1,6 +1,6 @@
 # Refactor Pressure Notes
 
-> **Purpose:** Track areas of the codebase under known refactor pressure, document the technical debt they represent, and provide prioritized guidance for future cleanup. This document is the canonical source for the "Refactor pressure notes" surface referenced in the Developer Portal storyboard.
+> **Purpose:** Track areas of the codebase under known refactor pressure, document the technical debt they represent, and provide prioritized guidance for future cleanup.
 
 ---
 
@@ -23,23 +23,22 @@ These areas actively slow down new feature development and increase the risk of 
 | **Phase introduced** | Phase 1 (grew through Phase 9) |
 
 **What it does now:**
-The orchestrator is the single entry point for every operation — study sessions, ML pipelines, research jobs, knowledge indexing, agent dispatch, operator memory, and workspace snapshots. It holds references to 15+ injected services and coordinates state transitions under a shared `_gate` semaphore.
+The orchestrator is the single entry point for every operation — ML pipelines, research jobs, knowledge indexing, agent dispatch, operator memory, and workspace snapshots. It holds references to 15+ injected services and coordinates state transitions under a shared `_gate` semaphore.
 
 **Why it is under pressure:**
 - Adding a new desk workflow requires modifying this file regardless of whether the change is related to other areas.
 - All state reads go through the same `SemaphoreSlim`, making selective locking impossible without touching the orchestrator.
-- Test coverage requires constructing the entire orchestrator graph, even for tests that only exercise one domain (e.g., study session scoring).
+- Test coverage requires constructing the entire orchestrator graph, even for tests that only exercise one domain (e.g., ML pipeline scoring).
 
 **Refactor direction:**
 Split into domain coordinators:
-- `StudySessionCoordinator` — practice, defense, reflection, scoring. ✅ Extracted to `DailyDesk.Core/Services/StudySessionCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
 - `ResearchCoordinator` — research jobs, watchlist, enrichment. ✅ Extracted to `DailyDesk.Core/Services/ResearchCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
 - `MLPipelineCoordinator` — ML job dispatch, result retrieval, export artifacts. ✅ Extracted and wired: `OfficeBrokerOrchestrator` now holds `_mlPipelineCoordinator` and delegates all ML pipeline methods to it.
 - `KnowledgeCoordinator` — import, indexing, context building. ✅ Extracted to `DailyDesk.Core/Services/KnowledgeCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
 
 Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordinators. The facade boundary means `Program.cs` endpoints do not change callers.
 
-**Prerequisite:** No blocking prerequisite. Wire `StudySessionCoordinator`, `ResearchCoordinator`, and `KnowledgeCoordinator` into `OfficeBrokerOrchestrator` the same way `MLPipelineCoordinator` was — constructor injection, then replace each direct implementation with a delegate call. Update existing tests that construct the orchestrator directly to pass the new coordinator dependencies.
+**Prerequisite:** No blocking prerequisite. Wire `ResearchCoordinator` and `KnowledgeCoordinator` into `OfficeBrokerOrchestrator` the same way `MLPipelineCoordinator` was — constructor injection, then replace each direct implementation with a delegate call. Update existing tests that construct the orchestrator directly to pass the new coordinator dependencies.
 
 ---
 
@@ -214,7 +213,6 @@ The WPF ViewModel is split across 6 partial class files. Each file handles a dom
 **Refactor direction:**
 Convert to ViewModel-per-desk as the SK agent desks mature (post Phase 9):
 - `OperatorViewModel` — operator memory, inbox, suggestions.
-- `StudyViewModel` — training, practice, defense, reflection.
 - `ResearchViewModel` — research jobs, watchlist.
 - `WorkflowViewModel` — schedules, daily-run, workflow templates.
 
@@ -241,6 +239,6 @@ Keep a record of pressure areas that have been resolved so contributors understa
 | Text-only document extraction | Phase 7 | Added Docling pipeline with table and figure extraction |
 | No scheduled automation | Phase 8 | Added cron-style `JobSchedulerStore` + `JobSchedulerWorker` |
 | WPF client blocking on ML calls | Phase 9 | Added `JobPollingService` with async poll loop |
-| Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs` and `StudyValidators.cs`; deleted root-level `Validators.cs` |
+| Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs`; deleted root-level `Validators.cs` |
 | PHASES-ROADMAP.md stale phase status | Tech Debt (chunk issue) | Updated status table: Phase 4 → ✅ Complete (health monitoring, JobRetentionWorker, PingAsync); Phase 5 → ✅ Complete (EmbeddingService, VectorStoreService, KnowledgeIndexStore) |
 | Broker Program.cs — All Endpoints in One File | Tech Debt (chunk issue) | Extracted 30+ endpoints into 8 dedicated `IEndpointRouteBuilder` extension files under `DailyDesk.Broker/Endpoints/`; request records co-located with their handlers; `Program.cs` reduced to ~70 lines of infrastructure setup |

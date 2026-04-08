@@ -78,8 +78,6 @@ Before proposing changes, it is important to recognize what the codebase already
 **Target validators:**
 - `ChatRouteRequestValidator` — Route not empty, Route in known catalog.
 - `ChatSendRequestValidator` — Prompt not empty.
-- `StudyScoreDefenseRequestValidator` — Answer not empty.
-- `StudySaveReflectionRequestValidator` — Reflection not empty.
 - `ResearchRunRequestValidator` — Query not empty.
 - `WatchlistRunRequestValidator` — WatchlistId not empty.
 - `InboxResolveRequestValidator` — SuggestionId not empty, Status in `[accepted, deferred, rejected]`.
@@ -317,7 +315,7 @@ The WPF client currently calls ML endpoints and waits for the response. With the
 
 - `JobSchedule` model + `JobSchedulerStore` (LiteDB `job_schedules`). `JobSchedulerWorker` enqueues jobs on schedule.
 - `daily-run` job type: state refresh → ML pipeline → artifact export → suggestions. `RunDailyWorkflowAsync` in orchestrator.
-- `WorkflowTemplate` + `WorkflowStore` (LiteDB `workflow_templates`). Three built-in templates: "Daily Run", "Exam Prep", "Knowledge Refresh".
+- `WorkflowTemplate` + `WorkflowStore` (LiteDB `workflow_templates`). Two built-in templates: "Daily Run", "Knowledge Refresh".
 - New endpoints: `/api/schedules` CRUD, `/api/daily-run/latest`, `/api/workflows` CRUD + run.
 
 ---
