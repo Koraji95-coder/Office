@@ -12,7 +12,6 @@ public sealed class OralDefenseAttemptRecord
     public int MaxScore { get; init; } = 20;
     public string Summary { get; init; } = string.Empty;
     public string NextReviewRecommendation { get; init; } = string.Empty;
-    public IReadOnlyList<DefenseRubricItem> RubricItems { get; init; } = Array.Empty<DefenseRubricItem>();
     public IReadOnlyList<string> FollowUpQuestions { get; init; } = Array.Empty<string>();
 
     public double ScoreRatio => MaxScore == 0 ? 0 : (double)TotalScore / MaxScore;

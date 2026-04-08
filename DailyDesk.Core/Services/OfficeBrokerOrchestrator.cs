@@ -23,15 +23,10 @@ public sealed class OfficeBrokerOrchestrator
     private readonly string _knowledgeLibraryPath;
     private readonly string _stateRootPath;
     private readonly IReadOnlyList<string> _additionalKnowledgePaths;
-    private readonly IReadOnlyList<StudyTrack> _studyTracks = BuildDefaultStudyTracks();
 
     private readonly IModelProvider _modelProvider;
     private readonly SuiteSnapshotService _suiteSnapshotService;
-    private readonly TrainingGeneratorService _trainingGeneratorService;
-    private readonly TrainingStore _trainingStore;
     private readonly KnowledgeImportService _knowledgeImportService;
-    private readonly LearningProfileService _learningProfileService;
-    private readonly OralDefenseService _oralDefenseService;
     private readonly LiveResearchService _liveResearchService;
     private readonly OperatorMemoryStore _operatorMemoryStore;
     private readonly OfficeSessionStateStore _sessionStore;
@@ -63,7 +58,6 @@ public sealed class OfficeBrokerOrchestrator
     private OperatorMemoryState _operatorMemoryState = new();
     private OfficeLiveSessionState _session = new();
     private MLAnalyticsResult? _latestMLAnalytics;
-    private MLForecastResult? _latestMLForecast;
     private MLEmbeddingsResult? _latestMLEmbeddings;
     private string? _lastMLArtifactExportPath;
     private DateTimeOffset? _lastMLRunAt;
@@ -97,17 +91,10 @@ public sealed class OfficeBrokerOrchestrator
             _processRunner,
             _settings.SuiteRuntimeStatusEndpoint
         );
-        _trainingGeneratorService = new TrainingGeneratorService(
-            _modelProvider,
-            _settings.TrainingModel
-        );
-        _trainingStore = new TrainingStore(_stateRootPath, _officeDatabase, lf.CreateLogger<TrainingStore>());
         _knowledgeImportService = new KnowledgeImportService(
             _processRunner,
             Path.Combine(_officeRootPath, "DailyDesk", "Scripts", "extract_document_text.py")
         );
-        _learningProfileService = new LearningProfileService();
-        _oralDefenseService = new OralDefenseService(_modelProvider, _settings.MentorModel);
         _liveResearchService = new LiveResearchService(_modelProvider, webResearchPipeline);
         _operatorMemoryStore = new OperatorMemoryStore(_stateRootPath, _officeDatabase, lf.CreateLogger<OperatorMemoryStore>());
         _sessionStore = new OfficeSessionStateStore(_stateRootPath, _officeDatabase);
@@ -439,409 +426,6 @@ public sealed class OfficeBrokerOrchestrator
             );
             await SaveSessionLockedAsync(cancellationToken);
             return assistantMessage;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<TrainingSessionState> StartStudyAsync(
-        string? focus,
-        string? difficulty,
-        int? questionCount,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-            ResetSessionProgressLocked(
-                string.IsNullOrWhiteSpace(focus) ? _session.Focus : focus.Trim(),
-                "Manual focus selected for the next guided session.",
-                difficulty,
-                questionCount
-            );
-            await SaveSessionLockedAsync(cancellationToken);
-            return BuildTrainingSessionStateLocked();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<PracticeTest> GeneratePracticeAsync(
-        string? focus,
-        string? difficulty,
-        int? questionCount,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-
-            var resolvedFocus = string.IsNullOrWhiteSpace(focus)
-                ? _session.Focus
-                : focus.Trim();
-            var resolvedDifficulty = string.IsNullOrWhiteSpace(difficulty)
-                ? _session.Difficulty
-                : difficulty.Trim();
-            var resolvedQuestionCount = Math.Clamp(
-                questionCount ?? _session.QuestionCount,
-                3,
-                10
-            );
-            var focusReason = string.IsNullOrWhiteSpace(focus)
-                ? "Practice linked to the current guided session."
-                : "Manual focus chosen for the guided training session.";
-
-            var practiceTest = await _trainingGeneratorService.CreatePracticeTestAsync(
-                resolvedFocus,
-                resolvedDifficulty,
-                resolvedQuestionCount,
-                _suiteSnapshot,
-                _trainingHistorySummary,
-                _learningProfile,
-                _learningLibrary,
-                _studyTracks,
-                cancellationToken
-            );
-
-            _session.Focus = resolvedFocus;
-            _session.Difficulty = resolvedDifficulty;
-            _session.QuestionCount = resolvedQuestionCount;
-            _session.FocusReason = focusReason;
-            _session.ActivePracticeTest = practiceTest;
-            _session.PracticeGenerated = true;
-            _session.PracticeScored = false;
-            _session.DefenseGenerated = false;
-            _session.DefenseScored = false;
-            _session.ReflectionSaved = false;
-            _session.PracticeResultSummary =
-                $"Generated {practiceTest.Questions.Count} questions for '{resolvedFocus}' at {resolvedDifficulty} difficulty.";
-            _session.LastScoredSessionMode = string.Empty;
-            _session.LastScoredSessionFocus = string.Empty;
-            _session.ReflectionContextSummary =
-                "Score a practice or defense session to save a reflection.";
-            await SaveSessionLockedAsync(cancellationToken);
-            await RecordActivityLockedAsync(
-                "practice_generated",
-                "Test Builder",
-                resolvedFocus,
-                _session.PracticeResultSummary,
-                cancellationToken
-            );
-            return practiceTest;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<TrainingAttemptRecord> ScorePracticeAsync(
-        IReadOnlyList<OfficePracticeAnswerInput> answers,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-
-            var practiceTest = _session.ActivePracticeTest;
-            if (practiceTest is null || practiceTest.Questions.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "No active practice test. Generate practice before scoring."
-                );
-            }
-
-            foreach (var answer in answers)
-            {
-                if (answer.QuestionIndex < 0 || answer.QuestionIndex >= practiceTest.Questions.Count)
-                {
-                    continue;
-                }
-
-                var selected = string.IsNullOrWhiteSpace(answer.SelectedOptionKey)
-                    ? string.Empty
-                    : answer.SelectedOptionKey.Trim().ToUpperInvariant();
-                practiceTest.Questions[answer.QuestionIndex].SelectedOptionKey = selected;
-            }
-
-            var correctCount = 0;
-            foreach (var question in practiceTest.Questions)
-            {
-                var isCorrect = string.Equals(
-                    question.SelectedOptionKey?.Trim(),
-                    question.CorrectOptionKey,
-                    StringComparison.OrdinalIgnoreCase
-                );
-                if (isCorrect)
-                {
-                    correctCount++;
-                    question.ResultText = $"Correct. {question.Explanation}";
-                    continue;
-                }
-
-                var correctOption = question.Options.FirstOrDefault(option =>
-                    option.Key.Equals(question.CorrectOptionKey, StringComparison.OrdinalIgnoreCase)
-                );
-                var unanswered = string.IsNullOrWhiteSpace(question.SelectedOptionKey);
-                question.ResultText =
-                    $"{(unanswered ? "Unanswered." : "Incorrect.")} Correct answer: {correctOption?.DisplayLabel ?? question.CorrectOptionKey}. {question.Explanation} Connection: {question.SuiteConnection}";
-            }
-
-            var attempt = new TrainingAttemptRecord
-            {
-                Title = practiceTest.Title,
-                Focus = practiceTest.Focus,
-                Difficulty = practiceTest.Difficulty,
-                GenerationSource = practiceTest.GenerationSource,
-                CompletedAt = DateTimeOffset.Now,
-                QuestionCount = practiceTest.Questions.Count,
-                CorrectCount = correctCount,
-                Questions = practiceTest.Questions
-                    .Select(question => new TrainingAttemptQuestionRecord
-                    {
-                        Topic = question.Topic,
-                        Difficulty = question.Difficulty,
-                        Correct = string.Equals(
-                            question.SelectedOptionKey?.Trim(),
-                            question.CorrectOptionKey,
-                            StringComparison.OrdinalIgnoreCase
-                        ),
-                    })
-                    .ToList(),
-            };
-
-            _trainingHistorySummary = await _trainingStore.SaveAttemptAsync(attempt, cancellationToken);
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
-
-            var percent = practiceTest.Questions.Count == 0
-                ? 0
-                : (double)correctCount / practiceTest.Questions.Count;
-            _session.PracticeGenerated = true;
-            _session.PracticeScored = true;
-            _session.Focus = practiceTest.Focus;
-            _session.PracticeResultSummary =
-                $"{correctCount}/{practiceTest.Questions.Count} correct ({percent:P0}). Weak topics update has been saved locally.";
-            _session.LastScoredSessionMode = "Practice";
-            _session.LastScoredSessionFocus = practiceTest.Focus;
-            _session.ReflectionSaved = false;
-            _session.ReflectionContextSummary =
-                $"Reflect on practice for {practiceTest.Focus}. Capture what felt weak, what to review next, and any tie-in to Suite or career progress.";
-            await SaveSessionLockedAsync(cancellationToken);
-            await RecordActivityLockedAsync(
-                "practice_scored",
-                "Test Builder",
-                practiceTest.Focus,
-                _session.PracticeResultSummary,
-                cancellationToken
-            );
-
-            return attempt;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<OralDefenseScenario> GenerateDefenseAsync(
-        string? topic,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-
-            var preferredTopic = string.IsNullOrWhiteSpace(topic) ? _session.Focus : topic.Trim();
-            var scenario = await _oralDefenseService.CreateScenarioAsync(
-                _suiteSnapshot,
-                _trainingHistorySummary,
-                _learningProfile,
-                _learningLibrary,
-                _studyTracks,
-                preferredTopic,
-                cancellationToken
-            );
-
-            _session.ActiveDefenseScenario = scenario;
-            _session.Focus = string.IsNullOrWhiteSpace(scenario.Topic)
-                ? preferredTopic
-                : scenario.Topic;
-            _session.DefenseGenerated = true;
-            _session.DefenseScored = false;
-            _session.ReflectionSaved = false;
-            _session.DefenseAnswerDraft = string.Empty;
-            _session.LastDefenseEvaluation = null;
-            _session.DefenseScoreSummary = "No scored oral-defense answer yet.";
-            _session.DefenseFeedbackSummary =
-                "Score a typed answer to get rubric feedback and follow-up coaching.";
-            await SaveSessionLockedAsync(cancellationToken);
-            await RecordActivityLockedAsync(
-                "defense_generated",
-                "EE Mentor",
-                _session.Focus,
-                scenario.Title,
-                cancellationToken
-            );
-            return scenario;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<OralDefenseAttemptRecord> ScoreDefenseAsync(
-        string answer,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (string.IsNullOrWhiteSpace(answer))
-        {
-            throw new ArgumentException("Answer is required.", nameof(answer));
-        }
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-
-            var scenario = _session.ActiveDefenseScenario ?? new OralDefenseScenario();
-            var trimmedAnswer = answer.Trim();
-            var evaluation = await _oralDefenseService.ScoreResponseAsync(
-                scenario,
-                trimmedAnswer,
-                _suiteSnapshot,
-                _learningProfile,
-                _learningLibrary,
-                cancellationToken
-            );
-
-            var followUps = evaluation.RecommendedFollowUps.Count == 0
-                ? scenario.FollowUpQuestions
-                : evaluation.RecommendedFollowUps;
-            var topic = string.IsNullOrWhiteSpace(scenario.Topic)
-                ? _session.Focus
-                : scenario.Topic.Trim();
-
-            var attempt = new OralDefenseAttemptRecord
-            {
-                Title = scenario.Title,
-                Topic = string.IsNullOrWhiteSpace(topic) ? "electrical production judgment" : topic,
-                Prompt = scenario.Prompt,
-                Answer = trimmedAnswer,
-                GenerationSource = scenario.GenerationSource,
-                CompletedAt = DateTimeOffset.Now,
-                TotalScore = evaluation.TotalScore,
-                MaxScore = evaluation.MaxScore,
-                Summary = evaluation.Summary,
-                NextReviewRecommendation = evaluation.NextReviewRecommendation,
-                RubricItems = evaluation.RubricItems.ToList(),
-                FollowUpQuestions = followUps.ToList(),
-            };
-
-            _trainingHistorySummary = await _trainingStore.SaveDefenseAttemptAsync(
-                attempt,
-                cancellationToken
-            );
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
-
-            _session.DefenseGenerated = true;
-            _session.DefenseScored = true;
-            _session.ReflectionSaved = false;
-            _session.Focus = attempt.Topic;
-            _session.DefenseAnswerDraft = trimmedAnswer;
-            _session.LastDefenseEvaluation = evaluation;
-            _session.DefenseScoreSummary = evaluation.DisplaySummary;
-            _session.DefenseFeedbackSummary = BuildDefenseFeedbackSummary(evaluation);
-            _session.LastScoredSessionMode = "Defense";
-            _session.LastScoredSessionFocus = attempt.Topic;
-            _session.ReflectionContextSummary =
-                $"Reflect on defense for {attempt.Topic}. Capture what felt weak, what to review next, and any tie-in to Suite or career progress.";
-            await SaveSessionLockedAsync(cancellationToken);
-            await RecordActivityLockedAsync(
-                "defense_scored",
-                "EE Mentor",
-                attempt.Topic,
-                _session.DefenseScoreSummary,
-                cancellationToken
-            );
-
-            return attempt;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<SessionReflectionRecord> SaveReflectionAsync(
-        string reflection,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (string.IsNullOrWhiteSpace(reflection))
-        {
-            throw new ArgumentException("Reflection is required.", nameof(reflection));
-        }
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-
-            var record = new SessionReflectionRecord
-            {
-                Mode = string.IsNullOrWhiteSpace(_session.LastScoredSessionMode)
-                    ? "Session"
-                    : _session.LastScoredSessionMode,
-                Focus = string.IsNullOrWhiteSpace(_session.LastScoredSessionFocus)
-                    ? _session.Focus
-                    : _session.LastScoredSessionFocus,
-                Reflection = reflection.Trim(),
-                CompletedAt = DateTimeOffset.Now,
-            };
-
-            _trainingHistorySummary = await _trainingStore.SaveReflectionAsync(record, cancellationToken);
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
-
-            _session.ReflectionSaved = true;
-            _session.LastReflection = record;
-            _session.ReflectionContextSummary =
-                $"Saved reflection for {record.Mode.ToLowerInvariant()} on {record.Focus}.";
-            await SaveSessionLockedAsync(cancellationToken);
-            await RecordActivityLockedAsync(
-                "reflection_saved",
-                "Chief of Staff",
-                record.Focus,
-                record.Reflection,
-                cancellationToken
-            );
-
-            return record;
         }
         finally
         {
@@ -1274,11 +858,7 @@ public sealed class OfficeBrokerOrchestrator
                 _additionalKnowledgePaths,
                 cancellationToken
             );
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
+            _learningProfile = new LearningProfile();
             await RecordActivityLockedAsync(
                 "library_import",
                 "Chief of Staff",
@@ -1313,13 +893,9 @@ public sealed class OfficeBrokerOrchestrator
             _operatorMemoryState = await _operatorMemoryStore.ResetAsync(cancellationToken);
             _session = await _sessionStore.ResetAsync(cancellationToken);
             _trainingHistorySummary = clearTrainingHistory
-                ? await _trainingStore.ResetAsync(cancellationToken)
-                : await _trainingStore.LoadSummaryAsync(cancellationToken);
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
+                ? await Task.FromResult(new TrainingHistorySummary())
+                : await Task.FromResult(new TrainingHistorySummary());
+            _learningProfile = new LearningProfile();
             _lastRefreshAt = DateTimeOffset.Now;
 
             return BuildStateLocked();
@@ -1342,17 +918,13 @@ public sealed class OfficeBrokerOrchestrator
             ResetKnowledgeLibraryRoot();
             _operatorMemoryState = await _operatorMemoryStore.ResetAsync(cancellationToken);
             _session = await _sessionStore.ResetAsync(cancellationToken);
-            _trainingHistorySummary = await _trainingStore.ResetAsync(cancellationToken);
+            _trainingHistorySummary = new TrainingHistorySummary();
             _learningLibrary = await _knowledgeImportService.LoadAsync(
                 _knowledgeLibraryPath,
                 _additionalKnowledgePaths,
                 cancellationToken
             );
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
+            _learningProfile = new LearningProfile();
             _lastRefreshAt = DateTimeOffset.Now;
 
             return BuildStateLocked();
@@ -1398,11 +970,7 @@ public sealed class OfficeBrokerOrchestrator
         _learningLibrary = await learningLibraryTask;
         _operatorMemoryState = await operatorMemoryTask;
         _session = await sessionTask;
-        _learningProfile = _learningProfileService.Build(
-            _learningLibrary,
-            _trainingHistorySummary,
-            _suiteSnapshot
-        );
+        _learningProfile = new LearningProfile();
         NormalizeSessionLocked();
         if (NormalizeHistoricalStateLocked())
         {
@@ -1415,7 +983,6 @@ public sealed class OfficeBrokerOrchestrator
 
         // Restore persisted ML results so export-artifacts works after restart
         _latestMLAnalytics ??= _mlResultStore.LoadAnalytics();
-        _latestMLForecast ??= _mlResultStore.LoadForecast();
         _latestMLEmbeddings ??= _mlResultStore.LoadEmbeddings();
         _lastMLRunAt ??= _mlResultStore.LoadLastRunTimestamp();
     }
@@ -1447,7 +1014,7 @@ public sealed class OfficeBrokerOrchestrator
     )
     {
         return await RunWithTimeoutFallbackAsync(
-            token => _trainingStore.LoadSummaryAsync(token),
+            token => Task.FromResult(new TrainingHistorySummary()),
             TrainingHistoryLoadTimeout,
             static () => new TrainingHistorySummary(),
             cancellationToken
@@ -1547,7 +1114,6 @@ public sealed class OfficeBrokerOrchestrator
             ? "Mixed"
             : _session.Difficulty.Trim();
         _session.QuestionCount = Math.Clamp(_session.QuestionCount, 3, 10);
-        _session.ActiveDefenseScenario ??= new OralDefenseScenario();
     }
 
     private bool NormalizeHistoricalStateLocked()
@@ -1568,7 +1134,6 @@ public sealed class OfficeBrokerOrchestrator
     {
         var chatThreads = BuildChatThreadsLocked();
         var currentRoute = OfficeRouteCatalog.NormalizeRoute(_session.CurrentRoute);
-        var trainingSession = BuildTrainingSessionStateLocked();
         var inbox = BuildInboxSectionLocked();
 
         return new OfficeBrokerState
@@ -1623,25 +1188,15 @@ public sealed class OfficeBrokerOrchestrator
             },
             Study = new OfficeStudySection
             {
-                Session = trainingSession,
                 Focus = _session.Focus,
                 Difficulty = _session.Difficulty,
                 QuestionCount = _session.QuestionCount,
-                ActivePracticeTest = _session.ActivePracticeTest,
-                PracticeQuestions = _session.ActivePracticeTest?.Questions ?? Array.Empty<TrainingQuestion>(),
                 PracticeResultSummary = _session.PracticeResultSummary,
-                ActiveDefenseScenario = _session.ActiveDefenseScenario,
-                LastDefenseEvaluation = _session.LastDefenseEvaluation,
                 DefenseScoreSummary = _session.DefenseScoreSummary,
                 DefenseFeedbackSummary = _session.DefenseFeedbackSummary,
                 ReflectionContextSummary = _session.ReflectionContextSummary,
-                PracticePrompt = _session.ActivePracticeTest?.Questions.FirstOrDefault()?.Prompt ?? string.Empty,
-                DefensePrompt = _session.ActiveDefenseScenario?.Prompt ?? string.Empty,
-                LatestScore = BuildLatestScoreSummaryLocked(),
                 LatestReflection = _session.LastReflection?.DisplaySummary
                     ?? _trainingHistorySummary.ReflectionSummary,
-                Hints = BuildStudyHintsLocked(),
-                Sequence = BuildStudySequenceLocked(),
                 History = _trainingHistorySummary,
             },
             Research = new OfficeResearchSection
@@ -1735,28 +1290,6 @@ public sealed class OfficeBrokerOrchestrator
                 Messages = Array.Empty<DeskMessageRecord>(),
             })
             .ToList();
-    }
-
-    private TrainingSessionState BuildTrainingSessionStateLocked()
-    {
-        var stage = OfficeStudySessionLogic.ResolveStage(_session);
-        var stageSummary = OfficeStudySessionLogic.BuildStageSummary(stage);
-
-        return new TrainingSessionState
-        {
-            Stage = stage,
-            Focus = _session.Focus,
-            FocusReason = _session.FocusReason,
-            StageSummary = stageSummary,
-            PracticeGenerated = _session.PracticeGenerated,
-            PracticeScored = _session.PracticeScored,
-            DefenseGenerated = _session.DefenseGenerated,
-            DefenseScored = _session.DefenseScored,
-            ReflectionSaved = _session.ReflectionSaved,
-            HistoryFilePath = _trainingStore.StorePath,
-            HistoryExists = _trainingStore.Exists,
-            LastHistoryWriteAt = _trainingStore.GetLastWriteTime(),
-        };
     }
 
     private OfficeInboxSection BuildInboxSectionLocked()
@@ -1903,123 +1436,6 @@ public sealed class OfficeBrokerOrchestrator
             )?.Messages
             ?? threads.FirstOrDefault()?.Messages
             ?? Array.Empty<DeskMessageRecord>();
-    }
-
-    private IReadOnlyList<string> BuildStudyHintsLocked()
-    {
-        var hints = new List<string>();
-        if (!string.IsNullOrWhiteSpace(_session.FocusReason))
-        {
-            hints.Add(_session.FocusReason);
-        }
-
-        if (_trainingHistorySummary.ReviewRecommendations.FirstOrDefault() is { } review)
-        {
-            hints.Add($"Review target: {review.Topic}.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(_session.DefenseFeedbackSummary))
-        {
-            hints.Add(_session.DefenseFeedbackSummary);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_trainingHistorySummary.ReflectionSummary))
-        {
-            hints.Add(_trainingHistorySummary.ReflectionSummary);
-        }
-
-        return hints
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(4)
-            .ToList();
-    }
-
-    private IReadOnlyList<OfficeStudyStep> BuildStudySequenceLocked()
-    {
-        return new List<OfficeStudyStep>
-        {
-            new()
-            {
-                Id = "focus",
-                Title = "Focus",
-                Detail = string.IsNullOrWhiteSpace(_session.Focus)
-                    ? "Choose the next focus area."
-                    : $"Active focus: {_session.Focus}",
-                Status = "complete",
-            },
-            new()
-            {
-                Id = "practice-generate",
-                Title = "Practice generation",
-                Detail = _session.PracticeGenerated
-                    ? "Practice set is loaded and ready for scoring."
-                    : "Generate a practice set from the active focus.",
-                Status = _session.PracticeGenerated ? "complete" : "pending",
-            },
-            new()
-            {
-                Id = "practice-score",
-                Title = "Practice scoring",
-                Detail = _session.PracticeScored
-                    ? _session.PracticeResultSummary
-                    : "Score the current practice set to unlock the defense stage.",
-                Status = _session.PracticeScored ? "complete" : (_session.PracticeGenerated ? "running" : "pending"),
-            },
-            new()
-            {
-                Id = "defense-generate",
-                Title = "Defense generation",
-                Detail = _session.DefenseGenerated
-                    ? "Defense prompt is ready."
-                    : "Generate an oral-defense prompt tied to the same topic.",
-                Status = _session.DefenseGenerated ? "complete" : (_session.PracticeScored ? "running" : "pending"),
-            },
-            new()
-            {
-                Id = "defense-score",
-                Title = "Defense scoring",
-                Detail = _session.DefenseScored
-                    ? _session.DefenseScoreSummary
-                    : "Score a typed defense answer to get rubric feedback.",
-                Status = _session.DefenseScored ? "complete" : (_session.DefenseGenerated ? "running" : "pending"),
-            },
-            new()
-            {
-                Id = "reflection",
-                Title = "Reflection",
-                Detail = _session.ReflectionSaved
-                    ? _session.ReflectionContextSummary
-                    : "Capture what felt weak, what to review next, and the proof value of this session.",
-                Status = _session.ReflectionSaved ? "complete" : (_session.DefenseScored ? "running" : "pending"),
-            },
-            new()
-            {
-                Id = "proof",
-                Title = "Proof output",
-                Detail = !string.IsNullOrWhiteSpace(_trainingHistorySummary.ReflectionSummary)
-                    ? _trainingHistorySummary.ReflectionSummary
-                    : "Saved reflections become proof of growth and future study evidence.",
-                Status = _session.ReflectionSaved ? "running" : "pending",
-            },
-        };
-    }
-
-    private string BuildLatestScoreSummaryLocked()
-    {
-        if (!string.IsNullOrWhiteSpace(_session.DefenseScoreSummary) &&
-            !string.Equals(_session.DefenseScoreSummary, "No scored oral-defense answer yet.", StringComparison.Ordinal))
-        {
-            return _session.DefenseScoreSummary;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_session.PracticeResultSummary) &&
-            !string.Equals(_session.PracticeResultSummary, "No scored practice yet.", StringComparison.Ordinal))
-        {
-            return _session.PracticeResultSummary;
-        }
-
-        return string.Empty;
     }
 
     private IReadOnlyList<OfficeLibraryRoot> BuildLibraryRootsLocked()
@@ -2557,41 +1973,6 @@ public sealed class OfficeBrokerOrchestrator
         await _sessionStore.SaveAsync(_session, cancellationToken);
     }
 
-    private void ResetSessionProgressLocked(
-        string focus,
-        string reason,
-        string? difficulty,
-        int? questionCount
-    )
-    {
-        _session.Focus = string.IsNullOrWhiteSpace(focus)
-            ? "Protection, grounding, standards, drafting safety"
-            : focus.Trim();
-        _session.FocusReason = string.IsNullOrWhiteSpace(reason)
-            ? "Manual focus selected for the next guided session."
-            : reason.Trim();
-        _session.Difficulty = string.IsNullOrWhiteSpace(difficulty) ? "Mixed" : difficulty.Trim();
-        _session.QuestionCount = Math.Clamp(questionCount ?? _session.QuestionCount, 3, 10);
-        _session.PracticeGenerated = false;
-        _session.PracticeScored = false;
-        _session.DefenseGenerated = false;
-        _session.DefenseScored = false;
-        _session.ReflectionSaved = false;
-        _session.ActivePracticeTest = null;
-        _session.ActiveDefenseScenario = new OralDefenseScenario();
-        _session.LastDefenseEvaluation = null;
-        _session.DefenseAnswerDraft = string.Empty;
-        _session.PracticeResultSummary = "No scored practice yet.";
-        _session.DefenseScoreSummary = "No scored oral-defense answer yet.";
-        _session.DefenseFeedbackSummary =
-            "Score a typed answer to get rubric feedback and follow-up coaching.";
-        _session.LastScoredSessionMode = string.Empty;
-        _session.LastScoredSessionFocus = string.Empty;
-        _session.LastReflection = null;
-        _session.ReflectionContextSummary =
-            "Score a practice or defense session to save a reflection.";
-    }
-
     private async Task<OperatorMemoryState> AutoStageSelfServeSuggestionsLockedAsync(
         IReadOnlyList<SuggestedAction> suggestions,
         CancellationToken cancellationToken
@@ -2783,11 +2164,7 @@ public sealed class OfficeBrokerOrchestrator
                 _additionalKnowledgePaths,
                 cancellationToken
             );
-            _learningProfile = _learningProfileService.Build(
-                _learningLibrary,
-                _trainingHistorySummary,
-                _suiteSnapshot
-            );
+            _learningProfile = new LearningProfile();
         }
 
         return filePath;
@@ -2826,11 +2203,7 @@ public sealed class OfficeBrokerOrchestrator
             _additionalKnowledgePaths,
             cancellationToken
         );
-        _learningProfile = _learningProfileService.Build(
-            _learningLibrary,
-            _trainingHistorySummary,
-            _suiteSnapshot
-        );
+        _learningProfile = new LearningProfile();
 
         var summary = $"Prepared follow-through brief: {fileName}";
         var detail =
@@ -3122,17 +2495,6 @@ public sealed class OfficeBrokerOrchestrator
         };
     }
 
-    private static string BuildDefenseFeedbackSummary(DefenseEvaluation evaluation)
-    {
-        var weakestItem = evaluation.RubricItems
-            .OrderBy(item => item.MaxScore == 0 ? 0 : (double)item.Score / item.MaxScore)
-            .ThenBy(item => item.Name)
-            .FirstOrDefault();
-        return weakestItem is null
-            ? evaluation.NextReviewRecommendation
-            : $"{evaluation.NextReviewRecommendation} Weakest area: {weakestItem.Name}. {weakestItem.Feedback}";
-    }
-
     private static string ResolveOfficeRootPath(string baseDirectory)
     {
         var current = new DirectoryInfo(baseDirectory);
@@ -3150,34 +2512,6 @@ public sealed class OfficeBrokerOrchestrator
 
         return Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", ".."));
     }
-
-    private static IReadOnlyList<StudyTrack> BuildDefaultStudyTracks() =>
-    [
-        new()
-        {
-            Title = "Protection, grounding, and safe design constraints",
-            Summary =
-                "Study how real electrical constraints should shape software decisions, review gates, and drafting workflows.",
-            NextMilestone =
-                "Next: explain one design constraint from memory and tie it to a Suite feature.",
-        },
-        new()
-        {
-            Title = "Standards, drawings, and operator trust",
-            Summary =
-                "Use drawing QA, title blocks, standards checks, and transmittals as a path to stronger EE production judgment.",
-            NextMilestone =
-                "Next: build one challenge around standards-checking logic and human review.",
-        },
-        new()
-        {
-            Title = "Automation with deterministic review gates",
-            Summary =
-                "Learn where automation helps, where it must stop, and how to structure preview, validate, and execute phases.",
-            NextMilestone =
-                "Next: explain why review-first automation is more credible than full autonomy in this domain.",
-        },
-    ];
 
     private static string GetUniqueKnowledgeImportPath(string targetDirectory, string fileName)
     {
@@ -3209,97 +2543,6 @@ public sealed class OfficeBrokerOrchestrator
     }
 
     // --- ML Pipeline ---
-
-    public async Task<MLAnalyticsResult> RunMLAnalyticsAsync(
-        CancellationToken cancellationToken = default
-    )
-    {
-        IReadOnlyList<TrainingAttemptRecord> attempts;
-        IReadOnlyList<OperatorActivityRecord> decisions;
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-            attempts = _trainingStore.LoadAllAttempts();
-            decisions = _operatorMemoryState.Activities;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await _mlGate.WaitAsync(cancellationToken);
-        try
-        {
-            var result = await _mlPipelineCoordinator.RunMLAnalyticsAsync(
-                attempts,
-                decisions,
-                cancellationToken
-            );
-
-            await _gate.WaitAsync(cancellationToken);
-            try
-            {
-                _latestMLAnalytics = result;
-                _lastMLRunAt = DateTimeOffset.Now;
-            }
-            finally
-            {
-                _gate.Release();
-            }
-
-            return result;
-        }
-        finally
-        {
-            _mlGate.Release();
-        }
-    }
-
-    public async Task<MLForecastResult> RunMLForecastAsync(
-        CancellationToken cancellationToken = default
-    )
-    {
-        IReadOnlyList<TrainingAttemptRecord> attempts;
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            await EnsureInitializedLockedAsync(cancellationToken);
-            attempts = _trainingStore.LoadAllAttempts();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        await _mlGate.WaitAsync(cancellationToken);
-        try
-        {
-            var result = await _mlPipelineCoordinator.RunMLForecastAsync(
-                attempts,
-                cancellationToken
-            );
-
-            await _gate.WaitAsync(cancellationToken);
-            try
-            {
-                _latestMLForecast = result;
-                _lastMLRunAt = DateTimeOffset.Now;
-            }
-            finally
-            {
-                _gate.Release();
-            }
-
-            return result;
-        }
-        finally
-        {
-            _mlGate.Release();
-        }
-    }
 
     public async Task<MLEmbeddingsResult> RunMLEmbeddingsAsync(
         string? query = null,
@@ -3351,7 +2594,6 @@ public sealed class OfficeBrokerOrchestrator
         CancellationToken cancellationToken = default
     )
     {
-        IReadOnlyList<TrainingAttemptRecord> attempts;
         IReadOnlyList<OperatorActivityRecord> decisions;
         IReadOnlyList<LearningDocument> documents;
 
@@ -3359,7 +2601,6 @@ public sealed class OfficeBrokerOrchestrator
         try
         {
             await EnsureInitializedLockedAsync(cancellationToken);
-            attempts = _trainingStore.LoadAllAttempts();
             decisions = _operatorMemoryState.Activities;
             documents = _learningLibrary.Documents;
         }
@@ -3372,7 +2613,7 @@ public sealed class OfficeBrokerOrchestrator
         try
         {
             var pipelineResult = await _mlPipelineCoordinator.RunFullMLPipelineAsync(
-                attempts,
+                Array.Empty<TrainingAttemptRecord>(),
                 decisions,
                 documents,
                 _stateRootPath,
@@ -3383,7 +2624,6 @@ public sealed class OfficeBrokerOrchestrator
             try
             {
                 _latestMLAnalytics = pipelineResult.Analytics;
-                _latestMLForecast = pipelineResult.Forecast;
                 _latestMLEmbeddings = pipelineResult.Embeddings;
                 _lastMLArtifactExportPath = pipelineResult.ExportPath;
                 _lastMLRunAt = DateTimeOffset.Now;
@@ -3422,7 +2662,7 @@ public sealed class OfficeBrokerOrchestrator
             await EnsureInitializedLockedAsync(cancellationToken);
             analytics = _latestMLAnalytics ?? new MLAnalyticsResult { Ok = false, Engine = "not-run" };
             embeddings = _latestMLEmbeddings ?? new MLEmbeddingsResult { Ok = false, Engine = "not-run" };
-            forecast = _latestMLForecast ?? new MLForecastResult { Ok = false, Engine = "not-run" };
+            forecast = new MLForecastResult { Ok = false, Engine = "not-run" };
         }
         finally
         {
@@ -3477,7 +2717,7 @@ public sealed class OfficeBrokerOrchestrator
         var summary = _latestMLAnalytics is not null
             ? $"ML pipeline active ({_latestMLAnalytics.Engine}). Readiness: {_latestMLAnalytics.OverallReadiness:P0}. " +
               $"Weak topics: {_latestMLAnalytics.WeakTopics.Count}. " +
-              $"Forecast engine: {_latestMLForecast?.Engine ?? "not run"}. " +
+              $"Forecast engine: not run. " +
               $"Embeddings: {_latestMLEmbeddings?.Engine ?? "not run"}."
             : "ML pipeline is enabled but has not been run yet. Use the ML endpoints to analyze your learning data.";
 
@@ -3486,7 +2726,7 @@ public sealed class OfficeBrokerOrchestrator
             Enabled = true,
             Summary = summary,
             Analytics = _latestMLAnalytics,
-            Forecast = _latestMLForecast,
+            Forecast = null,
             Embeddings = _latestMLEmbeddings,
             LastArtifactExportPath = _lastMLArtifactExportPath,
             LastRunAt = _lastMLRunAt,

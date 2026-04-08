@@ -4,7 +4,7 @@ namespace DailyDesk.Services;
 
 /// <summary>
 /// Domain coordinator for ML pipeline operations: analytics, forecast, embeddings, and artifact export.
-/// Extracted from OfficeBrokerOrchestrator per REFACTOR-PRESSURE.md.
+/// Extracted from OfficeBrokerOrchestrator per TECHNICAL-DEBT.md.
 /// </summary>
 public sealed class MLPipelineCoordinator
 {
@@ -17,42 +17,6 @@ public sealed class MLPipelineCoordinator
     {
         _mlAnalyticsService = mlAnalyticsService;
         _mlResultStore = mlResultStore;
-    }
-
-    /// <summary>
-    /// Runs learning analytics and persists the result to the ML result store.
-    /// </summary>
-    public async Task<MLAnalyticsResult> RunMLAnalyticsAsync(
-        IReadOnlyList<TrainingAttemptRecord> attempts,
-        IReadOnlyList<OperatorActivityRecord> decisions,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var result = await _mlAnalyticsService.RunLearningAnalyticsAsync(
-            attempts,
-            decisions,
-            cancellationToken);
-
-        _mlResultStore.SaveAnalytics(result);
-        return result;
-    }
-
-    /// <summary>
-    /// Runs progress forecast and persists the result to the ML result store.
-    /// </summary>
-    public async Task<MLForecastResult> RunMLForecastAsync(
-        IReadOnlyList<TrainingAttemptRecord> attempts,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var result = await _mlAnalyticsService.RunProgressForecastAsync(
-            attempts,
-            cancellationToken);
-
-        _mlResultStore.SaveForecast(result);
-        return result;
     }
 
     /// <summary>
@@ -75,8 +39,9 @@ public sealed class MLPipelineCoordinator
     }
 
     /// <summary>
-    /// Runs analytics, forecast, and embeddings in parallel, then generates and exports
-    /// a suite artifact bundle. All three results are persisted to the ML result store.
+    /// Runs embeddings, then generates and exports a suite artifact bundle.
+    /// The embeddings result is persisted to the ML result store.
+    /// Analytics and Forecast return default values.
     /// </summary>
     public async Task<MLPipelineRunResult> RunFullMLPipelineAsync(
         IReadOnlyList<TrainingAttemptRecord> attempts,
@@ -85,24 +50,13 @@ public sealed class MLPipelineCoordinator
         string stateRootPath,
         CancellationToken cancellationToken = default)
     {
-        // Run analytics, forecast, and embeddings in parallel — they are independent
-        var analyticsTask = _mlAnalyticsService.RunLearningAnalyticsAsync(
-            attempts,
-            decisions,
-            cancellationToken);
-        var forecastTask = _mlAnalyticsService.RunProgressForecastAsync(
-            attempts,
-            cancellationToken);
-        var embeddingsTask = _mlAnalyticsService.RunDocumentEmbeddingsAsync(
+        var embeddings = await _mlAnalyticsService.RunDocumentEmbeddingsAsync(
             documents,
             null,
             cancellationToken);
 
-        await Task.WhenAll(analyticsTask, forecastTask, embeddingsTask);
-
-        var analytics = await analyticsTask;
-        var forecast = await forecastTask;
-        var embeddings = await embeddingsTask;
+        var analytics = new MLAnalyticsResult();
+        var forecast = new MLForecastResult();
 
         var artifacts = await _mlAnalyticsService.GenerateSuiteArtifactsAsync(
             analytics,
@@ -115,8 +69,6 @@ public sealed class MLPipelineCoordinator
             stateRootPath,
             cancellationToken);
 
-        _mlResultStore.SaveAnalytics(analytics);
-        _mlResultStore.SaveForecast(forecast);
         _mlResultStore.SaveEmbeddings(embeddings);
 
         return new MLPipelineRunResult

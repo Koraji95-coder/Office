@@ -58,7 +58,6 @@ app.UseSerilogRequestLogging();
 
 app.MapHealthEndpoints(logger);
 app.MapChatEndpoints(logger);
-app.MapStudyEndpoints(logger);
 app.MapResearchEndpoints(logger);
 app.MapOperatorEndpoints(logger);
 app.MapMLEndpoints(logger);

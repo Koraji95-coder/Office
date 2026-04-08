@@ -15,10 +15,7 @@ public sealed class OfficeLiveSessionState
     public bool DefenseGenerated { get; set; }
     public bool DefenseScored { get; set; }
     public bool ReflectionSaved { get; set; }
-    public PracticeTest? ActivePracticeTest { get; set; }
     public string PracticeResultSummary { get; set; } = "No scored practice yet.";
-    public OralDefenseScenario ActiveDefenseScenario { get; set; } = new();
-    public DefenseEvaluation? LastDefenseEvaluation { get; set; }
     public string DefenseAnswerDraft { get; set; } = string.Empty;
     public string DefenseScoreSummary { get; set; } = "No scored oral-defense answer yet.";
     public string DefenseFeedbackSummary { get; set; } =
@@ -121,15 +118,10 @@ public sealed class OfficeChatThread
 
 public sealed class OfficeStudySection
 {
-    public TrainingSessionState Session { get; init; } = new();
     public string Focus { get; init; } = string.Empty;
     public string Difficulty { get; init; } = "Mixed";
     public int QuestionCount { get; init; } = 6;
-    public PracticeTest? ActivePracticeTest { get; init; }
-    public IReadOnlyList<TrainingQuestion> PracticeQuestions { get; init; } = Array.Empty<TrainingQuestion>();
     public string PracticeResultSummary { get; init; } = "No scored practice yet.";
-    public OralDefenseScenario ActiveDefenseScenario { get; init; } = new();
-    public DefenseEvaluation? LastDefenseEvaluation { get; init; }
     public string DefenseScoreSummary { get; init; } = "No scored oral-defense answer yet.";
     public string DefenseFeedbackSummary { get; init; } =
         "Score a typed answer to get rubric feedback and follow-up coaching.";
