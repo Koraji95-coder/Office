@@ -249,12 +249,18 @@ def _load_analytics_model_metrics() -> dict[str, Any] | None:
     return None
 
 
+_STATIC_IO_ERROR = "Failed to read input."
+
+
 def main() -> None:
     try:
         raw = _read_input()
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
         print(json.dumps({"ok": False, "error": "Invalid JSON input."}))
+        return
+    except OSError:
+        print(json.dumps({"ok": False, "error": _STATIC_IO_ERROR}))
         return
 
     try:

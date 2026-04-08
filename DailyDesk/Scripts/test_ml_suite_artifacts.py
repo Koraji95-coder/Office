@@ -3,6 +3,7 @@ Integration tests for error handling in ml_suite_artifacts.py.
 
 Verifies that all exception paths produce compliant static error detail strings:
   - JSONDecodeError → {"ok": false, "error": "Invalid JSON input."}
+  - OSError / IOError → {"ok": false, "error": "Failed to read input."}
   - Unexpected exceptions → {"ok": false, "error": "An unexpected error occurred. See server logs for details."}
   - Happy path → {"ok": true, "artifacts": [...]}
 """
@@ -30,6 +31,7 @@ _STATIC_UNEXPECTED_ERROR = (
     "An unexpected error occurred. See server logs for details."
 )
 _STATIC_JSON_ERROR = "Invalid JSON input."
+_STATIC_IO_ERROR = "Failed to read input."
 
 _MINIMAL_VALID_INPUT = json.dumps(
     {
@@ -152,7 +154,52 @@ class TestUnexpectedExceptionPath(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Group 3: Happy path / valid input
+# Group 3: OSError / IOError paths
+# ---------------------------------------------------------------------------
+class TestIOExceptionPath(unittest.TestCase):
+    """main() must return a static error when _read_input raises an OSError/IOError."""
+
+    def _assert_io_error_response(self, result: dict) -> None:
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], _STATIC_IO_ERROR)
+
+    def test_os_error_returns_ok_false(self):
+        with patch.object(_module, "_read_input", side_effect=OSError("disk error")):
+            result = _run_main_with_input("")
+        self.assertFalse(result["ok"])
+
+    def test_os_error_returns_static_detail(self):
+        with patch.object(_module, "_read_input", side_effect=OSError("disk error")):
+            result = _run_main_with_input("")
+        self._assert_io_error_response(result)
+
+    def test_file_not_found_error_returns_static_detail(self):
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("no such file")):
+            result = _run_main_with_input("")
+        self._assert_io_error_response(result)
+
+    def test_permission_error_returns_static_detail(self):
+        with patch.object(_module, "_read_input", side_effect=PermissionError("access denied")):
+            result = _run_main_with_input("")
+        self._assert_io_error_response(result)
+
+    def test_io_error_message_not_leaked_in_response(self):
+        """Raw OSError message must NOT appear in the error detail (no information disclosure)."""
+        sentinel = "SENSITIVE_PATH_INFO_67890"
+        with patch.object(_module, "_read_input", side_effect=OSError(sentinel)):
+            result = _run_main_with_input("")
+        self.assertNotIn(sentinel, result.get("error", ""))
+        self.assertNotIn(sentinel, json.dumps(result))
+
+    def test_io_error_detail_is_static_string(self):
+        """Error detail must be exactly the required static string, not a dynamic value."""
+        with patch.object(_module, "_read_input", side_effect=OSError("dynamic os msg")):
+            result = _run_main_with_input("")
+        self.assertEqual(result["error"], _STATIC_IO_ERROR)
+
+
+# ---------------------------------------------------------------------------
+# Group 4: Happy path / valid input
 # ---------------------------------------------------------------------------
 class TestHappyPath(unittest.TestCase):
     """Valid inputs must produce ok=True with all four artifact types."""
