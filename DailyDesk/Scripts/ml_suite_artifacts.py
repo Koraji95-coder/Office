@@ -256,6 +256,9 @@ def main() -> None:
     except json.JSONDecodeError:
         print(json.dumps({"ok": False, "error": "Invalid JSON input."}))
         return
+    except FileNotFoundError:
+        print(json.dumps({"ok": False, "error": "Input file not found."}))
+        return
 
     try:
         analytics = payload.get("analytics", {})

@@ -30,6 +30,7 @@ _STATIC_UNEXPECTED_ERROR = (
     "An unexpected error occurred. See server logs for details."
 )
 _STATIC_JSON_ERROR = "Invalid JSON input."
+_STATIC_FILE_NOT_FOUND_ERROR = "Input file not found."
 
 _MINIMAL_VALID_INPUT = json.dumps(
     {
@@ -211,6 +212,67 @@ class TestHappyPath(unittest.TestCase):
     def test_empty_json_object_returns_ok_true(self):
         result = _run_main_with_input("{}")
         self.assertTrue(result["ok"])
+
+
+# ---------------------------------------------------------------------------
+# Group 4: FileNotFoundError path
+# ---------------------------------------------------------------------------
+class TestFileNotFoundErrorPath(unittest.TestCase):
+    """FileNotFoundError in file I/O must produce compliant static error strings."""
+
+    def test_file_not_found_in_read_input_returns_ok_false(self):
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("/data/input.json")):
+            result = _run_main_with_input("")
+        self.assertFalse(result["ok"])
+
+    def test_file_not_found_in_read_input_returns_static_error_string(self):
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("/data/input.json")):
+            result = _run_main_with_input("")
+        self.assertEqual(result["error"], _STATIC_FILE_NOT_FOUND_ERROR)
+
+    def test_file_not_found_error_detail_is_exactly_static_string(self):
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError("any message")):
+            result = _run_main_with_input("")
+        self.assertEqual(result["error"], _STATIC_FILE_NOT_FOUND_ERROR)
+
+    def test_file_not_found_path_not_leaked_in_response(self):
+        """The dynamic file path must NOT appear in the error response."""
+        sentinel = "SECRET_PATH_ABC_99999"
+        with patch.object(_module, "_read_input", side_effect=FileNotFoundError(sentinel)):
+            result = _run_main_with_input("")
+        self.assertNotIn(sentinel, json.dumps(result))
+
+    def test_file_not_found_in_artifact_builder_returns_static_unexpected_error(self):
+        with patch.object(_module, "_build_operator_readiness", side_effect=FileNotFoundError("missing")):
+            result = _run_main_with_input(_MINIMAL_VALID_INPUT)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], _STATIC_UNEXPECTED_ERROR)
+
+    def test_file_not_found_in_artifact_builder_does_not_leak_path(self):
+        sentinel = "SENSITIVE_PATH_XYZ_12345"
+        with patch.object(_module, "_build_knowledge_index", side_effect=FileNotFoundError(sentinel)):
+            result = _run_main_with_input(_MINIMAL_VALID_INPUT)
+        self.assertNotIn(sentinel, json.dumps(result))
+
+    def test_scoring_metrics_file_not_found_main_succeeds(self):
+        """FileNotFoundError opening scoring model metrics must not crash main."""
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", side_effect=FileNotFoundError("model-metrics.json")):
+                result = _run_main_with_input(_MINIMAL_VALID_INPUT)
+        self.assertTrue(result["ok"])
+
+    def test_analytics_metrics_file_not_found_main_succeeds(self):
+        """FileNotFoundError opening analytics model metrics must not crash main."""
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", side_effect=FileNotFoundError("analytics-model-metrics.json")):
+                result = _run_main_with_input(_MINIMAL_VALID_INPUT)
+        self.assertTrue(result["ok"])
+
+    def test_scoring_metrics_file_not_found_still_produces_four_artifacts(self):
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", side_effect=FileNotFoundError("model-metrics.json")):
+                result = _run_main_with_input(_MINIMAL_VALID_INPUT)
+        self.assertEqual(len(result["artifacts"]), 4)
 
 
 if __name__ == "__main__":
