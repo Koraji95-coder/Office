@@ -199,6 +199,66 @@ app.MapPost("/api/chat/send", async (ChatSendRequest request, OfficeBrokerOrches
 
 ---
 
+### Microsoft.Extensions.Logging.Abstractions
+
+| | |
+|---|---|
+| **GitHub** | [dotnet/runtime](https://github.com/dotnet/runtime/tree/main/src/libraries/Microsoft.Extensions.Logging.Abstractions) |
+| **NuGet** | `Microsoft.Extensions.Logging.Abstractions` |
+| **Version** | 10.0.2 |
+| **License** | MIT |
+| **Added to** | `DailyDesk.Core.csproj` |
+
+**Problem it solves:**
+Core services (`OllamaService`, `MLAnalyticsService`, `ProcessRunner`, `TrainingStore`, etc.) are linked into `DailyDesk.Core` which has no ASP.NET dependency. These services need structured `ILogger<T>` support for diagnostics without pulling in the full `Microsoft.Extensions.Logging` runtime package. The Abstractions package supplies the `ILogger<T>`, `ILoggerFactory`, and `ILoggerProvider` interfaces — the actual logging implementation is supplied at runtime by the host (e.g., Serilog in `DailyDesk.Broker`).
+
+**What it replaces:**
+- `Console.WriteLine` diagnostics in services → Structured `ILogger<T>` with severity, message template, and named parameters.
+- Hard coupling to a specific logger → Interface-based injection; any `ILogger<T>` implementation (Serilog, NLog, console) satisfies the dependency.
+
+**What it does NOT include:**
+- No log sinks (console, file, etc.) — those are provided by `Serilog.AspNetCore` in the broker project.
+- No `ILogger<T>` implementation — only the contracts.
+
+**Canonical usage patterns:**
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+// Inject ILogger<T> into a Core service (constructor injection)
+public sealed class OllamaService : IModelProvider
+{
+    private readonly ILogger<OllamaService> _logger;
+
+    public OllamaService(
+        string endpoint,
+        ProcessRunner processRunner,
+        ResiliencePipeline? resiliencePipeline = null,
+        ILogger<OllamaService>? logger = null)
+    {
+        // Accept null logger and substitute a no-op implementation so the service
+        // can be constructed in tests without configuring a logging infrastructure.
+        _logger = logger ?? NullLogger<OllamaService>.Instance;
+    }
+
+    public async Task<string> GenerateAsync(string prompt, CancellationToken ct)
+    {
+        _logger.LogInformation("Generating response (model: {Model})", _selectedModel);
+        // ...
+        _logger.LogWarning("Ollama returned empty response — using fallback");
+    }
+}
+```
+
+**Rules for AI agents:**
+- Always use `ILogger<T>` for diagnostics in Core services — never `Console.WriteLine`.
+- Accept `ILogger<T>?` as an optional constructor parameter and default to `NullLogger<T>.Instance` so that services are test-friendly without requiring a full DI container.
+- Use structured logging templates (`"Did {Action} for {Entity}"`) — never string interpolation, as templates are indexed and queryable by Serilog.
+- Log timing at `Information`, fallbacks at `Warning`, exceptions at `Error`.
+- Do not log request/response bodies — log operation names, durations, and outcome codes only.
+
+---
+
 ### OllamaSharp (`OllamaSharp`)
 
 | | |
@@ -659,3 +719,108 @@ When a desk thread exceeds the summary threshold (16 messages), the agent uses t
 3. When adding a new desk route, create a new `DeskAgent` subclass and register it in `OfficeBrokerOrchestrator.InitializeAgents()`.
 4. The SK agent path is opt-in per chat call; the `PromptComposer` path remains as fallback.
 5. Use version ≥ 1.71.0 to avoid CVE-2026-25592 (arbitrary file write via function calling).
+
+---
+
+## Phase 7 Libraries
+
+### Microsoft.ML.OnnxRuntime
+
+| | |
+|---|---|
+| **GitHub** | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) |
+| **NuGet** | `Microsoft.ML.OnnxRuntime` |
+| **Version** | 1.24.4 |
+| **License** | MIT |
+| **Added to** | `DailyDesk.Core.csproj` |
+
+**Problem it solves:**
+Before this package, all ML inference (analytics, embeddings, forecast) required spawning Python subprocesses via `ProcessRunner`. Each subprocess call incurs a cold-start overhead (Python interpreter startup, library imports), and process spawn failures are a common source of transient errors. There is no way to do in-process tensor operations in .NET without a dedicated runtime.
+
+`Microsoft.ML.OnnxRuntime` provides an in-process inference engine for ONNX model files. Once an ONNX model is exported from the Python training pipeline, it can be loaded and executed directly inside the .NET process — no Python required. The `OnnxMLEngine` service wraps three ONNX sessions: `analytics.onnx`, `embeddings.onnx`, and `forecast.onnx`.
+
+**What it replaces:**
+- `ProcessRunner` calls to `ml_analytics.py` → `OnnxMLEngine.RunAnalytics()` (when `analytics.onnx` is present).
+- `ProcessRunner` calls to `ml_document_embeddings.py` → `OnnxMLEngine.RunEmbeddings()` (when `embeddings.onnx` is present).
+- `ProcessRunner` calls to `ml_forecast.py` → `OnnxMLEngine.RunForecast()` (when `forecast.onnx` is present).
+
+**What it does NOT replace:**
+- The Python subprocess path remains as a fallback when no ONNX model file is present on disk. `OnnxMLEngine.HasAnyModel` gates which path is used.
+- Python training scripts — ONNX models are exported from Python and placed in the models directory; `OnnxMLEngine` only runs inference.
+- `EmbeddingService` (Ollama embeddings via OllamaSharp) — that path is for semantic search vectors; `OnnxMLEngine` handles the ML analytics pipeline embeddings.
+
+**Canonical usage patterns:**
+
+```csharp
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
+
+// OnnxMLEngine wraps InferenceSession with lazy loading and thread-safe initialization
+public sealed class OnnxMLEngine : IDisposable
+{
+    private InferenceSession? _analyticsSession;
+    private readonly object _sessionLock = new();
+
+    // Sessions are created on first use (lazy) and reused thereafter
+    private InferenceSession? GetOrCreateSession(ref InferenceSession? session, string modelPath)
+    {
+        if (session is not null) return session;
+        lock (_sessionLock)
+        {
+            if (session is not null) return session;
+            if (!File.Exists(modelPath)) return null;
+            session = new InferenceSession(modelPath);
+            return session;
+        }
+    }
+
+    // Run inference: build input tensors, call session.Run(), read output tensors
+    public MLAnalyticsResult? RunAnalytics(...)
+    {
+        var session = GetOrCreateSession(ref _analyticsSession, modelPath);
+        if (session is null) return null;
+
+        var inputTensor = new DenseTensor<float>(features, [1, numTopics, 4]);
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("input", inputTensor),
+        };
+
+        using var results = session.Run(inputs);
+        var output = results.First().AsTensor<float>();
+        // ... interpret output ...
+    }
+
+    public void Dispose()
+    {
+        _analyticsSession?.Dispose();
+        _embeddingsSession?.Dispose();
+        _forecastSession?.Dispose();
+    }
+}
+```
+
+**ONNX model export (Python side):**
+```python
+import torch
+import torch.onnx
+
+# After training, export the model to ONNX format
+torch.onnx.export(
+    model,
+    dummy_input,
+    "analytics.onnx",
+    input_names=["input"],
+    output_names=["output"],
+    dynamic_axes={"input": {1: "num_topics"}, "output": {1: "num_topics"}},
+)
+```
+
+**Rules for AI agents:**
+- Always check `OnnxMLEngine.Is*ModelAvailable` before calling inference methods — models may not be present on a given workstation.
+- Load `InferenceSession` lazily and cache it for the lifetime of the engine — session construction is expensive (~100ms+).
+- Dispose `InferenceSession` instances in `Dispose()` — they hold native memory.
+- Use `DenseTensor<T>` from `Microsoft.ML.OnnxRuntime.Tensors` for input construction.
+- All inference calls should be wrapped in a `try/catch` that returns `null` on failure, preserving the Python subprocess fallback path.
+- Do not use `OrtValue` / span-based APIs unless the `DenseTensor<T>` path is demonstrably insufficient — they add complexity without benefit at current data sizes.
+- Model files (`*.onnx`) are not committed to the repository — they are generated by the Python ML training scripts and placed in the configured models directory at runtime.
