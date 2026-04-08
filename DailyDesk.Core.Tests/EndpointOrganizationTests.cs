@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using FluentValidation;
 using Xunit;
 
 namespace DailyDesk.Core.Tests;
@@ -91,30 +92,73 @@ public sealed class EndpointOrganizationTests : IClassFixture<BrokerWebApplicati
     }
 
     // -----------------------------------------------------------------------
-    // Group 2: Program.cs size test
+    // Group 2: Program.cs size and validator co-location tests
     // -----------------------------------------------------------------------
 
     [Fact]
     public void ProgramCs_IsSlim_NoMoreThan80Lines()
     {
-        // Walk up from the test assembly base directory to find the repo root.
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir, "DailyDesk", "DailyDesk.csproj")))
-                break;
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        Assert.NotNull(dir);
-
-        var programCsPath = Path.Combine(dir!, "DailyDesk.Broker", "Program.cs");
+        var repoRoot = FindRepoRoot();
+        var programCsPath = Path.Combine(repoRoot, "DailyDesk.Broker", "Program.cs");
         Assert.True(File.Exists(programCsPath), $"Program.cs not found at: {programCsPath}");
 
         var lines = File.ReadAllLines(programCsPath);
         Assert.True(lines.Length <= 80,
             $"Program.cs has {lines.Length} lines. After the endpoint refactor it must be " +
             $"≤ 80 lines (infrastructure setup only). Move endpoint handlers to Endpoints/*.cs.");
+    }
+
+    [Fact]
+    public void ValidatorsDirectory_DoesNotExist()
+    {
+        var repoRoot = FindRepoRoot();
+        var validatorsDirPath = Path.Combine(repoRoot, "DailyDesk.Broker", "Validators");
+        Assert.False(Directory.Exists(validatorsDirPath),
+            $"The Validators/ directory still exists at: {validatorsDirPath}. " +
+            $"Validator classes must be co-located in their corresponding Endpoints/*.cs files " +
+            $"alongside the request records they validate.");
+    }
+
+    [Fact]
+    public void ValidatorTypes_AreDefinedInBrokerAssembly_CoLocatedWithEndpoints()
+    {
+        // All AbstractValidator<T> subclasses must live in the broker assembly,
+        // confirming they have been moved out of the standalone Validators/ directory
+        // and into the Endpoints/*.cs files alongside the request records they validate.
+        var brokerAssembly = typeof(Program).Assembly;
+        var abstractValidatorBase = typeof(FluentValidation.AbstractValidator<>);
+
+        var validatorTypes = brokerAssembly.GetTypes()
+            .Where(t => !t.IsAbstract
+                     && t.BaseType is { IsGenericType: true }
+                     && t.BaseType.GetGenericTypeDefinition() == abstractValidatorBase)
+            .ToList();
+
+        Assert.NotEmpty(validatorTypes);
+
+        foreach (var validatorType in validatorTypes)
+        {
+            Assert.True(validatorType.Assembly == brokerAssembly,
+                $"Validator '{validatorType.Name}' is not in the broker assembly. " +
+                $"Validators must be co-located in their Endpoints/*.cs files.");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared helper
+    // -----------------------------------------------------------------------
+
+    private static string FindRepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "DailyDesk", "DailyDesk.csproj")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        throw new DirectoryNotFoundException(
+            "Could not locate repo root (expected to find DailyDesk/DailyDesk.csproj in an ancestor directory).");
     }
 
     // -----------------------------------------------------------------------

@@ -1,4 +1,5 @@
 using DailyDesk.Services;
+using FluentValidation;
 using Microsoft.Extensions.Logging;
 
 namespace DailyDesk.Broker;
@@ -109,3 +110,23 @@ internal static class ResearchEndpoints
 internal sealed record ResearchRunRequest(string Query, string? Perspective, bool? SaveToLibrary);
 internal sealed record ResearchSaveRequest(string? Notes);
 internal sealed record WatchlistRunRequest(string WatchlistId, bool? SaveToLibrary);
+
+internal sealed class ResearchRunRequestValidator : AbstractValidator<ResearchRunRequest>
+{
+    public ResearchRunRequestValidator()
+    {
+        RuleFor(x => x.Query)
+            .NotEmpty()
+            .WithMessage("Query is required.");
+    }
+}
+
+internal sealed class WatchlistRunRequestValidator : AbstractValidator<WatchlistRunRequest>
+{
+    public WatchlistRunRequestValidator()
+    {
+        RuleFor(x => x.WatchlistId)
+            .NotEmpty()
+            .WithMessage("WatchlistId is required.");
+    }
+}

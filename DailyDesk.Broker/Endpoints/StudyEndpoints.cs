@@ -1,5 +1,6 @@
 using DailyDesk.Models;
 using DailyDesk.Services;
+using FluentValidation;
 using Microsoft.Extensions.Logging;
 
 namespace DailyDesk.Broker;
@@ -177,3 +178,23 @@ internal sealed record StudyScorePracticeRequest(IReadOnlyList<OfficePracticeAns
 internal sealed record StudyGenerateDefenseRequest(string? Topic);
 internal sealed record StudyScoreDefenseRequest(string Answer);
 internal sealed record StudySaveReflectionRequest(string Reflection);
+
+internal sealed class StudyScoreDefenseRequestValidator : AbstractValidator<StudyScoreDefenseRequest>
+{
+    public StudyScoreDefenseRequestValidator()
+    {
+        RuleFor(x => x.Answer)
+            .NotEmpty()
+            .WithMessage("Answer is required.");
+    }
+}
+
+internal sealed class StudySaveReflectionRequestValidator : AbstractValidator<StudySaveReflectionRequest>
+{
+    public StudySaveReflectionRequestValidator()
+    {
+        RuleFor(x => x.Reflection)
+            .NotEmpty()
+            .WithMessage("Reflection is required.");
+    }
+}
