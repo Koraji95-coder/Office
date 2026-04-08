@@ -283,6 +283,108 @@ var embeddings = await client.EmbedAsync(new EmbedRequest
 - Handle `HttpRequestException` and `TaskCanceledException` (timeout) — wrap with Polly when Phase 2 is complete.
 - Do not use OllamaSharp's built-in chat history management — we manage conversation state in `DeskThreadState`.
 
+### Microsoft.Extensions.Logging.Abstractions
+
+| | |
+|---|---|
+| **GitHub** | [dotnet/runtime](https://github.com/dotnet/runtime) |
+| **NuGet** | `Microsoft.Extensions.Logging.Abstractions` |
+| **Version** | 10.0.2 |
+| **License** | MIT |
+| **Added to** | `DailyDesk.Core.csproj` |
+
+**Problem it solves:**
+Service classes in `DailyDesk.Core` need structured logging without coupling to any concrete logging provider. Without the `ILogger<T>` abstraction from this package, services would have to reference Serilog, NLog, or other provider packages directly, making the core library dependent on infrastructure concerns.
+
+**What it replaces:**
+- Direct `Console.WriteLine` diagnostics → Structured `ILogger<T>` injection with severity levels.
+- No logging in core services → Services receive `ILogger<T>` via constructor injection and call `LogInformation`, `LogWarning`, `LogError`.
+
+**Versioning rationale:**
+Version `10.0.2` tracks the `net10.0` target framework. This ensures consistent nullability annotations and avoids version conflicts with `Microsoft.Extensions.DependencyInjection.Abstractions` and other `Microsoft.Extensions.*` packages pulled in transitively by `Microsoft.SemanticKernel` and `OllamaSharp`. The version range `[10.0.2, )` allows minor-version updates without breaking the lock file.
+
+**Canonical usage patterns:**
+
+```csharp
+// In a core service: accept ILogger<T> via constructor injection
+public sealed class EmbeddingService : IEmbeddingService
+{
+    private readonly ILogger<EmbeddingService> _logger;
+
+    public EmbeddingService(ILogger<EmbeddingService> logger, ...)
+    {
+        _logger = logger;
+    }
+
+    public async Task<float[]> EmbedAsync(string text, CancellationToken ct)
+    {
+        _logger.LogInformation("Generating embedding for {TextLength} chars", text.Length);
+        // ...
+        _logger.LogWarning("Embedding returned empty vector for input");
+    }
+}
+```
+
+**Rules for AI agents:**
+- Always inject `ILogger<T>` via the constructor — never create a `LoggerFactory` directly in core classes.
+- Use structured message templates: `_logger.LogInformation("Did {Action}", action)` — never string interpolation.
+- Keep `ILogger<T>` in core services; do **not** take a hard dependency on Serilog or any concrete provider from `DailyDesk.Core`.
+
+---
+
+### Microsoft.ML.OnnxRuntime
+
+| | |
+|---|---|
+| **GitHub** | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) |
+| **NuGet** | `Microsoft.ML.OnnxRuntime` |
+| **Version** | 1.24.4 |
+| **License** | MIT |
+| **Added to** | `DailyDesk.Core.csproj` |
+
+**Problem it solves:**
+ML inference (embeddings, classification) was previously delegated to Python subprocesses (`ml_document_embeddings.py`, `ml_analytics.py`). Spawning a Python subprocess for every inference request introduces latency, process management overhead, and a hard dependency on the workstation Python environment. ONNX Runtime provides a managed, in-process alternative that runs ONNX models directly in .NET.
+
+**What it replaces:**
+- Python subprocess calls for embedding generation → `InferenceSession.Run(...)` on a local `.onnx` model file.
+- Dependency on `ml_document_embeddings.py` for vector generation → Managed ONNX inference via `Microsoft.ML.OnnxRuntime`.
+
+**What it does NOT replace:**
+- `EmbeddingService` interface — stays as the service boundary for embedding operations.
+- Ollama-based embeddings (via `OllamaSharp`) — remains the primary path; ONNX Runtime is a local fallback for offline scenarios.
+
+**Versioning rationale:**
+Version `1.24.4` is the first release with a clean split between `Microsoft.ML.OnnxRuntime` (native binaries) and `Microsoft.ML.OnnxRuntime.Managed` (pure managed code), and ships `System.Numerics.Tensors` bindings compatible with `net10.0`. The version range `[1.24.4, )` prevents older versions that lack this managed split and would pull in incompatible native runtime files.
+
+**Canonical usage patterns:**
+
+```csharp
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
+
+// Load a local ONNX model once at startup
+using var session = new InferenceSession("models/embedding-model.onnx");
+
+// Prepare input tensor
+var inputData = Tokenize(text); // int[] token ids
+var tensor = new DenseTensor<long>(inputData.Select(x => (long)x).ToArray(),
+    new[] { 1, inputData.Length });
+var inputs = new List<NamedOnnxValue>
+{
+    NamedOnnxValue.CreateFromTensor("input_ids", tensor)
+};
+
+// Run inference
+using var results = session.Run(inputs);
+var embedding = results.First().AsEnumerable<float>().ToArray();
+```
+
+**Rules for AI agents:**
+- Create one `InferenceSession` per model at application startup and reuse it — session creation is expensive.
+- Dispose `IDisposableReadOnlyCollection<DisposableNamedOnnxValue>` results after extracting values (use `using`).
+- Target CPU execution provider by default (no GPU required for workstation use). Use `SessionOptions` only when hardware acceleration is explicitly needed.
+- Do not store ONNX model files in the repository — reference them via a configurable path (e.g., `appsettings.json` `ModelPath`).
+
 ---
 
 ## Phase 2 Libraries
