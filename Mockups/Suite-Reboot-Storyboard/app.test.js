@@ -1177,6 +1177,124 @@ describe('Developer Portal tool-detail — graduation and staging panels (develo
 });
 
 // ---------------------------------------------------------------------------
+// Developer Portal tool-detail — graduation path workflow step details
+// Validates customer-safe copy and productization staging rules for each
+// workflow step rendered in the graduation path section of the tool-detail
+// route.  These tests target metrics, panel titles, panel copy, and the
+// content of the "Future product fit" and "Proof inputs" list panels.
+// ---------------------------------------------------------------------------
+describe('Developer Portal tool-detail — graduation path workflow step details (developer-portal:tool-detail)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/tool-detail');
+    });
+
+    it('"Graduation path" metric shows value "3 steps"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Graduation path'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('3 steps');
+    });
+
+    it('"Graduation path" metric annotation is "proof before productization"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Graduation path'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-meta').textContent.trim()).toBe(
+            'proof before productization'
+        );
+    });
+
+    it('"Release state" metric annotation is "not customer-safe yet"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Release state'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-meta').textContent.trim()).toBe(
+            'not customer-safe yet'
+        );
+    });
+
+    it('"Graduation path" panel title is "How this becomes customer-safe later"', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        expect(panel.querySelector('.panel-title').textContent.trim()).toBe(
+            'How this becomes customer-safe later'
+        );
+    });
+
+    it('"Graduation path" panel copy states "Productization is staged, not implied."', () => {
+        const panel = getPanelByEyebrow('Graduation path');
+        expect(panel.querySelector('.panel-copy').textContent.trim()).toBe(
+            'Productization is staged, not implied.'
+        );
+    });
+
+    it('"Future product fit" panel lists three items', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('"Future product fit" panel includes "Needs workflow evidence"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Needs workflow evidence');
+    });
+
+    it('"Future product fit" panel includes "High operator leverage"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('High operator leverage');
+    });
+
+    it('"Future product fit" panel includes "Strong automation story"', () => {
+        const panel = getPanelByEyebrow('Future product fit');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Strong automation story');
+    });
+
+    it('"Proof inputs" panel lists three items', () => {
+        const panel = getPanelByEyebrow('Proof inputs');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('"Proof inputs" panel includes "Customer-safe review state"', () => {
+        const panel = getPanelByEyebrow('Proof inputs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Customer-safe review state');
+    });
+
+    it('"Proof inputs" panel includes "Operator usage notes"', () => {
+        const panel = getPanelByEyebrow('Proof inputs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Operator usage notes');
+    });
+
+    it('"Proof inputs" panel includes "Supportability checks"', () => {
+        const panel = getPanelByEyebrow('Proof inputs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Supportability checks');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Developer Portal tool-detail — inspector and dock
 // Verifies the inspector surfaces readiness rules with a "Show" section and
 // that the dock reflects the correct tool states.
