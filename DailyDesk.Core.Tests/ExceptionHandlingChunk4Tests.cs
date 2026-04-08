@@ -353,6 +353,136 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
     }
 
     // -----------------------------------------------------------------------
+    // Group 5: Documentation compliance — CONVENTIONS.md Pattern 4 uses static string.
+    // Reads CONVENTIONS.md and verifies the catch (Exception ex) block in Pattern 4
+    // exposes the static generic detail string, never ex.Message or ex.ToString().
+    // This guards against documentation regression (the guideline in
+    // Docs/stack-trace-exposure-remediation.md must be reflected in the example code).
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void ConventionsMd_Pattern4_CatchExceptionBlock_DoesNotReturnExMessage()
+    {
+        var conventions = ReadConventionsMd();
+        var pattern4Block = ExtractPattern4CodeBlock(conventions);
+
+        Assert.False(
+            string.IsNullOrEmpty(pattern4Block),
+            "Could not locate '// Pattern 4: Broker endpoint catch' code block in CONVENTIONS.md"
+        );
+
+        var catchExceptionBlock = ExtractGeneralCatchBlock(pattern4Block);
+
+        Assert.False(
+            string.IsNullOrEmpty(catchExceptionBlock),
+            "Could not locate 'catch (Exception ex)' block in CONVENTIONS.md Pattern 4"
+        );
+
+        // Strip comment lines before checking — the block intentionally contains the
+        // text "Never return ex.Message" as a warning comment; only actual code matters.
+        var codeLines = catchExceptionBlock
+            .Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("//"));
+        var codeOnly = string.Join('\n', codeLines);
+
+        Assert.DoesNotContain(
+            "ex.Message",
+            codeOnly,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void ConventionsMd_Pattern4_CatchExceptionBlock_UsesStaticGenericString()
+    {
+        var conventions = ReadConventionsMd();
+        var pattern4Block = ExtractPattern4CodeBlock(conventions);
+        var catchExceptionBlock = ExtractGeneralCatchBlock(pattern4Block);
+
+        Assert.Contains(
+            "An unexpected error occurred. See server logs for details.",
+            catchExceptionBlock,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void ConventionsMd_Pattern4_CatchExceptionBlock_CallsLogError()
+    {
+        var conventions = ReadConventionsMd();
+        var pattern4Block = ExtractPattern4CodeBlock(conventions);
+        var catchExceptionBlock = ExtractGeneralCatchBlock(pattern4Block);
+
+        Assert.Contains(
+            "LogError",
+            catchExceptionBlock,
+            StringComparison.Ordinal
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Documentation helpers
+    // -----------------------------------------------------------------------
+
+    private static string? FindRepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "DailyDesk", "DailyDesk.csproj")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return null;
+    }
+
+    private static string ReadConventionsMd()
+    {
+        var root = FindRepoRoot();
+        Assert.NotNull(root);
+        var path = Path.Combine(root!, "Docs", "CONVENTIONS.md");
+        Assert.True(File.Exists(path), $"CONVENTIONS.md not found at: {path}");
+        return File.ReadAllText(path);
+    }
+
+    /// <summary>
+    /// Extracts the text of the Pattern 4 code block from CONVENTIONS.md,
+    /// starting at the <c>// Pattern 4: Broker endpoint catch</c> comment and
+    /// ending just before the closing <c>```</c> fence.
+    /// </summary>
+    private static string ExtractPattern4CodeBlock(string conventions)
+    {
+        const string pattern4Marker = "// Pattern 4: Broker endpoint catch";
+        var start = conventions.IndexOf(pattern4Marker, StringComparison.Ordinal);
+        if (start < 0)
+            return string.Empty;
+
+        // Find the closing ``` fence that ends this code block.
+        var codeBlockEnd = conventions.IndexOf("```", start, StringComparison.Ordinal);
+        return codeBlockEnd >= 0
+            ? conventions[start..codeBlockEnd]
+            : conventions[start..];
+    }
+
+    /// <summary>
+    /// Extracts the text of the general <c>catch (Exception ex)</c> block from
+    /// a Pattern 4 code snippet.  This is the catch-all block that must use a
+    /// static generic string — not <c>ex.Message</c>.
+    /// </summary>
+    private static string ExtractGeneralCatchBlock(string pattern4Code)
+    {
+        // Locate the catch (Exception ex) line that is NOT a specific type
+        // (ArgumentException / InvalidOperationException) and NOT a when-filter.
+        const string catchSignature = "catch (Exception ex)";
+        var idx = pattern4Code.IndexOf(catchSignature, StringComparison.Ordinal);
+        if (idx < 0)
+            return string.Empty;
+
+        // Return everything from that catch declaration to the end of the snippet.
+        return pattern4Code[idx..];
+    }
+
+    // -----------------------------------------------------------------------
     // Helper
     // -----------------------------------------------------------------------
 
