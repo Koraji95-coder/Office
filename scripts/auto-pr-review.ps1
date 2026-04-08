@@ -294,9 +294,19 @@ Provide your review:
             elseif ($review -match "NEEDS_DISCUSSION") { $verdict = "NEEDS_DISCUSSION" }
             elseif ($review -match "APPROVE") { $verdict = "APPROVE" }
 
-            # Extract score
+            # Extract score -- try patterns in order of specificity
             $score = 0
-            if ($review -match "(\d+)\s*/\s*10") { $score = [int]$Matches[1] }
+            if      ($review -match "(\d+)\s*/\s*10")                              { $score = [int]$Matches[1] }
+            elseif  ($review -match "(\d+)\s+out\s+of\s+10")                       { $score = [int]$Matches[1] }
+            elseif  ($review -match "Quality[:\s]+(\d+)")                          { $score = [int]$Matches[1] }
+            elseif  ($review -match "Score[:\s]+(\d+)")                            { $score = [int]$Matches[1] }
+            elseif  ($review -match "(?:quality|score|rated?|rating)[:\s-]+(\d+)") { $score = [int]$Matches[1] }
+
+            # Clamp to valid range; treat out-of-range as parse failure (0)
+            if ($score -lt 0 -or $score -gt 10) { $score = 0 }
+
+            # Safety net: if LLM explicitly approved but score parsed as 0, parsing failed -- default to 6
+            if ($verdict -eq "APPROVE" -and $score -eq 0) { $score = 6 }
 
             # ========== SCORING TIERS ==========
             # Verdict from LLM always wins -- tiers only decide merge behavior
