@@ -960,6 +960,124 @@ describe('Workshop launcher — dense diagnostics deferral (developer-portal:her
 });
 
 // ---------------------------------------------------------------------------
+// Refactor pressure notes — companion note integration (developer-portal:hero)
+// Verifies the companion note that accompanies the "Refactor pressure notes"
+// surface correctly states the portal's design intent: quick access and
+// consistent tool grouping, not an inline duplicate of refactor pressure detail.
+// ---------------------------------------------------------------------------
+describe('Refactor pressure notes — companion note integration (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('companion note panel-title says "Use one collapsible navigation system and consistent tool grouping across scopes."', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        expect(companion).not.toBeUndefined();
+        const title = companion.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe(
+            'Use one collapsible navigation system and consistent tool grouping across scopes.'
+        );
+    });
+
+    it('companion note body text says "The portal should feel quick to scan, easy to launch from, and light on decorative panels."', () => {
+        const copy = document.querySelector('.companion-copy');
+        expect(copy).not.toBeNull();
+        expect(copy.textContent.trim()).toBe(
+            'The portal should feel quick to scan, easy to launch from, and light on decorative panels.'
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Refactor pressure notes — Developer docs panel (developer-portal:hero)
+// Verifies the "Developer docs" panel that sits alongside the "Architecture
+// and code" panel lists its three documentation surfaces, confirming that
+// refactor notes live in the same developer-only documentation group.
+// ---------------------------------------------------------------------------
+describe('Refactor pressure notes — Developer docs panel (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('"Developer docs" panel title is "Workshop notes and runbooks"', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        expect(panel).not.toBeNull();
+        const title = panel.querySelector('.panel-title');
+        expect(title.textContent.trim()).toBe('Workshop notes and runbooks');
+    });
+
+    it('"Developer docs" panel lists "Developer docs"', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Developer docs');
+    });
+
+    it('"Developer docs" panel lists "Whiteboard"', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Whiteboard');
+    });
+
+    it('"Developer docs" panel lists "Runbook snapshots"', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Runbook snapshots');
+    });
+
+    it('"Developer docs" panel renders exactly three items', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('"Developer docs" panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Developer docs');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Refactor pressure notes — developer-only scope
+// Verifies that "Refactor pressure notes" is absent from the customer-app
+// route, enforcing the REFACTOR-PRESSURE.md rule that this surface is
+// developer-only and must not appear in customer-facing viewports.
+// ---------------------------------------------------------------------------
+describe('Refactor pressure notes — developer-only scope', () => {
+    it('customer-app:hero has no "Architecture and code" panel', () => {
+        initApp('#customer-app/hero');
+        expect(getPanelByEyebrow('Architecture and code')).toBeNull();
+    });
+
+    it('customer-app:hero does not list "Refactor pressure notes" anywhere on the stage', () => {
+        initApp('#customer-app/hero');
+        const allItems = Array.from(document.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Refactor pressure notes');
+    });
+
+    it('developer-portal:hero has "Refactor pressure notes" in the "Architecture and code" panel', () => {
+        initApp('#developer-portal/hero');
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Refactor pressure notes');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Developer Portal tool-detail — overall structure
 // Verifies that navigating to developer-portal:tool-detail renders the correct
 // title, stage label, metric cards, and lead / companion panels.

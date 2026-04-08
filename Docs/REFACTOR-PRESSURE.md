@@ -4,6 +4,35 @@
 
 ---
 
+## Developer Portal Storyboard Integration
+
+The phrase **"Refactor pressure notes"** appears as a named item in the `developer-portal:hero` route of the Suite-Reboot-Storyboard (`Mockups/Suite-Reboot-Storyboard/app.js`). Understanding where it lives and what rules govern it prevents scope creep and keeps the surface consistent with its design intent.
+
+### Where it appears
+
+| | |
+|---|---|
+| **Route** | `developer-portal:hero` |
+| **Panel eyebrow** | `Architecture and code` |
+| **Panel title** | `Maps, graphs, and refactor surfaces` |
+| **Position in panel** | Third item, after `Architecture Map` and `Architecture Graph` |
+| **Layout** | Key-list (not a row-list) |
+
+The portal gives quick access to this document but does not duplicate its content inline. The tool page (this document) stays focused on the detailed pressure entries.
+
+### Design rules
+
+- **Developer-only.** Refactor pressure notes must not appear in the `customer-app` route or any customer-facing surface. The Developer Portal inspector explicitly rejects developer-density content from the customer viewport.
+- **Architecture surface companion.** The item is grouped with `Architecture Map` and `Architecture Graph` because all three are read-only diagnostic lenses on the codebase. None of them are operational controls.
+- **Portal is a launcher, not a duplicate.** The `developer-portal:hero` companion note reads: *"The portal should feel quick to scan, easy to launch from, and light on decorative panels."* Do not embed refactor pressure detail inline on the portal. Link to this document.
+- **Metrics alignment.** The portal `Architecture` metric card shows `2 live` (map and graph). Refactor pressure notes is the third item in the panel but is not counted as a "live architecture surface" — it is a documentation surface. This 2 + 1 split must be preserved if items are ever added or removed.
+
+### Scope
+
+Changes to the "Refactor pressure notes" surface in the storyboard (label, panel placement, or panel grouping) must be reflected here so the documentation and the storyboard stay in sync. UI tests in `Mockups/Suite-Reboot-Storyboard/app.test.js` validate this integration against the rendered DOM.
+
+---
+
 ## How to Use This Document
 
 Each entry describes a **pressure area**: a part of the codebase that is functional today but is accumulating structural debt. Entries are grouped by priority — High, Medium, and Low — based on how much they affect future development velocity. When a pressure area is resolved, move its entry to the **Resolved Pressure** archive table at the bottom of this document. If the resolution corresponds to a new phase of work, also mark that phase complete in `PHASES-ROADMAP.md`.
