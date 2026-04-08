@@ -1769,3 +1769,212 @@ describe('Runtime Control diagnostics — inspector design rules (runtime-contro
         expect(items).toContain('Safe actions');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Architecture Map — cross-surface navigation target
+// Verifies that Architecture Map is surfaced as a named launch action in the
+// Workshop launcher AND as an item in the Architecture and code panel, so that
+// both entry points lead the developer to the same tool.
+// ---------------------------------------------------------------------------
+describe('Architecture Map — cross-surface navigation target (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('Workshop launcher exposes "Launch Architecture Map" as a named action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions).toContain('Launch Architecture Map');
+    });
+
+    it('Architecture and code panel lists "Architecture Map" as an item', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Map');
+    });
+
+    it('Architecture Map appears before Architecture Graph in the panel item list', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        const mapIdx = texts.indexOf('Architecture Map');
+        const graphIdx = texts.indexOf('Architecture Graph');
+        expect(mapIdx).toBeGreaterThanOrEqual(0);
+        expect(graphIdx).toBeGreaterThanOrEqual(0);
+        expect(mapIdx).toBeLessThan(graphIdx);
+    });
+
+    it('Architecture Map is the only action in Workshop launcher that references the map surface', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        const mapActions = actions.filter((a) => a.toLowerCase().includes('architecture map'));
+        expect(mapActions).toHaveLength(1);
+    });
+
+    it('Workshop launcher does not expose "Architecture Graph" as a direct action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions).not.toContain('Architecture Graph');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Architecture Graph — cross-surface presence
+// Verifies that Architecture Graph is accessible from two developer surfaces:
+// the Architecture and code panel in Developer Portal, and the Developer tools
+// panel in Runtime Control — covering both "chunk10" and "chunk15" references.
+// ---------------------------------------------------------------------------
+describe('Architecture Graph — cross-surface presence (developer-portal:hero)', () => {
+    beforeAll(() => {
+        initApp('#developer-portal/hero');
+    });
+
+    it('Architecture and code panel includes "Architecture Graph" as an item', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture Graph');
+    });
+
+    it('Architecture and code panel lists Architecture Graph at index 1', () => {
+        const panel = getPanelByEyebrow('Architecture and code');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts[1]).toBe('Architecture Graph');
+    });
+});
+
+describe('Architecture Graph — cross-surface presence (runtime-control:hero)', () => {
+    beforeAll(() => {
+        initApp('#runtime-control/hero');
+    });
+
+    // Note: app.js uses lowercase "Architecture graph" in the runtime-control:hero
+    // Developer tools panel (line 166), distinct from the uppercase "Architecture Graph"
+    // used in the developer-portal:hero Architecture and code panel (line 251).
+    // These tests match the exact source-data capitalization for each route.
+    it('"Developer tools" panel exposes "Architecture graph" as a launch target', () => {
+        const panel = getPanelByEyebrow('Developer tools');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Architecture graph');
+    });
+
+    it('"Developer tools" panel positions "Architecture graph" as the second item', () => {
+        const panel = getPanelByEyebrow('Developer tools');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts[1]).toBe('Architecture graph');
+    });
+
+    it('"Developer launchers" metric meta references "graph" alongside portal, docs, and labs', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Developer launchers'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-meta').textContent.trim()).toContain('graph');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Architecture surfaces — customer-safe isolation
+// Verifies that Architecture Map and Architecture Graph are NOT exposed in any
+// customer-facing surface, and that the customer inspector design rules
+// explicitly reject architecture pressure from the customer viewport.
+// ---------------------------------------------------------------------------
+describe('Architecture surfaces — customer-safe isolation (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('customer hero stage does not render an "Architecture and code" panel', () => {
+        expect(getPanelByEyebrow('Architecture and code')).toBeNull();
+    });
+
+    it('customer hero stage does not list "Architecture Map" as any panel item', () => {
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Map');
+    });
+
+    it('customer hero stage does not list "Architecture Graph" as any panel item', () => {
+        const allItems = Array.from(document.querySelectorAll('.key-row strong, .data-row .row-label')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Graph');
+    });
+
+    it('customer inspector "Reject" section explicitly lists "Architecture pressure"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        expect(rejectSection).not.toBeUndefined();
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Architecture pressure');
+    });
+
+    it('customer hero lead panel title references "drawing production control" not architecture', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const title = panelHero.querySelector('.panel-title');
+        expect(title.textContent).toContain('drawing production control');
+        expect(title.textContent.toLowerCase()).not.toContain('architecture map');
+        expect(title.textContent.toLowerCase()).not.toContain('architecture graph');
+    });
+});
+
+describe('Architecture surfaces — customer-safe isolation (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('project detail stage does not expose "Architecture Map" as a panel item', () => {
+        const allItems = Array.from(document.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Map');
+    });
+
+    it('project detail stage does not expose "Architecture Graph" as a panel item', () => {
+        const allItems = Array.from(document.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(allItems).not.toContain('Architecture Graph');
+    });
+
+    it('project detail inspector "Visible" section lists delivery-facing items only', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        expect(visibleSection).not.toBeUndefined();
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Milestones');
+        expect(items).toContain('Reference docs');
+        expect(items).not.toContain('Architecture Map');
+        expect(items).not.toContain('Architecture Graph');
+    });
+});
