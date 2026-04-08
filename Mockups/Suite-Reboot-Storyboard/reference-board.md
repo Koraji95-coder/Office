@@ -255,11 +255,42 @@ Layout hierarchy
 - Project readiness and review pressure second
 - Issue sets, transmittal queue, and deadlines after that
 
+Panel ordering rationale:
+1. Project readiness (rows, span-8) — the primary lens; every project shows its deliverable state at a glance
+2. Review pressure (list, span-4) — urgent but contained; visible without dominating the board
+3. Issue sets (rows, span-4) — grouped by resolution path (coordination, drafting QA), not by raw count
+4. Transmittal queue (list, span-4) — small, explicit, and next-action oriented
+5. Deadlines (rows, span-4) — sequenced by proximity; avoids becoming an alert wall
+
 Status and loading behavior
 
 - Trust states are stable and product-safe
 - Review pressure is visible but not loud
 - Watchdog remains supportive, not dominant
+
+Customer trust states (used in both hero dock and project-detail trust panel):
+- Ready — confirmed deliverable state; no blocking issues
+- Background — a monitoring service is active but has nothing to surface
+- Needs attention — a project or issue requires a response before the next milestone
+- Unavailable — a resource or dependency is offline; operator should investigate
+
+These four states cover the full customer-facing range. No developer-specific trust states (Risk, Blocked, Running) appear on customer routes.
+
+### Customer-safe workflow: project-detail depth
+
+The project-detail view deepens delivery work without exposing developer internals. It answers three questions in one scan: what is the delivery state, what issues are open, and what reference content applies?
+
+Panel ordering in project-detail:
+1. Milestones (list, span-7) — delivery sequence showing reference package, review pass, and IFC release gates
+2. Reference library (list, span-5) — customer-safe knowledge only; project scope, drawing standards, submittal checklist
+3. Issue lane (rows, span-4) — coordination issues grouped by resolution path (electrical, drafting QA)
+4. Package prep (list, span-4) — transmittal readiness in three explicit steps: check closure, confirm reference set, prepare release notes
+5. Customer trust (list, span-4) — the four valid trust states printed for context; keeps trust language visible and consistent
+
+Reference library rules:
+- Content is restricted to project-facing documents (scope briefs, standards packets, submittal checklists)
+- Developer docs, agent memory, and repo notes must never appear in the reference library
+- The library count surfaces as a metric card ("12 docs") so the operator knows the set size before opening it
 
 Density and tone
 
@@ -297,6 +328,35 @@ Surface interpretation rules
 - Customer calm: premium, spare, delivery-oriented
 - Dev dense: grouped, scannable, operationally rich
 - Runtime utilitarian: compact, direct, support-ready
+
+### Metrics model
+
+Every route exposes four metric cards in a strip above the board grid. The cards give an instant operational snapshot without requiring the operator to read the full panel layout.
+
+Card anatomy:
+- Label — a short noun phrase that names the metric (e.g. "Runtime state", "Review pressure", "Project readiness")
+- Value — a prominent status word or count that is immediately legible (e.g. "Ready", "3 active", "7 of 9")
+- Meta — a single-line qualifier that adds context without explanation (e.g. "two due today, one overdue")
+
+Metric selection rules per family:
+- Daily Desk: surfaces study progress, research activity, approval inbox size, and the chief brief state
+- Runtime Control: surfaces runtime aggregate state, doctor issue count, support bundle readiness, and launcher availability
+- Developer Portal: surfaces publishing activity, automation lab stage count, architecture surface count, and docs/labs availability
+- Customer App: surfaces project readiness fraction, active review pressure count, transmittal queue size, and watchdog state
+
+Metrics must not duplicate each other within a route and must not expose developer-only state on customer routes.
+
+### Trust vocabulary reference
+
+The shared trust vocabulary is used across all activity dock items, status badges, and Unified Doctor subsystem rows. The vocabulary is intentionally limited to prevent parallel status universes across surfaces.
+
+Valid trust states and their visual class:
+- Ready / Saved / Stable → status-pill-ready (green) — work is complete or the surface is healthy
+- Running / Prepared / Primary / Pinned / Active / Queued → status-pill-info (blue) — work is in progress or a resource is linked and available
+- Risk / Blocked → status-pill-risk (red) — work is halted or a critical dependency has failed
+- Pending / Attention / Background / Unavailable / Needs attention → status-pill-attention (amber) — work requires follow-up or a surface is degraded but not critical
+
+Customer App surfaces use only Ready, Background, Needs attention, and Unavailable. This keeps the vocabulary product-safe and avoids developer-state language leaking into customer routes.
 
 Prototype note
 

@@ -1769,3 +1769,570 @@ describe('Runtime Control diagnostics — inspector design rules (runtime-contro
         expect(items).toContain('Safe actions');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Customer App hero — overall structure
+// Verifies that the customer-app:hero route renders the correct title, stage,
+// metric cards, lead panel, and companion note for the mission board.
+// ---------------------------------------------------------------------------
+describe('Customer App hero — overall structure (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('sets the route title to "Customer App"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Customer App');
+    });
+
+    it('sets the route stage to "High-fidelity hero"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('High-fidelity hero');
+    });
+
+    it('sets the route kicker to include "Customer App"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Customer App');
+    });
+
+    it('renders four metric cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders a "Project readiness" metric with value "7 of 9"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Project readiness'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('7 of 9');
+    });
+
+    it('renders a "Review pressure" metric with value "3 active"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Review pressure'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('3 active');
+    });
+
+    it('renders a "Transmittal queue" metric with value "5 items"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Transmittal queue'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('5 items');
+    });
+
+    it('renders a "Watchdog" metric with value "Background"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Watchdog'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('Background');
+    });
+
+    it('renders the lead panel with eyebrow "Mission board"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Mission board');
+    });
+
+    it('renders "Open projects" as the first lead panel action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[0]).toBe('Open projects');
+    });
+
+    it('renders "Prepare transmittal" as the third lead panel action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[2]).toBe('Prepare transmittal');
+    });
+
+    it('renders the companion note with eyebrow "Reference move"', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Reference move';
+        });
+        expect(companion).not.toBeUndefined();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App hero — project readiness panel
+// Verifies the project readiness rows panel surfaces deliverable-state rows
+// using the correct row-list layout and project names.
+// ---------------------------------------------------------------------------
+describe('Customer App hero — project readiness panel (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('renders a "Project readiness" panel', () => {
+        expect(getPanelByEyebrow('Project readiness')).not.toBeNull();
+    });
+
+    it('"Project readiness" panel uses a row-list layout', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        expect(panel.querySelector('.row-list')).not.toBeNull();
+        expect(panel.querySelector('.key-list')).toBeNull();
+    });
+
+    it('"Project readiness" panel renders exactly three project rows', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = panel.querySelectorAll('.data-row');
+        expect(dataRows).toHaveLength(3);
+    });
+
+    it('shows "North Substation" row with value "Ready for review"', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('North Substation');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Ready for review');
+    });
+
+    it('shows "Relay Retrofit" row with value "Needs setup attention"', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Relay Retrofit');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('Needs setup attention');
+    });
+
+    it('shows "Ground Grid Update" row with value "In active review"', () => {
+        const panel = getPanelByEyebrow('Project readiness');
+        const dataRows = Array.from(panel.querySelectorAll('.data-row'));
+        const labels = dataRows.map((r) => r.querySelector('.row-label').textContent.trim());
+        const values = dataRows.map((r) => r.querySelector('.row-value').textContent.trim());
+        const idx = labels.indexOf('Ground Grid Update');
+        expect(idx).toBeGreaterThanOrEqual(0);
+        expect(values[idx]).toBe('In active review');
+    });
+
+    it('renders the "Review pressure", "Issue sets", "Transmittal queue", and "Deadlines" panels', () => {
+        expect(getPanelByEyebrow('Review pressure')).not.toBeNull();
+        expect(getPanelByEyebrow('Issue sets')).not.toBeNull();
+        expect(getPanelByEyebrow('Transmittal queue')).not.toBeNull();
+        expect(getPanelByEyebrow('Deadlines')).not.toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App hero — inspector and dock trust states
+// Verifies the inspector enforces customer-safe design rules and that dock
+// items use only product-safe trust vocabulary.
+// ---------------------------------------------------------------------------
+describe('Customer App hero — inspector and dock (customer-app:hero)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/hero');
+    });
+
+    it('inspector title is "Customer rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Customer rules');
+    });
+
+    it('inspector subtitle is "Premium, calm, and product-safe."', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe('Premium, calm, and product-safe.');
+    });
+
+    it('inspector has a "Keep" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Keep'
+        );
+        expect(keepSection).not.toBeUndefined();
+    });
+
+    it('"Keep" section lists "Mission-board framing"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const keepSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Keep'
+        );
+        const items = Array.from(keepSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Mission-board framing');
+    });
+
+    it('"Reject" section lists "Architecture pressure"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const rejectSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Reject'
+        );
+        const items = Array.from(rejectSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Architecture pressure');
+    });
+
+    it('renders a "Dashboard" dock item with status-pill-ready (Ready)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const dashItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Dashboard'
+        );
+        expect(dashItem).not.toBeUndefined();
+        expect(dashItem.querySelector('.status-pill').classList.contains('status-pill-ready')).toBe(true);
+    });
+
+    it('renders a "Reviews" dock item with status-pill-attention (Attention)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const reviewItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Reviews'
+        );
+        expect(reviewItem).not.toBeUndefined();
+        expect(
+            reviewItem.querySelector('.status-pill').classList.contains('status-pill-attention')
+        ).toBe(true);
+    });
+
+    it('renders a "Watchdog" dock item with status-pill-attention (Background)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const watchdogItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Watchdog'
+        );
+        expect(watchdogItem).not.toBeUndefined();
+        expect(
+            watchdogItem.querySelector('.status-pill').classList.contains('status-pill-attention')
+        ).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App project-detail — overall structure
+// Verifies the customer-app:project-detail route renders the correct title,
+// stage, metric cards, lead panel, and companion note.
+// ---------------------------------------------------------------------------
+describe('Customer App project-detail — overall structure (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('sets the route title to "Project Detail"', () => {
+        expect(document.getElementById('route-title').textContent.trim()).toBe('Project Detail');
+    });
+
+    it('sets the route stage to "Structural detail"', () => {
+        expect(document.getElementById('route-stage').textContent.trim()).toBe('Structural detail');
+    });
+
+    it('sets the route kicker to include "Customer App"', () => {
+        expect(document.getElementById('route-kicker').textContent).toContain('Customer App');
+    });
+
+    it('renders four metric cards', () => {
+        const metrics = document.querySelectorAll('.metric-card');
+        expect(metrics).toHaveLength(4);
+    });
+
+    it('renders a "Selected project" metric with value "North Substation"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Selected project'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('North Substation');
+    });
+
+    it('renders a "Readiness" metric with value "Review ready"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Readiness'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('Review ready');
+    });
+
+    it('renders an "Open issues" metric with value "6"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Open issues'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('6');
+    });
+
+    it('renders a "Reference library" metric with value "12 docs"', () => {
+        const cards = Array.from(document.querySelectorAll('.metric-card'));
+        const card = cards.find(
+            (c) => c.querySelector('.metric-label').textContent.trim() === 'Reference library'
+        );
+        expect(card).not.toBeUndefined();
+        expect(card.querySelector('.metric-value').textContent.trim()).toBe('12 docs');
+    });
+
+    it('renders the lead panel with eyebrow "Project depth"', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        expect(panelHero).not.toBeNull();
+        expect(panelHero.querySelector('.panel-kicker').textContent.trim()).toBe('Project depth');
+    });
+
+    it('renders "Open issue lane" as the first lead panel action', () => {
+        const panelHero = document.querySelector('.panel-hero');
+        const actions = Array.from(panelHero.querySelectorAll('.action-pill')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(actions[0]).toBe('Open issue lane');
+    });
+
+    it('renders the companion note with eyebrow "Why this matters"', () => {
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const companion = panels.find((p) => {
+            const kicker = p.querySelector('.panel-kicker');
+            return kicker && kicker.textContent.trim() === 'Why this matters';
+        });
+        expect(companion).not.toBeUndefined();
+    });
+
+    it('renders four dock items', () => {
+        const dockItems = document.querySelectorAll('#activity-dock .dock-item');
+        expect(dockItems).toHaveLength(4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App project-detail — reference library panel
+// Verifies the reference library panel uses a key-list layout and only
+// surfaces customer-safe documents (no developer docs or repo notes).
+// ---------------------------------------------------------------------------
+describe('Customer App project-detail — reference library panel (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('renders a "Reference library" panel', () => {
+        expect(getPanelByEyebrow('Reference library')).not.toBeNull();
+    });
+
+    it('"Reference library" panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+
+    it('"Reference library" panel lists three documents', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(3);
+    });
+
+    it('includes "Project scope brief" in the reference library', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Project scope brief');
+    });
+
+    it('includes "Drawing standards packet" in the reference library', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Drawing standards packet');
+    });
+
+    it('includes "Submittal checklist" in the reference library', () => {
+        const panel = getPanelByEyebrow('Reference library');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Submittal checklist');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App project-detail — customer trust panel
+// Verifies the customer trust panel surfaces the four valid customer-safe
+// trust states, confirming no developer-only states leak into the route.
+// ---------------------------------------------------------------------------
+describe('Customer App project-detail — customer trust panel (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('renders a "Customer trust" panel', () => {
+        expect(getPanelByEyebrow('Customer trust')).not.toBeNull();
+    });
+
+    it('"Customer trust" panel uses a key-list layout', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        expect(panel.querySelector('.key-list')).not.toBeNull();
+        expect(panel.querySelector('.row-list')).toBeNull();
+    });
+
+    it('"Customer trust" panel lists exactly four trust states', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const items = panel.querySelectorAll('.key-row strong');
+        expect(items).toHaveLength(4);
+    });
+
+    it('"Customer trust" panel includes "Ready"', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Ready');
+    });
+
+    it('"Customer trust" panel includes "Background"', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Background');
+    });
+
+    it('"Customer trust" panel includes "Needs attention"', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Needs attention');
+    });
+
+    it('"Customer trust" panel includes "Unavailable"', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toContain('Unavailable');
+    });
+
+    it('"Customer trust" panel lists all four states in correct order', () => {
+        const panel = getPanelByEyebrow('Customer trust');
+        const texts = Array.from(panel.querySelectorAll('.key-row strong')).map(
+            (el) => el.textContent.trim()
+        );
+        expect(texts).toEqual(['Ready', 'Background', 'Needs attention', 'Unavailable']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Customer App project-detail — inspector and dock
+// Verifies the inspector enforces delivery-facing depth rules and that the
+// dock items reflect customer-safe project states.
+// ---------------------------------------------------------------------------
+describe('Customer App project-detail — inspector and dock (customer-app:project-detail)', () => {
+    beforeAll(() => {
+        initApp('#customer-app/project-detail');
+    });
+
+    it('inspector title is "Project detail rules"', () => {
+        const title = document.getElementById('inspector').querySelector('h3');
+        expect(title.textContent.trim()).toBe('Project detail rules');
+    });
+
+    it('inspector subtitle is "Only delivery-facing depth belongs here."', () => {
+        const subtitle = document.getElementById('inspector').querySelector('.route-summary');
+        expect(subtitle.textContent.trim()).toBe('Only delivery-facing depth belongs here.');
+    });
+
+    it('inspector has a "Visible" section', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        expect(visibleSection).not.toBeUndefined();
+    });
+
+    it('"Visible" section lists "Milestones"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Milestones');
+    });
+
+    it('"Visible" section lists "Issue groups"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Issue groups');
+    });
+
+    it('"Visible" section lists "Reference docs"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Reference docs');
+    });
+
+    it('"Visible" section lists "Package prep"', () => {
+        const sections = Array.from(
+            document.getElementById('inspector').querySelectorAll('.inspector-section')
+        );
+        const visibleSection = sections.find(
+            (s) => s.querySelector('h4').textContent.trim() === 'Visible'
+        );
+        const items = Array.from(visibleSection.querySelectorAll('li')).map((li) =>
+            li.textContent.trim()
+        );
+        expect(items).toContain('Package prep');
+    });
+
+    it('renders a "Project" dock item with status-pill-info (Pinned)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const projectItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Project'
+        );
+        expect(projectItem).not.toBeUndefined();
+        expect(
+            projectItem.querySelector('.status-pill').classList.contains('status-pill-info')
+        ).toBe(true);
+    });
+
+    it('renders a "Reference set" dock item with status-pill-ready (Ready)', () => {
+        const items = Array.from(document.querySelectorAll('#activity-dock .dock-item'));
+        const refItem = items.find(
+            (item) => item.querySelector('strong').textContent.trim() === 'Reference set'
+        );
+        expect(refItem).not.toBeUndefined();
+        expect(refItem.querySelector('.status-pill').classList.contains('status-pill-ready')).toBe(
+            true
+        );
+    });
+});

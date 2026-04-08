@@ -374,38 +374,124 @@
         ]
     });
 
+    /**
+     * Build a metric card model.
+     * Each route exposes four metric cards in a strip above the board grid.
+     * The card surfaces an operational snapshot: a short label, a prominent
+     * value, and a single-line meta note that adds context without explanation.
+     * @param {string} label - Short noun phrase (e.g. "Runtime state", "Review pressure")
+     * @param {string} value - Prominent status or count (e.g. "Ready", "3 active")
+     * @param {string} meta  - One-line qualifier (e.g. "two due today, one overdue")
+     */
     function metric(label, value, meta) {
         return { label, value, meta };
     }
 
+    /**
+     * Build a data row model for use inside a rows() panel.
+     * Rows panels use a row-list layout: each row has a label, a value, and an
+     * annotation note. Use rows() when the relationship between label and value
+     * needs an explanatory suffix (e.g. scoring dimensions, subsystem states).
+     * @param {string} label - Left-aligned identifier (e.g. "Correctness", "Frontend")
+     * @param {string} value - Right-aligned status or score (e.g. "4 / 5", "Ready")
+     * @param {string} note  - Short annotation below the row (e.g. "strong fundamentals")
+     */
     function row(label, value, note) {
         return { label, value, note };
     }
 
+    /**
+     * Build the lead panel model (hero panel, span-7).
+     * Each route has one lead panel that states the surface purpose, adds a
+     * single explanatory body sentence, and exposes up to three action pills.
+     * @param {string}   eyebrow - Eyebrow / kicker label
+     * @param {string}   title   - Panel heading
+     * @param {string}   body    - One-sentence intent description
+     * @param {string[]} actions - Array of action pill labels (max 3)
+     */
     function panel(eyebrow, title, body, actions) {
         return { eyebrow, title, body, actions };
     }
 
+    /**
+     * Build the companion note model (span-5, sits beside the lead panel).
+     * The companion note provides a reference rationale — what to borrow and why —
+     * without adding actions or extra work to the view.
+     * @param {string} eyebrow - Eyebrow / kicker label
+     * @param {string} title   - Note heading
+     * @param {string} body    - Rationale sentence
+     */
     function note(eyebrow, title, body) {
         return { eyebrow, title, body };
     }
 
+    /**
+     * Build a rows-layout panel model.
+     * Rows panels render a .row-list of .data-row elements, each with a label,
+     * value, and annotation note. Use for structured comparisons, scoring
+     * dimensions, subsystem states, and multi-field readiness tables.
+     * @param {string}   span   - CSS grid span class (e.g. "span-4", "span-7")
+     * @param {string}   eyebrow - Panel eyebrow / kicker
+     * @param {string}   title   - Panel heading
+     * @param {string}   body    - Panel copy / intent sentence
+     * @param {object[]} items   - Array of row() objects
+     */
     function rows(span, eyebrow, title, body, items) {
         return { span, eyebrow, title, body, rows: items };
     }
 
+    /**
+     * Build a list-layout panel model.
+     * List panels render a .key-list of .key-row elements, each containing a
+     * single <strong> label. Use for action queues, launcher lists, evidence
+     * chains, and any panel where items stand alone without a paired value.
+     * @param {string}   span   - CSS grid span class (e.g. "span-4", "span-5")
+     * @param {string}   eyebrow - Panel eyebrow / kicker
+     * @param {string}   title   - Panel heading
+     * @param {string}   body    - Panel copy / intent sentence
+     * @param {string[]} items   - Array of item label strings
+     */
     function list(span, eyebrow, title, body, items) {
         return { span, eyebrow, title, body, list: items };
     }
 
+    /**
+     * Build an inspector model.
+     * Each route has one inspector card that surfaces design rules and rationale.
+     * Sections are named keep/reject/visible/show depending on the rule type.
+     * @param {string} title    - Inspector card heading (e.g. "Runtime rules")
+     * @param {string} subtitle - One-sentence design intent
+     * @param {Object.<string, string[]>} sections - Named rule buckets, each an array of strings
+     */
     function inspect(title, subtitle, sections) {
         return { title, subtitle, sections };
     }
 
+    /**
+     * Build a dock item model for the activity dock.
+     * The dock shows up to four live-job or session-state items.
+     * Each item carries a label, a trust-state label, and a short note.
+     * Valid trust-state labels and their CSS mappings:
+     *   - "Ready" / "Saved" / "Stable"  → status-pill-ready  (green)
+     *   - "Running" / "Prepared" / "Primary" / "Pinned" / "Active" / "Queued"
+     *                                    → status-pill-info   (blue)
+     *   - "Risk" / "Blocked"            → status-pill-risk   (red)
+     *   - all others (e.g. "Pending", "Attention", "Background")
+     *                                    → status-pill-attention (amber)
+     * @param {string} label      - Item label (e.g. "Doctor", "Reflection")
+     * @param {string} stateLabel - Trust-state word (see valid labels above)
+     * @param {string} noteText   - Short context note
+     */
     function dock(label, stateLabel, noteText) {
         return { label, stateLabel, note: noteText };
     }
 
+    /**
+     * Wrap a view model object — identity function used to signal intent.
+     * All route data is passed through screen() so that the shape is explicit
+     * and consistent across routes.
+     * @param {object} model - Route model object (metrics, lead, companion, panels, inspector, dock)
+     */
     function screen(model) {
         return model;
     }
@@ -478,10 +564,35 @@
         `;
     }
 
+    /**
+     * Render one metric card.
+     * Produces an <article class="metric-card"> with a label, prominent value,
+     * and a meta note. Four metric cards appear in the .metrics-strip at the
+     * top of every route stage, giving an instant operational snapshot.
+     */
     function renderMetric(item) {
         return `<article class="metric-card"><span class="metric-label">${item.label}</span><div class="metric-row"><strong class="metric-value">${item.value}</strong><span class="metric-meta">${item.meta}</span></div></article>`;
     }
 
+    /**
+     * Render one secondary panel in the .board-grid.
+     *
+     * Two layout modes are supported, determined by which property the model carries:
+     *
+     * rows layout  (.row-list)
+     *   Used when each item has a label, a value, and a note (structured tables,
+     *   scoring dimensions, subsystem states, project readiness rows).
+     *   Each row renders as .data-row > .data-row-main > .row-label + .row-value
+     *   followed by a .row-note annotation.
+     *
+     * list layout  (.key-list)
+     *   Used when items stand alone as actionable instructions or launcher links
+     *   (review queues, support actions, evidence chains, milestone lists).
+     *   Each item renders as .key-row > <strong>.
+     *
+     * The panel span class (e.g. span-4, span-7) is set by the data model and
+     * controls how many grid columns the panel occupies.
+     */
     function renderPanel(item) {
         const body = item.rows
             ? `<div class="row-list">${item.rows.map((line) => `<div class="data-row"><div class="data-row-main"><span class="row-label">${line.label}</span><span class="row-value">${line.value}</span></div><span class="row-note">${line.note}</span></div>`).join("")}</div>`
@@ -505,6 +616,12 @@
         `;
     }
 
+    /**
+     * Render the activity dock.
+     * The dock shows up to four live-job or session-state items as .dock-item
+     * elements. Each item carries a .status-pill whose CSS class is set by
+     * statusClass(), a label, and a short context note.
+     */
     function renderDock(items) {
         els.dock.innerHTML = items.map((item) => `
             <div class="dock-item">
@@ -515,10 +632,30 @@
         `).join("");
     }
 
+    /**
+     * Map a trust-state label to a status-pill CSS modifier class.
+     *
+     * The shared trust vocabulary is intentionally limited so that every
+     * surface (Daily Desk, Runtime Control, Developer Portal, Customer App)
+     * uses the same visual language without inventing new states.
+     *
+     * Mapping:
+     *   ready   (green)  — "Ready", "Saved", "Stable"
+     *   info    (blue)   — "Running", "Prepared", "Primary", "Pinned", "Active", "Queued"
+     *   risk    (red)    — "Risk", "Blocked"
+     *   attention (amber) — everything else (e.g. "Pending", "Attention",
+     *                       "Background", "Unavailable", "Needs attention")
+     *
+     * Customer App surfaces only use Ready, Background, Needs attention, and
+     * Unavailable — keeping the vocabulary product-safe and calm.
+     *
+     * @param {string} label - Trust-state label from a dock item or status badge
+     * @returns {string} CSS class name
+     */
     function statusClass(label) {
         const value = label.toLowerCase();
         if (["ready", "saved", "stable"].includes(value)) return "status-pill-ready";
-        if (["running", "prepared", "primary", "pinned", "active"].includes(value)) return "status-pill-info";
+        if (["running", "prepared", "primary", "pinned", "active", "queued"].includes(value)) return "status-pill-info";
         if (["risk", "blocked"].includes(value)) return "status-pill-risk";
         return "status-pill-attention";
     }
