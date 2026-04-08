@@ -32,44 +32,14 @@ The orchestrator is the single entry point for every operation — study session
 
 **Refactor direction:**
 Split into domain coordinators:
-- `StudySessionCoordinator` — practice, defense, reflection, scoring.
-- `ResearchCoordinator` — research jobs, watchlist, enrichment.
+- `StudySessionCoordinator` — practice, defense, reflection, scoring. ✅ Extracted to `DailyDesk.Core/Services/StudySessionCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
+- `ResearchCoordinator` — research jobs, watchlist, enrichment. ✅ Extracted to `DailyDesk.Core/Services/ResearchCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
 - `MLPipelineCoordinator` — ML job dispatch, result retrieval, export artifacts. ✅ Extracted and wired: `OfficeBrokerOrchestrator` now holds `_mlPipelineCoordinator` and delegates all ML pipeline methods to it.
-- `KnowledgeCoordinator` — import, indexing, context building.
+- `KnowledgeCoordinator` — import, indexing, context building. ✅ Extracted to `DailyDesk.Core/Services/KnowledgeCoordinator.cs` but not yet delegated from `OfficeBrokerOrchestrator`.
 
 Keep `OfficeBrokerOrchestrator` as a thin facade that delegates to these coordinators. The facade boundary means `Program.cs` endpoints do not change callers.
 
-**Prerequisite:** No blocking prerequisite. This is a refactor of existing code. Start with the study session domain — it is the most self-contained.
-
----
-
-### 2. Broker Program.cs — All Endpoints in One File
-
-| | |
-|---|---|
-| **File** | `DailyDesk.Broker/Program.cs` |
-| **Size** | ~1,120 lines |
-| **Phase introduced** | Phase 1 (grew through Phase 9) |
-
-**What it does now:**
-All 30+ API endpoints are defined inline in `Program.cs`. Shared infrastructure (request records, service registration, middleware, and logging) is mixed with endpoint handler logic in the same file. Request record types are defined at the top of `Program.cs` while their corresponding validators live in the `DailyDesk.Broker/Validators/` folder, which means navigating between a record definition and its validation rules requires crossing files.
-
-**Why it is under pressure:**
-- Finding a specific endpoint requires searching through 1,000+ lines.
-- Adding a new endpoint family (e.g., a future customer API) means extending an already-dense file.
-- Service registration, middleware setup, and endpoint handlers are all interleaved, making each section harder to scan in isolation.
-
-**Refactor direction:**
-Extract endpoint groups into separate files using `IEndpointRouteBuilder` extension methods:
-- `StudyEndpoints.cs` — `/api/study/*`
-- `MLEndpoints.cs` — `/api/ml/*`, `/api/jobs/*`
-- `KnowledgeEndpoints.cs` — `/api/knowledge/*`, `/api/library/*`
-- `ScheduleEndpoints.cs` — `/api/schedules/*`, `/api/workflows/*`, `/api/daily-run/*`
-- `OperatorEndpoints.cs` — `/api/inbox/*`, `/api/operator/*`, `/api/workspace/*`
-
-Keep shared setup (Serilog, DI, middleware) in `Program.cs`. Endpoint groups call `app.MapStudyEndpoints()` etc.
-
-**Prerequisite:** None. This is additive restructuring. The test suite is not affected because tests call the orchestrator directly, not the endpoint handlers.
+**Prerequisite:** No blocking prerequisite. Wire `StudySessionCoordinator`, `ResearchCoordinator`, and `KnowledgeCoordinator` into `OfficeBrokerOrchestrator` the same way `MLPipelineCoordinator` was — constructor injection, then replace each direct implementation with a delegate call. Update existing tests that construct the orchestrator directly to pass the new coordinator dependencies.
 
 ---
 
@@ -77,7 +47,7 @@ Keep shared setup (Serilog, DI, middleware) in `Program.cs`. Endpoint groups cal
 
 These areas add maintenance overhead but do not block current development.
 
-### 3. MLAnalyticsService — Redundant In-Memory TTL Cache
+### 2. MLAnalyticsService — Redundant In-Memory TTL Cache
 
 | | |
 |---|---|
@@ -100,11 +70,11 @@ Remove the in-memory TTL cache from `MLAnalyticsService`. Replace the three `_ca
 
 ---
 
-### 4. ML Endpoints — `?sync=true` Backward Compatibility Path
+### 3. ML Endpoints — `?sync=true` Backward Compatibility Path
 
 | | |
 |---|---|
-| **Files** | `DailyDesk.Broker/Program.cs` |
+| **Files** | `DailyDesk.Broker/Endpoints/MLEndpoints.cs` |
 | **Phase introduced** | Phase 3 (async job model) |
 | **Removal condition** | WPF client fully migrated to job polling (Phase 9 complete) |
 
@@ -126,11 +96,60 @@ After confirming no active callers use `?sync=true`:
 
 ---
 
+### 4. MLAnalyticsService — Dual ONNX/Python Execution with Stale Availability Check
+
+| | |
+|---|---|
+| **File** | `DailyDesk/Services/MLAnalyticsService.cs` |
+| **Phase introduced** | Phase 7 (ONNX engine added alongside existing Python path) |
+
+**What it does now:**
+`MLAnalyticsService` has a three-tier execution order for each ML operation: ONNX model (if file present) → Python subprocess → computed fallback. Python availability is checked once at first use via `IsPythonAvailable()`, result is cached in `_pythonAvailable` (a `bool?` field), and never re-evaluated for the lifetime of the process.
+
+**Why it is under pressure:**
+- A Python environment installed or removed after the first check will never be detected. The process must be restarted to reflect a change in Python availability.
+- All three ML types (analytics, embeddings, forecast) each have their own ONNX check, Python fallback, and hardcoded fallback calculation — roughly 60 lines of near-identical control flow repeated three times.
+- Artifacts generation (`GenerateMLArtifactsAsync`) is Python-only with no ONNX path, meaning it silently returns a fallback bundle on workstations without Python even when the ONNX engine is otherwise healthy.
+
+**Refactor direction:**
+1. Extract the three-tier execution pattern (ONNX → Python → fallback) into a private generic helper `TryExecuteAsync<T>(Func<T?> onnxFn, Func<Task<T?>> pythonFn, Func<T> fallbackFn)`.
+2. Replace the cached `bool? _pythonAvailable` field with a short-lived check (e.g., re-evaluate at most once per 5 minutes) so Python environment changes are picked up without restarting.
+3. Add an ONNX-based artifacts generation path or document the Python-only limitation explicitly in a code comment and in `CURRENT-STATE.md`.
+
+**Prerequisite:** No blocking prerequisite. Refactor can be done independently. Verify all ML endpoint integration tests still pass after the helper extraction.
+
+---
+
+### 5. KnowledgeImportService — Python Subprocess Dependency for Rich Extraction
+
+| | |
+|---|---|
+| **File** | `DailyDesk/Services/KnowledgeImportService.cs` |
+| **Phase introduced** | Phase 7 (Docling pipeline) |
+
+**What it does now:**
+`KnowledgeImportService` invokes an external Python script (`_pythonScriptPath`) via `ProcessRunner` for all rich document extraction (PDF, DOCX, PPTX, OneNote packages). If the script is absent or Python is unavailable, extraction throws `FileNotFoundException` or `InvalidOperationException`. The service also hard-caps document loading at 64 files per call (`.Take(64)`) with no configuration surface.
+
+**Why it is under pressure:**
+- The Python script path is passed as a constructor argument with no validation until the first extraction call, making configuration errors silent until runtime.
+- The 64-document cap is an unexplained magic number. Large knowledge libraries silently drop newer documents beyond the cap.
+- There is no fallback for unsupported file types — if the Python script fails mid-import, the entire `LoadAsync` call throws and the partial document list is discarded.
+- Deployment on a machine without Python (e.g., a locked-down workstation) breaks all rich-format knowledge import with no degraded-mode behavior.
+
+**Refactor direction:**
+1. Validate `_pythonScriptPath` at construction time (or at `LoadAsync` startup) and log a clear warning if the script is absent, then continue with only built-in text/markdown extraction rather than throwing.
+2. Replace the hard-coded `64` with a configurable `MaxDocuments` property (default 64, settable via `DailyDeskSettings`).
+3. Catch per-document extraction exceptions inside the loop, log the failure, and continue with a `LearningDocument` that carries only the filename and an error flag — so a single corrupt PDF does not abort the entire import.
+
+**Prerequisite:** No blocking prerequisite. Validate against the existing `KnowledgeImportServiceTests` suite after each sub-step.
+
+---
+
 ## Low Pressure
 
 These areas are well-understood technical debt that does not need immediate action but should be tracked.
 
-### 5. Store JSON Export — Dropbox Compatibility Holdover
+### 6. Store JSON Export — Dropbox Compatibility Holdover
 
 | | |
 |---|---|
@@ -155,7 +174,29 @@ Once LiteDB has been proven stable across multiple workstations:
 
 ---
 
-### 6. WPF MainViewModel — Partial Class Growth
+### 7. OnnxMLEngine — Coarse Single Lock Across Independent Model Sessions
+
+| | |
+|---|---|
+| **File** | `DailyDesk/Services/OnnxMLEngine.cs` |
+| **Phase introduced** | Phase 7 (ONNX in-process engine) |
+
+**What it does now:**
+`OnnxMLEngine` manages three independent `InferenceSession` instances (analytics, embeddings, forecast), each loaded lazily from disk. All lazy-load paths share a single `_sessionLock` object, meaning a slow cold-start of one model type blocks the other two from initializing concurrently.
+
+**Why it is under pressure:**
+- Once all three sessions are warm the shared lock is uncontested, but the first cold-start (e.g., when the WPF client sends three ML requests close together after a restart) serializes what could otherwise be parallel model loads.
+- The `Dispose()` method sets a `_disposed` flag but does not null the session references, so a use-after-dispose will still dereference the `InferenceSession` objects and throw an `ObjectDisposedException` from within the ONNX Runtime rather than a clean `ObjectDisposedException` from the engine itself.
+
+**Refactor direction:**
+1. Replace the single `_sessionLock` with three separate per-model locks (`_analyticsLock`, `_embeddingsLock`, `_forecastLock`) so concurrent cold-starts for different model types do not block each other.
+2. In `Dispose()`, null the session fields after disposing them to prevent post-dispose use from reaching the ONNX Runtime.
+
+**Prerequisite:** No blocking prerequisite. Changes are confined to `OnnxMLEngine.cs`. Verify with the existing ONNX engine unit tests.
+
+---
+
+### 8. WPF MainViewModel — Partial Class Growth
 
 | | |
 |---|---|
@@ -202,3 +243,4 @@ Keep a record of pressure areas that have been resolved so contributors understa
 | WPF client blocking on ML calls | Phase 9 | Added `JobPollingService` with async poll loop |
 | Validators.cs flat file vs. convention | Tech Debt (chunk7) | Completed domain split: added `Validators/MLValidators.cs` and `Validators/ScheduleValidators.cs` alongside pre-existing `ChatValidators.cs` and `StudyValidators.cs`; deleted root-level `Validators.cs` |
 | PHASES-ROADMAP.md stale phase status | Tech Debt (chunk issue) | Updated status table: Phase 4 → ✅ Complete (health monitoring, JobRetentionWorker, PingAsync); Phase 5 → ✅ Complete (EmbeddingService, VectorStoreService, KnowledgeIndexStore) |
+| Broker Program.cs — All Endpoints in One File | Tech Debt (chunk issue) | Extracted 30+ endpoints into 8 dedicated `IEndpointRouteBuilder` extension files under `DailyDesk.Broker/Endpoints/`; request records co-located with their handlers; `Program.cs` reduced to ~70 lines of infrastructure setup |

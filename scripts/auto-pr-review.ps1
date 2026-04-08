@@ -43,6 +43,8 @@ if (Test-Path $memoryFile) {
 
 $repos = @("Koraji95-coder/Office")
 
+$reviewedThisRun = @{}
+
 foreach ($repo in $repos) {
     try {
         $prs = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls?state=open&per_page=100" -Headers $headers
@@ -84,6 +86,12 @@ foreach ($repo in $repos) {
                     continue
                 }
                 Write-Host "SKIP: $repoShort#$($pr.number) - draft (Copilot still working)"
+                continue
+            }
+
+            # ========== GATE 1B: Already reviewed in this run ==========
+            if ($reviewedThisRun.ContainsKey("$repo#$($pr.number)")) {
+                Write-Host "SKIP: $repoShort#$($pr.number) - already reviewed in this run"
                 continue
             }
 
@@ -134,8 +142,8 @@ foreach ($repo in $repos) {
                 continue
             }
 
-            # ========== GATE 6: Already reviewed this version ==========
-            $prKey = "$repo#$($pr.number)@$($freshPr.updated_at)"
+            # ========== GATE 6: Already reviewed this PR ==========
+            $prKey = "$repo#$($pr.number)"
             if ($reviewed -contains $prKey) { continue }
 
             # ========== GATE 6B: Already has a review from us ==========
@@ -185,7 +193,9 @@ foreach ($repo in $repos) {
                 } catch {
                     Write-Host "  -> Failed to close duplicate"
                 }
+                $reviewedThisRun[$prKey] = $true
                 $reviewed += $prKey
+                $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
                 continue
             }
 
@@ -391,6 +401,11 @@ Provide your review:
                 }
             }
 
+            # ---- Record review immediately (before Discord) ----
+            $reviewedThisRun[$prKey] = $true
+            $reviewed += $prKey
+            $reviewed | ConvertTo-Json | Set-Content -Path $reviewedFile -Encoding UTF8
+
             # ---- DISCORD ----
             if ($mergeStatus -match "Auto-merged") {
                 $color = 3066993; $statusLabel = "MERGED"
@@ -437,7 +452,6 @@ Provide your review:
                 Write-Host "Discord failed for $repoShort#$($pr.number): $($_.Exception.Message)"
             }
 
-            $reviewed += $prKey
             Start-Sleep -Seconds 5
         }
     } catch {

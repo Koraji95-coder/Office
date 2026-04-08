@@ -5,23 +5,17 @@ using Xunit;
 namespace DailyDesk.Core.Tests;
 
 // ============================================================================
-// Section 1.13 — Electrical QA/QC: Full Mandatory-Test Coverage
-// (Watercare QA/QC Templates – all 7 mandatory-test categories)
+// Electrical QA/QC Section 1.13 Integration Tests
+// (Watercare QA/QC Templates – mandatory tests per section 1.13)
 //
-// Category 1: General Electrical Installation
-//             – earthing continuity, insulation resistance, polarity, functional tests
-// Category 2: Cables and Conduit
-//             – installation inspection, cable pulling records, megger test results
-// Category 3: Switchboards, Distribution Centres, and Control Centres
-//             – covered by SwitchboardControlCentreQaQcIntegrationTests.cs
-// Category 4: Motors and Drives
-//             – rotation checks, no-load/full-load current, thermal overload settings
-// Category 5: Lighting and Small Power
-//             – circuit continuity, RCD trip-time testing, lux level verification
-// Category 6: Instrumentation and Control Wiring
-//             – loop checks, signal calibration records, PLC I/O verification
-// Category 7: Earthing and Bonding Systems
-//             – earth resistance measurements, bonding continuity records
+// Section 1.13 defines minimum mandatory tests for seven categories:
+//   1. General Electrical Installation
+//   2. Cables and Conduit
+//   3. Switchboards, Distribution Centres, and Control Centres
+//   4. Motors and Drives
+//   5. Lighting and Small Power
+//   6. Instrumentation and Control Wiring
+//   7. Earthing and Bonding Systems
 // ============================================================================
 
 public sealed class ElectricalQaQcSection113IntegrationTests
@@ -34,26 +28,24 @@ public sealed class ElectricalQaQcSection113IntegrationTests
         new(new ThrowingModelProvider(), "test-model");
 
     // =========================================================================
-    // Group 1 – OralDefenseScenario Model Construction
-    //           (one scenario per section-1.13 category)
+    // Group 1 – General Electrical Installation (Category 1)
     // =========================================================================
 
-    // --- Category 1: General Electrical Installation -------------------------
-
     [Fact]
-    public void Section113_Cat1_GeneralInstallation_ScenarioCanBeCreated()
+    public void Category1_GeneralElectricalInstallation_Scenario_CanBeCreated()
     {
         var scenario = new OralDefenseScenario
         {
             Topic = "general electrical installation QA/QC",
             Title = "General Electrical Installation: Mandatory QA/QC Checks",
             Prompt =
-                "Describe the mandatory QA/QC checks for a general electrical installation "
-                + "before energisation, including earthing continuity, insulation resistance, "
-                + "polarity verification, and functional tests.",
+                "Describe the mandatory QA/QC checks for a general electrical installation, "
+                + "including earthing continuity, insulation resistance, polarity checks, "
+                + "and functional tests before energisation.",
             WhatGoodLooksLike =
-                "A strong answer covers all four checks, names the risk eliminated by each, "
-                + "and references the required QA sign-off record.",
+                "A strong answer covers all four mandatory check categories: "
+                + "earthing continuity, insulation resistance, polarity, and functional tests, "
+                + "and references the required sign-off record for each.",
         };
 
         Assert.Equal("general electrical installation QA/QC", scenario.Topic);
@@ -64,37 +56,106 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_Cat1_GeneralInstallation_WhatGoodLooksLike_MentionsRisk()
+    public void Category1_GeneralElectrical_WhatGoodLooksLike_CoversFourMandatoryChecks()
     {
         var scenario = new OralDefenseScenario
         {
             Topic = "general electrical installation QA/QC",
             WhatGoodLooksLike =
-                "A strong answer explains the risk eliminated by earthing continuity failures, "
-                + "insulation breakdown, reversed polarity, and incomplete functional tests.",
+                "A strong answer covers: earthing continuity, insulation resistance, "
+                + "polarity checks, and functional tests.",
         };
 
-        Assert.Contains("risk", scenario.WhatGoodLooksLike);
         Assert.Contains("earthing continuity", scenario.WhatGoodLooksLike);
-        Assert.Contains("insulation", scenario.WhatGoodLooksLike);
+        Assert.Contains("insulation resistance", scenario.WhatGoodLooksLike);
         Assert.Contains("polarity", scenario.WhatGoodLooksLike);
+        Assert.Contains("functional tests", scenario.WhatGoodLooksLike);
     }
 
-    // --- Category 2: Cables and Conduit --------------------------------------
+    [Fact]
+    public async Task Category1_FallbackScoring_EarthingKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Earthing continuity and earth ground resistance must be verified with a low-resistance "
+            + "ohmmeter before energising any electrical installation panel.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
 
     [Fact]
-    public void Section113_Cat2_CablesAndConduit_ScenarioCanBeCreated()
+    public async Task Category1_FallbackScoring_InsulationResistanceKeyword_ScoresTechnicalThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Insulation resistance testing with a 500 V megger should confirm cable resistance "
+            + "above 1 MΩ before applying voltage to the installation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void Category1_LearningDocument_Topics_IncludeAllFourMandatoryChecks()
+    {
+        var document = new LearningDocument
+        {
+            FileName = "general-electrical-installation-qaqc.md",
+            RelativePath = "Knowledge/general-electrical-installation-qaqc.md",
+            Summary =
+                "Watercare QA/QC section 1.13 category 1: general electrical installation mandatory "
+                + "tests. Covers earthing continuity, insulation resistance, polarity checks, "
+                + "and functional tests.",
+            Topics =
+            [
+                "general electrical installation",
+                "earthing continuity",
+                "insulation resistance",
+                "polarity checks",
+                "functional tests",
+            ],
+        };
+
+        Assert.Contains("earthing continuity", document.Topics);
+        Assert.Contains("insulation resistance", document.Topics);
+        Assert.Contains("polarity checks", document.Topics);
+        Assert.Contains("functional tests", document.Topics);
+    }
+
+    // =========================================================================
+    // Group 2 – Cables and Conduit (Category 2)
+    // =========================================================================
+
+    [Fact]
+    public void Category2_CablesAndConduit_Scenario_CanBeCreated()
     {
         var scenario = new OralDefenseScenario
         {
             Topic = "cables and conduit QA/QC",
             Title = "Cables and Conduit: Mandatory QA/QC Checks",
             Prompt =
-                "What mandatory QA/QC checks must be completed for cables and conduit installations? "
+                "What mandatory QA/QC checks are required for cables and conduit installations? "
                 + "Include installation inspection, cable pulling records, and megger test results.",
             WhatGoodLooksLike =
-                "A strong answer covers installation inspection, pulling-tension records, "
-                + "and megger insulation test results, with sign-off requirements for each.",
+                "A strong answer covers installation inspection, cable pulling records, and "
+                + "megger test results, and references the required sign-off documentation.",
         };
 
         Assert.Equal("cables and conduit QA/QC", scenario.Topic);
@@ -104,311 +165,15 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_Cat2_CablesAndConduit_WhatGoodLooksLike_MentionsSignOff()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "cables and conduit QA/QC",
-            WhatGoodLooksLike =
-                "A strong answer references sign-off sheets for installation inspection, "
-                + "cable pulling records, and megger test results.",
-        };
-
-        Assert.Contains("sign-off", scenario.WhatGoodLooksLike);
-        Assert.Contains("megger", scenario.WhatGoodLooksLike);
-    }
-
-    // --- Category 4: Motors and Drives ---------------------------------------
-
-    [Fact]
-    public void Section113_Cat4_MotorsAndDrives_ScenarioCanBeCreated()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "motors and drives QA/QC",
-            Title = "Motors and Drives: Mandatory QA/QC Checks",
-            Prompt =
-                "Explain the mandatory QA/QC checks required before a motor or drive system "
-                + "is commissioned, including rotation checks, no-load and full-load current "
-                + "measurements, and thermal overload settings.",
-            WhatGoodLooksLike =
-                "A strong answer covers rotation direction verification, current measurements "
-                + "at no-load and full-load, and correct thermal overload relay settings.",
-        };
-
-        Assert.Equal("motors and drives QA/QC", scenario.Topic);
-        Assert.Contains("rotation checks", scenario.Prompt);
-        Assert.Contains("no-load", scenario.Prompt);
-        Assert.Contains("full-load current", scenario.Prompt);
-        Assert.Contains("thermal overload settings", scenario.Prompt);
-    }
-
-    [Fact]
-    public void Section113_Cat4_MotorsAndDrives_WhatGoodLooksLike_CoversMandatoryChecks()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "motors and drives QA/QC",
-            WhatGoodLooksLike =
-                "A strong answer covers rotation direction, no-load current, full-load current, "
-                + "and thermal overload settings as four separate mandatory checks.",
-        };
-
-        Assert.Contains("rotation", scenario.WhatGoodLooksLike);
-        Assert.Contains("no-load", scenario.WhatGoodLooksLike);
-        Assert.Contains("full-load", scenario.WhatGoodLooksLike);
-        Assert.Contains("thermal overload", scenario.WhatGoodLooksLike);
-    }
-
-    // --- Category 5: Lighting and Small Power --------------------------------
-
-    [Fact]
-    public void Section113_Cat5_LightingAndSmallPower_ScenarioCanBeCreated()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "lighting and small power QA/QC",
-            Title = "Lighting and Small Power: Mandatory QA/QC Checks",
-            Prompt =
-                "Describe the mandatory QA/QC checks for lighting and small power circuits, "
-                + "including circuit continuity, RCD trip-time testing, and lux level verification.",
-            WhatGoodLooksLike =
-                "A strong answer confirms circuit continuity, records RCD trip-time results "
-                + "against the acceptable threshold, and documents lux level measurements.",
-        };
-
-        Assert.Equal("lighting and small power QA/QC", scenario.Topic);
-        Assert.Contains("circuit continuity", scenario.Prompt);
-        Assert.Contains("RCD trip-time testing", scenario.Prompt);
-        Assert.Contains("lux level verification", scenario.Prompt);
-    }
-
-    [Fact]
-    public void Section113_Cat5_LightingAndSmallPower_WhatGoodLooksLike_MentionsRCD()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "lighting and small power QA/QC",
-            WhatGoodLooksLike =
-                "A strong answer includes RCD trip-time results against AS/NZS 3760 thresholds "
-                + "and lux level measurements compared to design requirements.",
-        };
-
-        Assert.Contains("RCD", scenario.WhatGoodLooksLike);
-        Assert.Contains("lux", scenario.WhatGoodLooksLike);
-    }
-
-    // --- Category 6: Instrumentation and Control Wiring ----------------------
-
-    [Fact]
-    public void Section113_Cat6_InstrumentationAndControlWiring_ScenarioCanBeCreated()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "instrumentation and control wiring QA/QC",
-            Title = "Instrumentation and Control Wiring: Mandatory QA/QC Checks",
-            Prompt =
-                "What mandatory QA/QC checks are required for instrumentation and control wiring? "
-                + "Include loop checks, signal calibration records, and PLC I/O verification.",
-            WhatGoodLooksLike =
-                "A strong answer covers completed loop check sheets, calibration certificates "
-                + "for each instrument, and PLC I/O point-by-point verification records.",
-        };
-
-        Assert.Equal("instrumentation and control wiring QA/QC", scenario.Topic);
-        Assert.Contains("loop checks", scenario.Prompt);
-        Assert.Contains("signal calibration records", scenario.Prompt);
-        Assert.Contains("PLC I/O verification", scenario.Prompt);
-    }
-
-    [Fact]
-    public void Section113_Cat6_InstrumentationAndControlWiring_WhatGoodLooksLike_MentionsCalibration()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "instrumentation and control wiring QA/QC",
-            WhatGoodLooksLike =
-                "A strong answer references calibration certificates, loop check sheets, "
-                + "and PLC I/O verification records as mandatory sign-off deliverables.",
-        };
-
-        Assert.Contains("calibration", scenario.WhatGoodLooksLike);
-        Assert.Contains("loop check", scenario.WhatGoodLooksLike);
-        Assert.Contains("PLC", scenario.WhatGoodLooksLike);
-    }
-
-    // --- Category 7: Earthing and Bonding Systems ----------------------------
-
-    [Fact]
-    public void Section113_Cat7_EarthingAndBonding_ScenarioCanBeCreated()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "earthing and bonding systems QA/QC",
-            Title = "Earthing and Bonding Systems: Mandatory QA/QC Checks",
-            Prompt =
-                "Explain the mandatory QA/QC checks for earthing and bonding systems, "
-                + "including earth resistance measurements and bonding continuity records.",
-            WhatGoodLooksLike =
-                "A strong answer covers fall-of-potential earth resistance test results, "
-                + "bonding continuity measurements, and required sign-off records.",
-        };
-
-        Assert.Equal("earthing and bonding systems QA/QC", scenario.Topic);
-        Assert.Contains("earth resistance measurements", scenario.Prompt);
-        Assert.Contains("bonding continuity records", scenario.Prompt);
-    }
-
-    [Fact]
-    public void Section113_Cat7_EarthingAndBonding_WhatGoodLooksLike_MentionsResistance()
-    {
-        var scenario = new OralDefenseScenario
-        {
-            Topic = "earthing and bonding systems QA/QC",
-            WhatGoodLooksLike =
-                "A strong answer references earth resistance test results against the design "
-                + "limit and documents bonding continuity for all metallic enclosures.",
-        };
-
-        Assert.Contains("earth resistance", scenario.WhatGoodLooksLike);
-        Assert.Contains("bonding continuity", scenario.WhatGoodLooksLike);
-    }
-
-    // =========================================================================
-    // Group 2 – DefenseEvaluation and DefenseRubricItem Model Tests
-    // =========================================================================
-
-    [Fact]
-    public void Section113_DefenseEvaluation_ScoreRatio_CalculatesCorrectly()
-    {
-        var evaluation = new DefenseEvaluation { TotalScore = 16, MaxScore = 20 };
-
-        Assert.Equal(0.8, evaluation.ScoreRatio, precision: 5);
-    }
-
-    [Fact]
-    public void Section113_DefenseEvaluation_ScoreRatio_ReturnsZero_WhenMaxScoreIsZero()
-    {
-        var evaluation = new DefenseEvaluation { TotalScore = 0, MaxScore = 0 };
-
-        Assert.Equal(0.0, evaluation.ScoreRatio);
-    }
-
-    [Fact]
-    public void Section113_DefenseEvaluation_DisplaySummary_ContainsScoreAndSummary()
-    {
-        var evaluation = new DefenseEvaluation
-        {
-            TotalScore = 16,
-            MaxScore = 20,
-            Summary = "General electrical installation QA/QC answer evaluated.",
-        };
-
-        Assert.Contains("16/20", evaluation.DisplaySummary);
-        Assert.Contains("General electrical installation QA/QC answer evaluated.", evaluation.DisplaySummary);
-    }
-
-    [Fact]
-    public void Section113_DefenseRubricItem_DisplaySummary_ContainsNameScoreAndFeedback()
-    {
-        var item = new DefenseRubricItem
-        {
-            Name = "Technical Correctness",
-            Score = 4,
-            Feedback = "Insulation resistance and polarity correctly referenced.",
-        };
-
-        Assert.Contains("Technical Correctness", item.DisplaySummary);
-        Assert.Contains("4/4", item.DisplaySummary);
-        Assert.Contains("Insulation resistance and polarity correctly referenced.", item.DisplaySummary);
-    }
-
-    [Fact]
-    public void Section113_DefenseRubricItem_DefaultMaxScore_IsFour()
-    {
-        var item = new DefenseRubricItem { Name = "Validation Thinking", Score = 3 };
-
-        Assert.Equal(4, item.MaxScore);
-    }
-
-    [Fact]
-    public void Section113_DefenseEvaluation_RubricItemScoreSum_EqualsTotalScore()
-    {
-        var items = new[]
-        {
-            new DefenseRubricItem { Name = "Technical Correctness",  Score = 4 },
-            new DefenseRubricItem { Name = "Tradeoff Reasoning",     Score = 3 },
-            new DefenseRubricItem { Name = "Failure-Mode Awareness", Score = 3 },
-            new DefenseRubricItem { Name = "Validation Thinking",    Score = 3 },
-            new DefenseRubricItem { Name = "Clarity",                Score = 3 },
-        };
-
-        var evaluation = new DefenseEvaluation
-        {
-            TotalScore = items.Sum(i => i.Score),
-            MaxScore   = items.Sum(i => i.MaxScore),
-            RubricItems = items,
-        };
-
-        Assert.Equal(16, evaluation.TotalScore);
-        Assert.Equal(20, evaluation.MaxScore);
-        Assert.Equal(evaluation.RubricItems.Sum(i => i.Score), evaluation.TotalScore);
-    }
-
-    // =========================================================================
-    // Group 3 – Fallback Scoring Tests (one per relevant section-1.13 topic)
-    // =========================================================================
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat1_InsulationKeyword_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Insulation resistance of all cables must be measured with a 500 V megger "
-            + "before energisation to confirm no short circuits to earth.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
-        Assert.NotNull(technical);
-        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat1_GroundKeyword_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Earth ground continuity of the installation must be verified before energising "
-            + "any panel or distribution board.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
-        Assert.NotNull(technical);
-        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat2_MeggerKeyword_ScoresTechnicalCorrectness()
+    public async Task Category2_FallbackScoring_MeggerKeyword_ScoresTechnicalCorrectnessThreeOrMore()
     {
         var service = MakeService();
         var scenario = new OralDefenseScenario { Topic = "cables and conduit QA/QC" };
 
         var evaluation = await service.ScoreResponseAsync(
             scenario,
-            "All cable runs must pass a megger insulation resistance test after installation "
-            + "and before connection to equipment, with results recorded on the QA sheet.",
+            "Megger test results for all cable runs must be recorded before termination, "
+            + "confirming insulation resistance meets the standard minimum threshold.",
             new SuiteSnapshot(),
             new LearningProfile(),
             new LearningLibrary()
@@ -420,889 +185,15 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public async Task Section113_FallbackScoring_Cat4_MotorAnswer_ScoresValidation()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Motor rotation direction must be checked with the drive uncoupled before connecting "
-            + "the load. No-load current is then measured and verified against the nameplate value.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
-        Assert.NotNull(validation);
-        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat4_VoltageKeyword_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Voltage supply to the drive must be within ±10 % of nameplate rating before "
-            + "the motor rotation check is performed.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
-        Assert.NotNull(technical);
-        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat5_LightingAnswer_ScoresValidation()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "lighting and small power QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "All RCD devices must be tested to verify that they trip within the required "
-            + "time limit. Lux levels are then checked against the design specification.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
-        Assert.NotNull(validation);
-        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat6_InstrumentationAnswer_ScoresValidation()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "instrumentation and control wiring QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Loop checks must verify that each 4–20 mA signal is correctly mapped from "
-            + "the field instrument to the PLC input. Signal calibration records are checked "
-            + "to confirm instrument accuracy before commissioning.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
-        Assert.NotNull(validation);
-        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_Cat7_EarthingAnswer_ScoresTechnical()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Earth electrode resistance must be measured using the fall-of-potential method "
-            + "and must not exceed the design-specified maximum. Bonding conductor continuity "
-            + "is verified with a low-resistance ohmmeter before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
-        Assert.NotNull(technical);
-        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
-    }
-
-    // =========================================================================
-    // Group 3b – Per-keyword heuristic validation
-    //            One test per new mentionsTechnical keyword, each using a
-    //            minimal answer that contains only that keyword so that the
-    //            assertion directly proves the keyword drives the score.
-    // =========================================================================
-
-    [Fact]
-    public async Task Section113_NewKeyword_Insulation_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Insulation resistance must be tested before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Megger_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "cables and conduit QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "A megger test confirms cable integrity before connection.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Earthing_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Earthing electrode installations are measured before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Bonding_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Bonding between all metallic enclosures must be confirmed.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Resistance_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Resistance of the earth loop path must be below the design limit.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Continuity_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Continuity of all circuit conductors is confirmed before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Calibration_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "instrumentation and control wiring QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Calibration certificates are required for every field instrument.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Relay_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "switchboard QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Protection relay pickup values must be confirmed before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Overload_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Overload relay settings must match the motor nameplate full-load current.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_Rotation_ScoresTechnicalCorrectness()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Rotation direction of every motor must be confirmed before coupling the load.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NewKeyword_AllTen_InOneAnswer_ScoresTechnicalCorrectnessThree()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        // Answer deliberately contains all 10 new keywords so the test acts as a
-        // single integration-wide smoke-test for the mentionsTechnical heuristic.
-        var answer =
-            "Insulation resistance is measured with a megger. "
-            + "Earthing electrode resistance is below the limit. "
-            + "Bonding continuity is verified for all enclosures. "
-            + "Calibration of instruments is confirmed. "
-            + "Protection relay settings are set. "
-            + "Motor overload relay matches nameplate current. "
-            + "Rotation direction is confirmed before coupling the load.";
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            answer,
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(3, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_NoNewKeyword_WithoutAnyTechnicalTerm_ScoresTechnicalCorrectnessTwo()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Everything should be done carefully before starting.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var technical = evaluation.RubricItems.First(r => r.Name == "Technical Correctness");
-        Assert.Equal(2, technical.Score);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_TradeoffKeyword_ScoresTradeoffReasoning()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "cables and conduit QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "The tradeoff between comprehensive megger testing of every cable and commissioning "
-            + "schedule pressure must be managed through documented hold-point sign-offs.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var tradeoff = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Tradeoff Reasoning");
-        Assert.NotNull(tradeoff);
-        Assert.True(tradeoff!.Score >= 3, $"Expected Tradeoff Reasoning >= 3 but was {tradeoff.Score}");
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_NoKeywords_TradeoffAndFailureModeBothScoreLow()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "All checks should be done properly before energisation.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        var tradeoff = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Tradeoff Reasoning");
-        var failureMode = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Failure-Mode Awareness");
-        Assert.NotNull(tradeoff);
-        Assert.NotNull(failureMode);
-        Assert.Equal(1, tradeoff!.Score);
-        Assert.Equal(1, failureMode!.Score);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_MaxScoreIsAlwaysTwenty()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Some answer.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        Assert.Equal(20, evaluation.MaxScore);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_HasExactlyFiveRubricItems()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "lighting and small power QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "RCD trip times and lux levels were tested and verified on all circuits.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        Assert.Equal(5, evaluation.RubricItems.Count);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_HasThreeRecommendedFollowUps()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "instrumentation and control wiring QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Some answer.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        Assert.Equal(3, evaluation.RecommendedFollowUps.Count);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_TotalScoreWithinValidRange()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "general electrical installation QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Earth ground continuity and voltage polarity must be verified before energisation. "
-            + "The tradeoff between test depth and schedule must be managed with signed hold-points.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        Assert.InRange(evaluation.TotalScore, 0, 20);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScoring_NextReviewRecommendation_IsNonEmpty()
-    {
-        var service = MakeService();
-        var scenario = new OralDefenseScenario { Topic = "earthing and bonding systems QA/QC" };
-
-        var evaluation = await service.ScoreResponseAsync(
-            scenario,
-            "Earth electrode resistance was measured and bonding continuity was confirmed.",
-            new SuiteSnapshot(),
-            new LearningProfile(),
-            new LearningLibrary()
-        );
-
-        Assert.False(string.IsNullOrWhiteSpace(evaluation.NextReviewRecommendation));
-    }
-
-    // =========================================================================
-    // Group 4 – Fallback Scenario Creation Tests
-    // =========================================================================
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat1_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "general electrical installation QA/QC"
-        );
-
-        Assert.Equal("general electrical installation QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat2_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "cables and conduit QA/QC"
-        );
-
-        Assert.Equal("cables and conduit QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat4_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "motors and drives QA/QC"
-        );
-
-        Assert.Equal("motors and drives QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat5_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "lighting and small power QA/QC"
-        );
-
-        Assert.Equal("lighting and small power QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat6_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "instrumentation and control wiring QA/QC"
-        );
-
-        Assert.Equal("instrumentation and control wiring QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Cat7_TopicPreserved()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "earthing and bonding systems QA/QC"
-        );
-
-        Assert.Equal("earthing and bonding systems QA/QC", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_Prompt_ContainsPreferredTopic()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "motors and drives QA/QC"
-        );
-
-        Assert.Contains("motors and drives QA/QC", scenario.Prompt);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_GenerationSource_IsFallbackOralDrill()
-    {
-        var service = MakeService();
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "cables and conduit QA/QC"
-        );
-
-        Assert.Equal("fallback oral drill", scenario.GenerationSource);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_HotArea_AppearsInTitle()
-    {
-        var service = MakeService();
-        var snapshot = new SuiteSnapshot { HotAreas = ["commissioning-earthing-portal"] };
-
-        var scenario = await service.CreateScenarioAsync(
-            snapshot,
-            new TrainingHistorySummary(),
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>(),
-            preferredTopic: "earthing and bonding systems QA/QC"
-        );
-
-        Assert.Contains("commissioning-earthing-portal", scenario.Title);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_WeakTopic_UsedWhenNoPreferredTopic()
-    {
-        var service = MakeService();
-        var historySummary = new TrainingHistorySummary
-        {
-            WeakTopics =
-            [
-                new TopicMasterySummary { Topic = "motor thermal overload settings", Attempted = 5, Correct = 1 },
-            ],
-        };
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            historySummary,
-            new LearningProfile(),
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>()
-        );
-
-        Assert.Equal("motor thermal overload settings", scenario.Topic);
-    }
-
-    [Fact]
-    public async Task Section113_FallbackScenario_ActiveTopic_UsedWhenNoOtherSource()
-    {
-        var service = MakeService();
-        var learningProfile = new LearningProfile
-        {
-            ActiveTopics = ["PLC I/O verification and loop checks"],
-        };
-
-        var scenario = await service.CreateScenarioAsync(
-            new SuiteSnapshot(),
-            new TrainingHistorySummary(),
-            learningProfile,
-            new LearningLibrary(),
-            Array.Empty<StudyTrack>()
-        );
-
-        Assert.Equal("PLC I/O verification and loop checks", scenario.Topic);
-    }
-
-    // =========================================================================
-    // Group 5 – Knowledge Search Tests
-    // =========================================================================
-
-    [Fact]
-    public void Section113_KnowledgeSearch_GeneralInstallationQuery_FindsRelevantDocument()
-    {
-        var library = new LearningLibrary
-        {
-            Documents =
-            [
-                new LearningDocument
-                {
-                    FileName = "general-installation-qaqc.md",
-                    RelativePath = "Knowledge/general-installation-qaqc.md",
-                    Summary =
-                        "General electrical installation mandatory QA/QC: earthing continuity, "
-                        + "insulation resistance, polarity verification, functional tests.",
-                    Topics = ["general installation", "earthing", "insulation", "polarity", "functional test"],
-                },
-                new LearningDocument
-                {
-                    FileName = "motor-commissioning.md",
-                    RelativePath = "Knowledge/motor-commissioning.md",
-                    Summary = "Motor rotation checks and no-load current measurements.",
-                    Topics = ["motor", "rotation", "current"],
-                },
-            ],
-        };
-
-        var result = KnowledgeSearchService.FallbackTextSearch(
-            "general installation earthing continuity insulation resistance",
-            library
-        );
-
-        Assert.NotEmpty(result.Results);
-        Assert.Equal("general-installation-qaqc.md", result.Results[0].Title);
-    }
-
-    [Fact]
-    public void Section113_KnowledgeSearch_CablesAndConduitQuery_FindsRelevantDocument()
-    {
-        var library = new LearningLibrary
-        {
-            Documents =
-            [
-                new LearningDocument
-                {
-                    FileName = "lighting-circuit-test.md",
-                    RelativePath = "Knowledge/lighting-circuit-test.md",
-                    Summary = "RCD trip-time tests and lux verification for lighting circuits.",
-                    Topics = ["lighting", "RCD", "lux"],
-                },
-                new LearningDocument
-                {
-                    FileName = "cables-and-conduit-qaqc.md",
-                    RelativePath = "Knowledge/cables-and-conduit-qaqc.md",
-                    Summary =
-                        "Cables and conduit mandatory QA/QC: installation inspection, "
-                        + "cable pulling records, megger insulation test results.",
-                    Topics = ["cable", "conduit", "megger", "installation inspection", "pulling records"],
-                },
-            ],
-        };
-
-        var result = KnowledgeSearchService.FallbackTextSearch(
-            "cable conduit megger installation inspection",
-            library
-        );
-
-        Assert.NotEmpty(result.Results);
-        Assert.Equal("cables-and-conduit-qaqc.md", result.Results[0].Title);
-    }
-
-    [Fact]
-    public void Section113_KnowledgeSearch_MotorsAndDrivesQuery_FindsRelevantDocument()
-    {
-        var library = new LearningLibrary
-        {
-            Documents =
-            [
-                new LearningDocument
-                {
-                    FileName = "instrumentation-loop-check.md",
-                    RelativePath = "Knowledge/instrumentation-loop-check.md",
-                    Summary = "Loop checks and signal calibration for instruments.",
-                    Topics = ["loop check", "calibration", "PLC"],
-                },
-                new LearningDocument
-                {
-                    FileName = "motors-and-drives-qaqc.md",
-                    RelativePath = "Knowledge/motors-and-drives-qaqc.md",
-                    Summary =
-                        "Motors and drives mandatory QA/QC: rotation checks, no-load and "
-                        + "full-load current measurements, thermal overload settings.",
-                    Topics = ["motor", "drive", "rotation", "overload", "current"],
-                },
-            ],
-        };
-
-        var result = KnowledgeSearchService.FallbackTextSearch(
-            "motor rotation overload current",
-            library
-        );
-
-        Assert.NotEmpty(result.Results);
-        Assert.Equal("motors-and-drives-qaqc.md", result.Results[0].Title);
-    }
-
-    [Fact]
-    public void Section113_KnowledgeSearch_AllSevenCategories_InLibrary_ReturnsBestMatch()
-    {
-        var library = new LearningLibrary
-        {
-            Documents =
-            [
-                new LearningDocument
-                {
-                    FileName = "general-installation-qaqc.md",
-                    RelativePath = "Knowledge/general-installation-qaqc.md",
-                    Summary = "General electrical installation: earthing, insulation, polarity, functional.",
-                    Topics = ["general installation", "earthing", "insulation", "polarity"],
-                },
-                new LearningDocument
-                {
-                    FileName = "cables-and-conduit-qaqc.md",
-                    RelativePath = "Knowledge/cables-and-conduit-qaqc.md",
-                    Summary = "Cables and conduit: installation inspection, pulling records, megger.",
-                    Topics = ["cable", "conduit", "megger", "pulling records"],
-                },
-                new LearningDocument
-                {
-                    FileName = "switchboard-qaqc.md",
-                    RelativePath = "Knowledge/switchboard-qaqc.md",
-                    Summary = "Switchboard: termination, protection relay, interlocking, FAT/SAT.",
-                    Topics = ["switchboard", "protection relay", "interlocking", "FAT", "SAT"],
-                },
-                new LearningDocument
-                {
-                    FileName = "motors-and-drives-qaqc.md",
-                    RelativePath = "Knowledge/motors-and-drives-qaqc.md",
-                    Summary = "Motors and drives: rotation, current, overload.",
-                    Topics = ["motor", "drive", "rotation", "overload"],
-                },
-                new LearningDocument
-                {
-                    FileName = "lighting-and-small-power-qaqc.md",
-                    RelativePath = "Knowledge/lighting-and-small-power-qaqc.md",
-                    Summary = "Lighting and small power: circuit continuity, RCD, lux.",
-                    Topics = ["lighting", "RCD", "lux", "circuit continuity"],
-                },
-                new LearningDocument
-                {
-                    FileName = "instrumentation-control-wiring-qaqc.md",
-                    RelativePath = "Knowledge/instrumentation-control-wiring-qaqc.md",
-                    Summary = "Instrumentation and control: loop checks, calibration, PLC I/O.",
-                    Topics = ["instrumentation", "loop check", "calibration", "PLC"],
-                },
-                new LearningDocument
-                {
-                    FileName = "earthing-and-bonding-qaqc.md",
-                    RelativePath = "Knowledge/earthing-and-bonding-qaqc.md",
-                    Summary = "Earthing and bonding: earth resistance, bonding continuity.",
-                    Topics = ["earthing", "bonding", "earth resistance", "continuity"],
-                },
-            ],
-        };
-
-        var result = KnowledgeSearchService.FallbackTextSearch(
-            "earthing bonding earth resistance continuity",
-            library
-        );
-
-        Assert.NotEmpty(result.Results);
-        Assert.Equal("earthing-and-bonding-qaqc.md", result.Results[0].Title);
-        Assert.Equal(7, library.Documents.Count);
-    }
-
-    // =========================================================================
-    // Group 6 – LearningDocument Checklist Compliance Tests
-    //           (section-1.13 items 1, 2, 4, 5, 6, 7)
-    // =========================================================================
-
-    [Fact]
-    public void Section113_Cat1_LearningDocument_Topics_IncludeAllMandatoryChecks()
+    public void Category2_LearningDocument_Topics_IncludeAllThreeMandatoryChecks()
     {
         var document = new LearningDocument
         {
-            FileName = "general-installation-section113-cat1.md",
-            RelativePath = "Knowledge/general-installation-section113-cat1.md",
+            FileName = "cables-conduit-qaqc.md",
+            RelativePath = "Knowledge/cables-conduit-qaqc.md",
             Summary =
-                "Section 1.13 category 1: general electrical installation mandatory tests. "
-                + "Covers earthing continuity, insulation resistance, polarity, functional tests.",
-            Topics =
-            [
-                "general installation",
-                "earthing continuity",
-                "insulation resistance",
-                "polarity",
-                "functional tests",
-            ],
-        };
-
-        Assert.Contains("earthing continuity", document.Topics);
-        Assert.Contains("insulation resistance", document.Topics);
-        Assert.Contains("polarity", document.Topics);
-        Assert.Contains("functional tests", document.Topics);
-    }
-
-    [Fact]
-    public void Section113_Cat2_LearningDocument_Topics_IncludeAllMandatoryChecks()
-    {
-        var document = new LearningDocument
-        {
-            FileName = "cables-conduit-section113-cat2.md",
-            RelativePath = "Knowledge/cables-conduit-section113-cat2.md",
-            Summary =
-                "Section 1.13 category 2: cables and conduit mandatory tests. "
-                + "Covers installation inspection, cable pulling records, megger test results.",
+                "Watercare QA/QC section 1.13 category 2: cables and conduit mandatory tests. "
+                + "Covers installation inspection, cable pulling records, and megger test results.",
             Topics =
             [
                 "cables",
@@ -1319,15 +210,298 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_Cat4_LearningDocument_Topics_IncludeAllMandatoryChecks()
+    public void Category2_KnowledgeSearch_CablesQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "cables-conduit-qaqc.md",
+                    RelativePath = "Knowledge/cables-conduit-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests for cables and conduit: installation inspection, "
+                        + "cable pulling records, megger test results.",
+                    Topics = ["cables", "conduit", "megger", "installation inspection"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-circuit-test.md",
+                    RelativePath = "Knowledge/lighting-circuit-test.md",
+                    Summary = "RCD trip-time tests and lux verification for lighting circuits.",
+                    Topics = ["lighting", "RCD", "lux"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "cables conduit megger installation inspection",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("cables-conduit-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 3 – Switchboards, Distribution Centres, and Control Centres (Category 3)
+    // =========================================================================
+    // Full coverage for this category exists in SwitchboardControlCentreQaQcIntegrationTests.
+    // The following tests validate section 1.13 category 3 from the top-level section perspective.
+
+    [Fact]
+    public void Category3_Section113_Scenario_CrossReferences_SwitchboardMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "section 1.13 category 3 QA/QC",
+            Title = "Section 1.13 Category 3: Switchboards, Distribution Centres, Control Centres",
+            Prompt =
+                "What are the mandatory QA/QC checks for switchboards, distribution centres, "
+                + "and control centres under Watercare QA/QC template section 1.13 category 3? "
+                + "Include termination checks, protection relay settings, interlocking verification, "
+                + "and FAT/SAT records.",
+            WhatGoodLooksLike =
+                "A complete answer references all four mandatory checks: "
+                + "termination checks, protection relay settings, interlocking verification, "
+                + "and FAT/SAT records.",
+        };
+
+        Assert.Contains("termination checks", scenario.Prompt);
+        Assert.Contains("protection relay settings", scenario.Prompt);
+        Assert.Contains("interlocking verification", scenario.Prompt);
+        Assert.Contains("FAT/SAT records", scenario.Prompt);
+    }
+
+    [Fact]
+    public void Category3_Switchboard_WhatGoodLooksLike_CoversFourMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "switchboards distribution centres control centres QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers all four mandatory QA/QC checks per Watercare section 1.13: "
+                + "termination checks, protection relay settings, "
+                + "interlocking verification, and FAT/SAT records. "
+                + "The response should identify which check applies to each device type.",
+        };
+
+        Assert.Contains("termination checks", scenario.WhatGoodLooksLike);
+        Assert.Contains("protection relay settings", scenario.WhatGoodLooksLike);
+        Assert.Contains("interlocking verification", scenario.WhatGoodLooksLike);
+        Assert.Contains("FAT/SAT records", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category3_FallbackScoring_TerminationKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboards distribution centres control centres QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "All termination checks must be completed and verified against the approved "
+            + "protection standard before the switchboard or distribution centre is energised.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Category3_FallbackScoring_ProtectionRelayKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "switchboards distribution centres control centres QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Protection relay settings must be verified against the approved relay co-ordination "
+            + "study for each switchboard, distribution centre, and control centre before energisation.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void Category3_LearningDocument_Topics_IncludeAllFourMandatoryChecks()
     {
         var document = new LearningDocument
         {
-            FileName = "motors-drives-section113-cat4.md",
-            RelativePath = "Knowledge/motors-drives-section113-cat4.md",
+            FileName = "section113-category3-switchboard-dc-cc-qaqc.md",
+            RelativePath = "Knowledge/section113-category3-switchboard-dc-cc-qaqc.md",
             Summary =
-                "Section 1.13 category 4: motors and drives mandatory tests. "
-                + "Covers rotation checks, no-load current, full-load current, thermal overload settings.",
+                "Watercare QA/QC template section 1.13 category 3: mandatory tests for "
+                + "switchboards, distribution centres, and control centres. "
+                + "Covers termination checks, protection relay settings, "
+                + "interlocking verification, and FAT/SAT records.",
+            Topics =
+            [
+                "switchboard",
+                "distribution centre",
+                "control centre",
+                "termination checks",
+                "protection relay settings",
+                "interlocking verification",
+                "FAT/SAT records",
+            ],
+        };
+
+        Assert.Contains("termination checks", document.Topics);
+        Assert.Contains("protection relay settings", document.Topics);
+        Assert.Contains("interlocking verification", document.Topics);
+        Assert.Contains("FAT/SAT records", document.Topics);
+    }
+
+    [Fact]
+    public void Category3_KnowledgeSearch_SwitchboardQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "section113-category3-switchboard-dc-cc-qaqc.md",
+                    RelativePath = "Knowledge/section113-category3-switchboard-dc-cc-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests per Watercare section 1.13 category 3: "
+                        + "switchboards, distribution centres, control centres. "
+                        + "Termination checks, protection relay settings, interlocking verification, FAT/SAT records.",
+                    Topics =
+                    [
+                        "switchboard",
+                        "distribution centre",
+                        "control centre",
+                        "termination checks",
+                        "protection relay settings",
+                        "interlocking verification",
+                        "FAT/SAT records",
+                    ],
+                },
+                new LearningDocument
+                {
+                    FileName = "cables-conduit-qaqc.md",
+                    RelativePath = "Knowledge/cables-conduit-qaqc.md",
+                    Summary = "Cables and conduit installation inspection, cable pulling records, megger test results.",
+                    Topics = ["cables", "conduit", "megger", "installation inspection"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "switchboard termination protection relay interlocking FAT SAT",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("section113-category3-switchboard-dc-cc-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 4 – Motors and Drives (Category 4)
+    // =========================================================================
+
+    [Fact]
+    public void Category4_MotorsAndDrives_Scenario_CanBeCreated()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "motors and drives QA/QC",
+            Title = "Motors and Drives: Mandatory QA/QC Checks",
+            Prompt =
+                "Explain the mandatory QA/QC checks required for motors and drives before "
+                + "commissioning, including rotation checks, no-load and full-load current "
+                + "measurements, and thermal overload settings.",
+            WhatGoodLooksLike =
+                "A strong answer covers rotation checks, no-load and full-load current "
+                + "measurements, and thermal overload settings, and references the sign-off record.",
+        };
+
+        Assert.Equal("motors and drives QA/QC", scenario.Topic);
+        Assert.Contains("rotation checks", scenario.Prompt);
+        Assert.Contains("no-load", scenario.Prompt);
+        Assert.Contains("full-load current", scenario.Prompt);
+        Assert.Contains("thermal overload settings", scenario.Prompt);
+    }
+
+    [Fact]
+    public void Category4_MotorsAndDrives_WhatGoodLooksLike_CoversThreeMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "motors and drives QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers rotation checks, no-load and full-load current "
+                + "measurements, and thermal overload settings.",
+        };
+
+        Assert.Contains("rotation checks", scenario.WhatGoodLooksLike);
+        Assert.Contains("no-load", scenario.WhatGoodLooksLike);
+        Assert.Contains("thermal overload settings", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category4_FallbackScoring_RotationKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Rotation checks for all motors must be performed at no-load before connecting the "
+            + "drive, verifying correct phase sequence against the standard wiring diagram.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Category4_FallbackScoring_ThermalOverloadKeyword_ScoresValidationThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "motors and drives QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Thermal overload settings must be checked against the motor nameplate data "
+            + "and verified to match the correct full-load current value before commissioning.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public void Category4_LearningDocument_Topics_IncludeAllThreeMandatoryChecks()
+    {
+        var document = new LearningDocument
+        {
+            FileName = "motors-drives-qaqc.md",
+            RelativePath = "Knowledge/motors-drives-qaqc.md",
+            Summary =
+                "Watercare QA/QC section 1.13 category 4: motors and drives mandatory tests. "
+                + "Covers rotation checks, no-load and full-load current measurements, "
+                + "and thermal overload settings.",
             Topics =
             [
                 "motors",
@@ -1346,40 +520,233 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_Cat5_LearningDocument_Topics_IncludeAllMandatoryChecks()
+    public void Category4_KnowledgeSearch_MotorQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "motors-drives-qaqc.md",
+                    RelativePath = "Knowledge/motors-drives-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests for motors and drives: rotation checks, "
+                        + "no-load and full-load current measurements, thermal overload settings.",
+                    Topics = ["motors", "drives", "rotation", "thermal overload"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-circuit-test.md",
+                    RelativePath = "Knowledge/lighting-circuit-test.md",
+                    Summary = "RCD trip-time tests and lux verification for lighting circuits.",
+                    Topics = ["lighting", "RCD", "lux"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "motors drives rotation thermal overload",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("motors-drives-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 5 – Lighting and Small Power (Category 5)
+    // =========================================================================
+
+    [Fact]
+    public void Category5_LightingAndSmallPower_Scenario_CanBeCreated()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "lighting and small power QA/QC",
+            Title = "Lighting and Small Power: Mandatory QA/QC Checks",
+            Prompt =
+                "What mandatory QA/QC checks are required for lighting and small power circuits? "
+                + "Include circuit continuity, RCD trip-time testing, and lux level verification.",
+            WhatGoodLooksLike =
+                "A strong answer covers circuit continuity, RCD trip-time testing, and lux level "
+                + "verification, and references the sign-off record for each check.",
+        };
+
+        Assert.Equal("lighting and small power QA/QC", scenario.Topic);
+        Assert.Contains("circuit continuity", scenario.Prompt);
+        Assert.Contains("RCD trip-time", scenario.Prompt);
+        Assert.Contains("lux level verification", scenario.Prompt);
+    }
+
+    [Fact]
+    public void Category5_Lighting_WhatGoodLooksLike_CoversThreeMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "lighting and small power QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers circuit continuity, RCD trip-time testing, "
+                + "and lux level verification.",
+        };
+
+        Assert.Contains("circuit continuity", scenario.WhatGoodLooksLike);
+        Assert.Contains("RCD trip-time", scenario.WhatGoodLooksLike);
+        Assert.Contains("lux level", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category5_FallbackScoring_RCDKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "lighting and small power QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "RCD trip-time testing must confirm that all residual current devices operate within "
+            + "the standard 30 ms trip time to protect against electric shock.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public void Category5_LearningDocument_Topics_IncludeAllThreeMandatoryChecks()
     {
         var document = new LearningDocument
         {
-            FileName = "lighting-small-power-section113-cat5.md",
-            RelativePath = "Knowledge/lighting-small-power-section113-cat5.md",
+            FileName = "lighting-small-power-qaqc.md",
+            RelativePath = "Knowledge/lighting-small-power-qaqc.md",
             Summary =
-                "Section 1.13 category 5: lighting and small power mandatory tests. "
-                + "Covers circuit continuity, RCD trip-time testing, lux level verification.",
+                "Watercare QA/QC section 1.13 category 5: lighting and small power mandatory tests. "
+                + "Covers circuit continuity, RCD trip-time testing, and lux level verification.",
             Topics =
             [
                 "lighting",
                 "small power",
                 "circuit continuity",
-                "RCD trip-time testing",
+                "RCD trip-time",
                 "lux level verification",
             ],
         };
 
         Assert.Contains("circuit continuity", document.Topics);
-        Assert.Contains("RCD trip-time testing", document.Topics);
+        Assert.Contains("RCD trip-time", document.Topics);
         Assert.Contains("lux level verification", document.Topics);
     }
 
     [Fact]
-    public void Section113_Cat6_LearningDocument_Topics_IncludeAllMandatoryChecks()
+    public void Category5_KnowledgeSearch_LightingQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "lighting-small-power-qaqc.md",
+                    RelativePath = "Knowledge/lighting-small-power-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests for lighting and small power: circuit continuity, "
+                        + "RCD trip-time testing, lux level verification.",
+                    Topics = ["lighting", "small power", "RCD", "circuit continuity", "lux"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motors-drives-qaqc.md",
+                    RelativePath = "Knowledge/motors-drives-qaqc.md",
+                    Summary = "Rotation checks and thermal overload settings for motors and drives.",
+                    Topics = ["motors", "drives", "rotation", "thermal overload"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "lighting RCD circuit continuity lux",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("lighting-small-power-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 6 – Instrumentation and Control Wiring (Category 6)
+    // =========================================================================
+
+    [Fact]
+    public void Category6_InstrumentationControlWiring_Scenario_CanBeCreated()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "instrumentation and control wiring QA/QC",
+            Title = "Instrumentation and Control Wiring: Mandatory QA/QC Checks",
+            Prompt =
+                "Describe the mandatory QA/QC checks for instrumentation and control wiring, "
+                + "including loop checks, signal calibration records, and PLC I/O verification.",
+            WhatGoodLooksLike =
+                "A strong answer covers loop checks, signal calibration records, and PLC I/O "
+                + "verification, and references the required sign-off documentation.",
+        };
+
+        Assert.Equal("instrumentation and control wiring QA/QC", scenario.Topic);
+        Assert.Contains("loop checks", scenario.Prompt);
+        Assert.Contains("signal calibration", scenario.Prompt);
+        Assert.Contains("PLC I/O verification", scenario.Prompt);
+    }
+
+    [Fact]
+    public void Category6_InstrumentationControl_WhatGoodLooksLike_CoversThreeMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "instrumentation and control wiring QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers loop checks, signal calibration records, "
+                + "and PLC I/O verification.",
+        };
+
+        Assert.Contains("loop checks", scenario.WhatGoodLooksLike);
+        Assert.Contains("signal calibration", scenario.WhatGoodLooksLike);
+        Assert.Contains("PLC I/O verification", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category6_FallbackScoring_ValidationKeyword_ScoresValidationThinkingThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "instrumentation and control wiring QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Loop checks must be performed to validate the complete signal path from field instrument "
+            + "to PLC input, confirming correct wiring and signal levels before commissioning.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public void Category6_LearningDocument_Topics_IncludeAllThreeMandatoryChecks()
     {
         var document = new LearningDocument
         {
-            FileName = "instrumentation-control-section113-cat6.md",
-            RelativePath = "Knowledge/instrumentation-control-section113-cat6.md",
+            FileName = "instrumentation-control-wiring-qaqc.md",
+            RelativePath = "Knowledge/instrumentation-control-wiring-qaqc.md",
             Summary =
-                "Section 1.13 category 6: instrumentation and control wiring mandatory tests. "
-                + "Covers loop checks, signal calibration records, PLC I/O verification.",
+                "Watercare QA/QC section 1.13 category 6: instrumentation and control wiring "
+                + "mandatory tests. Covers loop checks, signal calibration records, "
+                + "and PLC I/O verification.",
             Topics =
             [
                 "instrumentation",
@@ -1396,15 +763,129 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_Cat7_LearningDocument_Topics_IncludeAllMandatoryChecks()
+    public void Category6_KnowledgeSearch_InstrumentationQuery_FindsRelevantDocument()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "instrumentation-control-wiring-qaqc.md",
+                    RelativePath = "Knowledge/instrumentation-control-wiring-qaqc.md",
+                    Summary =
+                        "Mandatory QA/QC tests for instrumentation and control wiring: loop checks, "
+                        + "signal calibration records, PLC I/O verification.",
+                    Topics = ["instrumentation", "control wiring", "loop checks", "PLC I/O"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motors-drives-qaqc.md",
+                    RelativePath = "Knowledge/motors-drives-qaqc.md",
+                    Summary = "Rotation checks and thermal overload settings for motors and drives.",
+                    Topics = ["motors", "drives", "rotation", "thermal overload"],
+                },
+            ],
+        };
+
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "instrumentation control wiring loop checks PLC",
+            library
+        );
+
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("instrumentation-control-wiring-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 7 – Earthing and Bonding Systems (Category 7)
+    // =========================================================================
+
+    [Fact]
+    public void Category7_EarthingAndBonding_Scenario_CanBeCreated()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "earthing and bonding QA/QC",
+            Title = "Earthing and Bonding Systems: Mandatory QA/QC Checks",
+            Prompt =
+                "What mandatory QA/QC checks are required for earthing and bonding systems? "
+                + "Include earth resistance measurements and bonding continuity records.",
+            WhatGoodLooksLike =
+                "A strong answer covers earth resistance measurements and bonding continuity "
+                + "records, and references the required sign-off documentation.",
+        };
+
+        Assert.Equal("earthing and bonding QA/QC", scenario.Topic);
+        Assert.Contains("earth resistance measurements", scenario.Prompt);
+        Assert.Contains("bonding continuity records", scenario.Prompt);
+    }
+
+    [Fact]
+    public void Category7_EarthingAndBonding_WhatGoodLooksLike_CoversTwoMandatoryChecks()
+    {
+        var scenario = new OralDefenseScenario
+        {
+            Topic = "earthing and bonding QA/QC",
+            WhatGoodLooksLike =
+                "A strong answer covers earth resistance measurements and bonding continuity records.",
+        };
+
+        Assert.Contains("earth resistance measurements", scenario.WhatGoodLooksLike);
+        Assert.Contains("bonding continuity records", scenario.WhatGoodLooksLike);
+    }
+
+    [Fact]
+    public async Task Category7_FallbackScoring_EarthResistanceKeyword_ScoresTechnicalCorrectnessThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "earthing and bonding QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Earth ground resistance measurements must be taken at each earth electrode using a "
+            + "dedicated earth resistance tester, confirming resistance below the design threshold "
+            + "before the system is energised.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var technical = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Technical Correctness");
+        Assert.NotNull(technical);
+        Assert.True(technical!.Score >= 3, $"Expected Technical Correctness >= 3 but was {technical.Score}");
+    }
+
+    [Fact]
+    public async Task Category7_FallbackScoring_BondingKeyword_ScoresValidationThinkingThreeOrMore()
+    {
+        var service = MakeService();
+        var scenario = new OralDefenseScenario { Topic = "earthing and bonding QA/QC" };
+
+        var evaluation = await service.ScoreResponseAsync(
+            scenario,
+            "Bonding continuity records must validate that all metallic structural components "
+            + "are connected to the main earthing terminal with resistance below 0.1 Ω.",
+            new SuiteSnapshot(),
+            new LearningProfile(),
+            new LearningLibrary()
+        );
+
+        var validation = evaluation.RubricItems.FirstOrDefault(r => r.Name == "Validation Thinking");
+        Assert.NotNull(validation);
+        Assert.True(validation!.Score >= 3, $"Expected Validation Thinking >= 3 but was {validation.Score}");
+    }
+
+    [Fact]
+    public void Category7_LearningDocument_Topics_IncludeBothMandatoryChecks()
     {
         var document = new LearningDocument
         {
-            FileName = "earthing-bonding-section113-cat7.md",
-            RelativePath = "Knowledge/earthing-bonding-section113-cat7.md",
+            FileName = "earthing-bonding-qaqc.md",
+            RelativePath = "Knowledge/earthing-bonding-qaqc.md",
             Summary =
-                "Section 1.13 category 7: earthing and bonding systems mandatory tests. "
-                + "Covers earth resistance measurements and bonding continuity records.",
+                "Watercare QA/QC section 1.13 category 7: earthing and bonding systems mandatory "
+                + "tests. Covers earth resistance measurements and bonding continuity records.",
             Topics =
             [
                 "earthing",
@@ -1419,7 +900,7 @@ public sealed class ElectricalQaQcSection113IntegrationTests
     }
 
     [Fact]
-    public void Section113_FullChecklist_AllSevenCategories_PresentInLearningLibrary()
+    public void Category7_KnowledgeSearch_EarthingQuery_FindsRelevantDocument()
     {
         var library = new LearningLibrary
         {
@@ -1427,47 +908,249 @@ public sealed class ElectricalQaQcSection113IntegrationTests
             [
                 new LearningDocument
                 {
-                    FileName = "qa-templates-section113-full.md",
-                    RelativePath = "Knowledge/qa-templates-section113-full.md",
+                    FileName = "earthing-bonding-qaqc.md",
+                    RelativePath = "Knowledge/earthing-bonding-qaqc.md",
                     Summary =
-                        "Section 1.13 all mandatory QA/QC categories: general installation, "
-                        + "cables and conduit, switchboards, motors and drives, "
-                        + "lighting and small power, instrumentation and control wiring, "
-                        + "earthing and bonding systems.",
-                    Topics =
-                    [
-                        "general installation",
-                        "cables",
-                        "conduit",
-                        "switchboard",
-                        "distribution centre",
-                        "control centre",
-                        "motor",
-                        "drive",
-                        "lighting",
-                        "small power",
-                        "instrumentation",
-                        "control wiring",
-                        "earthing",
-                        "bonding",
-                    ],
+                        "Mandatory QA/QC tests for earthing and bonding: earth resistance "
+                        + "measurements and bonding continuity records.",
+                    Topics = ["earthing", "bonding", "earth resistance", "bonding continuity"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-circuit-test.md",
+                    RelativePath = "Knowledge/lighting-circuit-test.md",
+                    Summary = "RCD trip-time tests and lux verification for lighting circuits.",
+                    Topics = ["lighting", "RCD", "lux"],
                 },
             ],
         };
 
-        var document = library.Documents.FirstOrDefault(
-            d => d.FileName == "qa-templates-section113-full.md"
+        var result = KnowledgeSearchService.FallbackTextSearch(
+            "earthing bonding earth resistance continuity",
+            library
         );
 
-        Assert.NotNull(document);
-        Assert.Contains("general installation", document!.Topics);
+        Assert.NotEmpty(result.Results);
+        Assert.Equal("earthing-bonding-qaqc.md", result.Results[0].Title);
+    }
+
+    // =========================================================================
+    // Group 8 – Section 1.13 Top-Level Structure Tests
+    // =========================================================================
+
+    [Fact]
+    public void Section113_AllSevenCategories_AreRepresentedInLibrary()
+    {
+        var library = new LearningLibrary
+        {
+            Documents =
+            [
+                new LearningDocument
+                {
+                    FileName = "general-electrical-installation-qaqc.md",
+                    Topics = ["general electrical installation", "earthing continuity", "insulation resistance"],
+                },
+                new LearningDocument
+                {
+                    FileName = "cables-conduit-qaqc.md",
+                    Topics = ["cables", "conduit", "megger test results"],
+                },
+                new LearningDocument
+                {
+                    FileName = "switchboard-distribution-control-qaqc.md",
+                    Topics = ["switchboard", "distribution centre", "control centre", "protection relay"],
+                },
+                new LearningDocument
+                {
+                    FileName = "motors-drives-qaqc.md",
+                    Topics = ["motors", "drives", "rotation checks", "thermal overload settings"],
+                },
+                new LearningDocument
+                {
+                    FileName = "lighting-small-power-qaqc.md",
+                    Topics = ["lighting", "small power", "RCD trip-time", "lux level verification"],
+                },
+                new LearningDocument
+                {
+                    FileName = "instrumentation-control-wiring-qaqc.md",
+                    Topics = ["instrumentation", "control wiring", "loop checks", "PLC I/O verification"],
+                },
+                new LearningDocument
+                {
+                    FileName = "earthing-bonding-qaqc.md",
+                    Topics = ["earthing", "bonding", "earth resistance measurements", "bonding continuity records"],
+                },
+            ],
+        };
+
+        Assert.Equal(7, library.Documents.Count);
+        Assert.Contains(library.Documents, d => d.Topics.Contains("general electrical installation"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("cables"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("switchboard"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("motors"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("lighting"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("instrumentation"));
+        Assert.Contains(library.Documents, d => d.Topics.Contains("earthing"));
+    }
+
+    [Fact]
+    public void Section113_ChecklistCompliance_AllCategoryTopics_PresentInFullLibraryDocument()
+    {
+        var document = new LearningDocument
+        {
+            FileName = "qa-templates-electrical-section113-full.md",
+            RelativePath = "Knowledge/qa-templates-electrical-section113-full.md",
+            Summary =
+                "Watercare QA/QC template section 1.13 full mandatory test categories: "
+                + "general electrical installation, cables and conduit, switchboards, "
+                + "distribution centres, control centres, motors and drives, lighting and small power, "
+                + "instrumentation and control wiring, earthing and bonding systems.",
+            Topics =
+            [
+                "general electrical installation",
+                "cables",
+                "conduit",
+                "switchboard",
+                "distribution centre",
+                "control centre",
+                "motors",
+                "drives",
+                "lighting",
+                "small power",
+                "instrumentation",
+                "control wiring",
+                "earthing",
+                "bonding",
+            ],
+        };
+
+        Assert.Contains("general electrical installation", document.Topics);
         Assert.Contains("cables", document.Topics);
         Assert.Contains("switchboard", document.Topics);
-        Assert.Contains("motor", document.Topics);
+        Assert.Contains("motors", document.Topics);
         Assert.Contains("lighting", document.Topics);
         Assert.Contains("instrumentation", document.Topics);
         Assert.Contains("earthing", document.Topics);
-        Assert.Contains("bonding", document.Topics);
+    }
+
+    [Fact]
+    public async Task Section113_FallbackEvaluation_AllCategories_TotalScoreWithinValidRange()
+    {
+        var service = MakeService();
+
+        var categories = new[]
+        {
+            "general electrical installation QA/QC",
+            "cables and conduit QA/QC",
+            "motors and drives QA/QC",
+            "lighting and small power QA/QC",
+            "instrumentation and control wiring QA/QC",
+            "earthing and bonding QA/QC",
+        };
+
+        foreach (var topic in categories)
+        {
+            var scenario = new OralDefenseScenario { Topic = topic };
+            var evaluation = await service.ScoreResponseAsync(
+                scenario,
+                $"The standard QA/QC checks for {topic} must be completed and signed off.",
+                new SuiteSnapshot(),
+                new LearningProfile(),
+                new LearningLibrary()
+            );
+
+            Assert.InRange(evaluation.TotalScore, 0, 20);
+        }
+    }
+
+    [Fact]
+    public async Task Section113_FallbackEvaluation_AllCategories_HaveExactlyFiveRubricItems()
+    {
+        var service = MakeService();
+
+        var categories = new[]
+        {
+            "general electrical installation QA/QC",
+            "cables and conduit QA/QC",
+            "motors and drives QA/QC",
+            "lighting and small power QA/QC",
+            "instrumentation and control wiring QA/QC",
+            "earthing and bonding QA/QC",
+        };
+
+        foreach (var topic in categories)
+        {
+            var scenario = new OralDefenseScenario { Topic = topic };
+            var evaluation = await service.ScoreResponseAsync(
+                scenario,
+                "Some answer.",
+                new SuiteSnapshot(),
+                new LearningProfile(),
+                new LearningLibrary()
+            );
+
+            Assert.Equal(5, evaluation.RubricItems.Count);
+        }
+    }
+
+    [Fact]
+    public async Task Section113_FallbackEvaluation_AllCategories_HaveThreeRecommendedFollowUps()
+    {
+        var service = MakeService();
+
+        var categories = new[]
+        {
+            "general electrical installation QA/QC",
+            "cables and conduit QA/QC",
+            "motors and drives QA/QC",
+            "lighting and small power QA/QC",
+            "instrumentation and control wiring QA/QC",
+            "earthing and bonding QA/QC",
+        };
+
+        foreach (var topic in categories)
+        {
+            var scenario = new OralDefenseScenario { Topic = topic };
+            var evaluation = await service.ScoreResponseAsync(
+                scenario,
+                "Some answer.",
+                new SuiteSnapshot(),
+                new LearningProfile(),
+                new LearningLibrary()
+            );
+
+            Assert.Equal(3, evaluation.RecommendedFollowUps.Count);
+        }
+    }
+
+    [Fact]
+    public async Task Section113_FallbackEvaluation_AllCategories_NextReviewRecommendation_IsNonEmpty()
+    {
+        var service = MakeService();
+
+        var categories = new[]
+        {
+            "general electrical installation QA/QC",
+            "cables and conduit QA/QC",
+            "motors and drives QA/QC",
+            "lighting and small power QA/QC",
+            "instrumentation and control wiring QA/QC",
+            "earthing and bonding QA/QC",
+        };
+
+        foreach (var topic in categories)
+        {
+            var scenario = new OralDefenseScenario { Topic = topic };
+            var evaluation = await service.ScoreResponseAsync(
+                scenario,
+                "The mandatory QA/QC checks must be completed and signed off before energisation.",
+                new SuiteSnapshot(),
+                new LearningProfile(),
+                new LearningLibrary()
+            );
+
+            Assert.False(string.IsNullOrWhiteSpace(evaluation.NextReviewRecommendation));
+        }
     }
 
     // -------------------------------------------------------------------------
