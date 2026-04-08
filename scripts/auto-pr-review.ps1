@@ -217,6 +217,33 @@ foreach ($repo in $repos) {
             # ==========================================
             Write-Host "`n--- Reviewing $repoShort#$($pr.number): $($pr.title) ---"
 
+            # ---- Log raw PR data BEFORE scoring (unconditional) ----
+            $rawLogFile = "$HOME\.office-rag-db\raw-pr-data.jsonl"
+            try {
+                $rawRecord = @{
+                    pr_number    = [int]$pr.number
+                    repo         = $repoShort
+                    title        = $pr.title
+                    author       = $pr.user.login
+                    branch       = $pr.head.ref
+                    base_branch  = $pr.base.ref
+                    created_at   = $pr.created_at
+                    updated_at   = $pr.updated_at
+                    additions    = [int]$freshPr.additions
+                    deletions    = [int]$freshPr.deletions
+                    changed_files = [int]$freshPr.changed_files
+                    files        = $thisFiles
+                    body         = $pr.body
+                    labels       = @($pr.labels | ForEach-Object { $_.name })
+                    draft        = $pr.draft
+                    commits      = [int]$freshPr.commits
+                    logged_at    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+                } | ConvertTo-Json -Compress
+                Add-Content -Path $rawLogFile -Value $rawRecord -Encoding UTF8
+            } catch {
+                Write-Host "WARN: Failed to write raw JSONL log: $($_.Exception.Message)"
+            }
+
             $diffHeaders = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.github.v3.diff" }
             $diff = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/pulls/$($pr.number)" -Headers $diffHeaders
 
@@ -390,22 +417,58 @@ You MUST respond with ONLY this JSON structure — no markdown, no extra text:
             $mergeStatus = ""
 
             # Build training record for ML data export
+            $additions    = [int]$freshPr.additions
+            $deletions    = [int]$freshPr.deletions
+            $testFiles    = @($thisFiles | Where-Object { $_ -match 'test|spec|Tests\.cs' })
+            $docFiles     = @($thisFiles | Where-Object { $_ -match '\.md$|Docs/|README' })
+            $fileCount    = if ($thisFiles) { $thisFiles.Count } else { 0 }
+            $testRatio    = if ($fileCount -gt 0) { [Math]::Round($testFiles.Count / $fileCount, 4) } else { 0.0 }
+            $topDirs      = @($thisFiles | ForEach-Object { ($_ -replace '\\', '/').Split('/')[0] } | Sort-Object -Unique)
+
             $trainingRecord = @{
-                decision    = $tierAction
-                repo        = $repoShort
-                pr_number   = [int]$pr.number
-                title       = $pr.title
-                score       = $score
-                verdict     = $verdict
-                files       = $thisFiles
-                file_count  = $thisFiles.Count
-                additions   = [int]$freshPr.additions
-                deletions   = [int]$freshPr.deletions
+                decision          = $tierAction
+                repo              = $repoShort
+                pr_number         = [int]$pr.number
+                title             = $pr.title
+                author            = $pr.user.login
+                branch            = $pr.head.ref
+                created_at        = $pr.created_at
+                score             = $score
+                verdict           = $verdict
+                files             = $thisFiles
+                file_count        = $fileCount
+                additions         = $additions
+                deletions         = $deletions
+                total_size        = ([int]$additions + [int]$deletions)
+                has_tests         = if ($testFiles.Count -gt 0) { 1.0 } else { 0.0 }
+                has_docs          = if ($docFiles.Count -gt 0) { 1.0 } else { 0.0 }
+                test_ratio        = $testRatio
+                dir_spread        = $topDirs.Count
+                cluster_id               = $null
+                cluster_label            = $null
+                cluster_confidence       = $null
+                embedding_similarity_scores = $null
+                plateau_detected         = $null
+                forecast_confidence      = $null
                 model       = "qwen3:14b"
                 json_parsed = ($null -ne $parsedJson)
                 concerns    = if ($parsedJson) { $parsedJson.concerns } else { @() }
                 summary     = if ($parsedJson) { $parsedJson.summary } else { ($review -split "`n")[0..2] -join " " }
                 timestamp   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+            }
+
+            # Optional schema validation (non-blocking — logs warning only)
+            try {
+                $validateScript = Join-Path $PSScriptRoot "scoring\validate_schema.py"
+                if (Test-Path $validateScript) {
+                    $validationJson = $trainingRecord | ConvertTo-Json -Compress -Depth 10
+                    $validationResult = $validationJson | & python $validateScript 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Host "WARN: Schema validation failed for $repoShort#$($pr.number): $validationResult"
+                    }
+                }
+            } catch {
+                Write-Host "WARN: Schema validation error: $($_.Exception.Message)"
             }
 
             if ($tierAction -eq "auto-merge" -and $verdict -eq "APPROVE") {
