@@ -213,5 +213,235 @@ class TestHappyPath(unittest.TestCase):
         self.assertTrue(result["ok"])
 
 
+# ---------------------------------------------------------------------------
+# Group 4: Real KeyError integration tests (data-driven, no mocks)
+# ---------------------------------------------------------------------------
+class TestKeyErrorIntegration(unittest.TestCase):
+    """Passing malformed input data that causes real KeyErrors in builder functions.
+
+    Verifies that each direct key access in the builder functions (``entry["topic"]``,
+    ``embedding["documentId"]``, etc.) is covered by the outer exception handler and
+    returns the static error string rather than leaking internal detail.
+    """
+
+    def _assert_static_error(self, result: dict) -> None:
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], _STATIC_UNEXPECTED_ERROR)
+
+    # -- _build_operator_readiness --
+
+    def test_operator_readiness_missing_topic_returns_static_error(self):
+        """readinessBreakdown entry without 'topic' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {
+                    "readinessBreakdown": [{"readiness": 0.8}],  # "topic" missing
+                    "adaptiveSchedule": [],
+                    "topicClusters": [],
+                },
+                "embeddings": {},
+                "forecast": {"masteryEstimates": [], "anomalies": [], "plateaus": [], "forecasts": []},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_operator_readiness_missing_readiness_returns_static_error(self):
+        """readinessBreakdown entry without 'readiness' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {
+                    "readinessBreakdown": [{"topic": "Circuits"}],  # "readiness" missing
+                    "adaptiveSchedule": [],
+                    "topicClusters": [],
+                },
+                "embeddings": {},
+                "forecast": {"masteryEstimates": [], "anomalies": [], "plateaus": [], "forecasts": []},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    # -- _build_knowledge_index --
+
+    def test_knowledge_index_missing_document_id_returns_static_error(self):
+        """Embedding entry without 'documentId' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {},
+                "embeddings": {
+                    "embeddings": [{"title": "Doc A", "dimensions": 128}],  # "documentId" missing
+                    "similarities": [],
+                },
+                "forecast": {},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_knowledge_index_missing_title_returns_static_error(self):
+        """Embedding entry without 'title' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {},
+                "embeddings": {
+                    "embeddings": [{"documentId": "doc-1", "dimensions": 128}],  # "title" missing
+                    "similarities": [],
+                },
+                "forecast": {},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_knowledge_index_missing_dimensions_returns_static_error(self):
+        """Embedding entry without 'dimensions' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {},
+                "embeddings": {
+                    "embeddings": [{"documentId": "doc-1", "title": "Doc 1"}],  # "dimensions" missing
+                    "similarities": [],
+                },
+                "forecast": {},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_knowledge_index_missing_document_a_in_similarity_returns_static_error(self):
+        """Similarity pair without 'documentA' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {},
+                "embeddings": {
+                    "embeddings": [],
+                    "similarities": [{"documentB": "doc-2", "similarity": 0.9}],  # "documentA" missing
+                },
+                "forecast": {},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_knowledge_index_missing_document_b_in_similarity_returns_static_error(self):
+        """Similarity pair without 'documentB' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {},
+                "embeddings": {
+                    "embeddings": [],
+                    "similarities": [{"documentA": "doc-1", "similarity": 0.9}],  # "documentB" missing
+                },
+                "forecast": {},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    # -- _build_study_schedule --
+
+    def test_study_schedule_missing_topic_returns_static_error(self):
+        """adaptiveSchedule entry without 'topic' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {
+                    "readinessBreakdown": [],
+                    "adaptiveSchedule": [{"sessions": 3}],  # "topic" missing
+                    "topicClusters": [],
+                },
+                "embeddings": {},
+                "forecast": {"masteryEstimates": [], "anomalies": [], "plateaus": [], "forecasts": []},
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    # -- _build_watchdog_baseline --
+
+    def test_watchdog_baseline_missing_topic_returns_static_error(self):
+        """Forecast entry without 'topic' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {"readinessBreakdown": [], "adaptiveSchedule": [], "topicClusters": []},
+                "embeddings": {},
+                "forecast": {
+                    "masteryEstimates": [],
+                    "anomalies": [],
+                    "plateaus": [],
+                    "forecasts": [
+                        {"currentAccuracy": 0.8, "trend": "up", "dataPoints": 10}  # "topic" missing
+                    ],
+                },
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_watchdog_baseline_missing_current_accuracy_returns_static_error(self):
+        """Forecast entry without 'currentAccuracy' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {"readinessBreakdown": [], "adaptiveSchedule": [], "topicClusters": []},
+                "embeddings": {},
+                "forecast": {
+                    "masteryEstimates": [],
+                    "anomalies": [],
+                    "plateaus": [],
+                    "forecasts": [
+                        {"topic": "Circuits", "trend": "up", "dataPoints": 10}  # "currentAccuracy" missing
+                    ],
+                },
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_watchdog_baseline_missing_trend_returns_static_error(self):
+        """Forecast entry without 'trend' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {"readinessBreakdown": [], "adaptiveSchedule": [], "topicClusters": []},
+                "embeddings": {},
+                "forecast": {
+                    "masteryEstimates": [],
+                    "anomalies": [],
+                    "plateaus": [],
+                    "forecasts": [
+                        {"topic": "Circuits", "currentAccuracy": 0.8, "dataPoints": 10}  # "trend" missing
+                    ],
+                },
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    def test_watchdog_baseline_missing_data_points_returns_static_error(self):
+        """Forecast entry without 'dataPoints' key raises KeyError."""
+        payload = json.dumps(
+            {
+                "analytics": {"readinessBreakdown": [], "adaptiveSchedule": [], "topicClusters": []},
+                "embeddings": {},
+                "forecast": {
+                    "masteryEstimates": [],
+                    "anomalies": [],
+                    "plateaus": [],
+                    "forecasts": [
+                        {"topic": "Circuits", "currentAccuracy": 0.8, "trend": "up"}  # "dataPoints" missing
+                    ],
+                },
+            }
+        )
+        self._assert_static_error(_run_main_with_input(payload))
+
+    # -- No information disclosure --
+
+    def test_key_error_does_not_leak_missing_key_name(self):
+        """The missing key name must NOT appear in the error response."""
+        payload = json.dumps(
+            {
+                "analytics": {
+                    "readinessBreakdown": [{"readiness": 0.8}],  # triggers KeyError("topic")
+                    "adaptiveSchedule": [],
+                    "topicClusters": [],
+                },
+                "embeddings": {},
+                "forecast": {"masteryEstimates": [], "anomalies": [], "plateaus": [], "forecasts": []},
+            }
+        )
+        result = _run_main_with_input(payload)
+        self.assertNotIn("topic", result.get("error", ""))
+        self.assertNotIn("KeyError", result.get("error", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
