@@ -1,47 +1,83 @@
-# Daily Office
+# Office — ML-Powered PR Scoring Pipeline
 
-Separate repo for the `Office` desktop app (`DailyDesk`) and its local knowledge/mockup assets.
+Office is an ML-powered PR scoring and training pipeline with a two-machine distributed setup. It continuously scores pull requests using a local Ollama LLM, feeds the scores into a training feature schema, retrains a gradient-boosted scoring model, and keeps a RAG index updated for context retrieval.
 
 ## Layout
 
-- `DailyDesk/`: WPF application source
+- `DailyDesk/`: WPF desktop application (operator UI and agent desks)
 - `DailyDesk.Broker/`: ASP.NET Core web service broker (localhost:57420)
-- `DailyDesk.Core/`: Shared business logic & models library
+- `DailyDesk.Core/`: Shared business logic and ML pipeline models
 - `DailyDesk.Core.Tests/`: Unit tests (xUnit)
-- `Knowledge/`: repo-owned knowledge and seed content
-- `Mockups/`: UI mockups and experiments
+- `scripts/`: PR scoring pipeline, RAG system, and ML training scripts
+- `schemas/`: Training feature schema (`feature-v1.json`)
+- `Knowledge/`: Repo-owned seed knowledge for the RAG index
+- `Docs/`: Architecture, conventions, and library decisions
+
+## ML Scoring Pipeline
+
+The pipeline scores every open PR using a local Ollama model, records the scores as training features, and retrains the scoring model on a schedule.
+
+```
+auto-pr-review.ps1  →  feature-v1.json  →  retrain.py  →  scoring model
+        ↑                                                         ↓
+    RAG context (rag/)                                  replay-historical.ps1
+```
+
+### Key Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/auto-pr-review.ps1` | Live scoring engine — reviews all open PRs with Ollama |
+| `scripts/scoring/replay-historical.ps1` | Replay historical PR scores for model training |
+| `scripts/scoring/pull-training-data.ps1` | Pull training data from GitHub |
+| `scripts/scoring/retrain.py` | Retrain the gradient-boosted scoring model |
+| `scripts/scoring/validate_schema.py` | Validate feature schema against `feature-v1.json` |
+| `scripts/rag/index.py` | Index repository content into the RAG vector store |
+| `scripts/rag/query.py` | Query the RAG index for context retrieval |
+
+### Training Feature Schema
+
+`schemas/feature-v1.json` defines the features used for model training:
+
+- PR metadata (size, file count, author history)
+- LLM score from Ollama review
+- Merge outcome (merged / closed / still open)
+
+### Two-Machine Setup
+
+- **DUSTIN** (primary): Runs `auto-pr-review.ps1` + Ollama (qwen3:14b), handles scoring
+- **Machine 2** (secondary): Runs the lighter `qwen3:8b` model, handles training replay
 
 ## Agent Desks
 
-Office includes five Ollama-powered agent routes, each with its own personality and focus:
+Office includes five Ollama-powered agent desks, each with its own focus:
 
 | Route | Title | Purpose |
 |-------|-------|---------|
-| `chief` | Chief of Staff | Routes the day across Suite, engineering, CAD, and growth |
-| `engineering` | Engineering Desk | EE coaching, CAD workflow judgment, practice tests, oral defense |
-| `suite` | Suite Context | Read-only awareness of Suite repo, trust, and runtime signals |
-| `business` | Growth Ops | Monetization discipline, offers, career proof |
-| `ml` | ML Engineer | Machine learning insights, forecasts, and Suite-ready artifacts |
+| `chief` | Chief of Staff | Routes the day across Suite, engineering, and growth |
+| `engineering` | Engineering Desk | Technical analysis and code review support |
+| `suite` | Suite Context | Read-only awareness of Suite repo and runtime signals |
+| `business` | Growth Ops | Monetization and offer framing |
+| `ml` | ML Engineer | ML pipeline status, forecasts, and Suite-ready artifacts |
 
-## ML Pipeline
+## Embedded ML Pipeline
 
-Office includes a local machine learning pipeline that analyzes training data and produces actionable insights. The pipeline runs Python scripts as subprocesses and falls back to heuristic analysis when ML libraries are not installed.
+Office includes a local machine learning pipeline that analyzes operator data and produces actionable insights. The pipeline runs Python scripts as subprocesses and falls back to heuristic analysis when ML libraries are not installed.
 
 ### ML Engines
 
 | Engine | Library | Purpose |
 |--------|---------|---------|
-| Learning Analytics | Scikit-learn | Topic clustering, readiness prediction, adaptive study scheduling, operator pattern classification |
+| Analytics | Scikit-learn | Pattern clustering, operator readiness prediction, pattern classification |
 | Document Embeddings | PyTorch | Semantic embeddings for knowledge library, document similarity, relevance-ranked search |
-| Progress Forecast | TensorFlow | Time-series accuracy forecasting, plateau detection, anomaly alerts, mastery estimation |
+| Forecast | TensorFlow | Time-series forecasting, anomaly alerts, trend estimation |
 
 ### Suite Integration Artifacts
 
 The ML pipeline produces versioned artifacts that Suite can consume through its deterministic workflows:
 
-- **operator-readiness**: Skill readiness signals for project task assignment
+- **operator-readiness**: Readiness signals for project task assignment
 - **knowledge-index**: Semantic document index for Suite's standards checker
-- **study-schedule**: Adaptive study plan for Suite's project timeline
 - **watchdog-baseline**: Anomaly detection baselines for Suite's watchdog telemetry
 
 Artifacts are exported to `State/ml-artifacts/` and follow Suite's review-first design philosophy.
@@ -62,9 +98,7 @@ Document extraction works with basic `pypdf` and `python-docx` out of the box. F
 pip install docling
 ```
 
-When Docling is installed, the extraction script automatically uses it for supported formats (PDF, DOCX, PPTX, HTML, images). When Docling is not installed, the script falls back to the basic `pypdf`/`python-docx` extractors.
-
-Enable the pipeline in `dailydesk.settings.json`:
+Enable the embedded ML pipeline in `dailydesk.settings.json`:
 
 ```json
 {
@@ -76,13 +110,13 @@ Enable the pipeline in `dailydesk.settings.json`:
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/api/ml/analytics` | Run Scikit-learn learning analytics (async; `?sync=true` for blocking) |
-| POST | `/api/ml/forecast` | Run TensorFlow progress forecast (async; `?sync=true` for blocking) |
+| POST | `/api/ml/analytics` | Run Scikit-learn analytics (async; `?sync=true` for blocking) |
+| POST | `/api/ml/forecast` | Run TensorFlow forecast (async; `?sync=true` for blocking) |
 | POST | `/api/ml/embeddings` | Run PyTorch document embeddings (async; `?sync=true` for blocking) |
 | POST | `/api/ml/pipeline` | Run full ML pipeline (all three engines + artifact export) |
 | POST | `/api/ml/export-artifacts` | Export Suite integration artifacts |
-| POST | `/api/ml/index-knowledge` | Index knowledge documents into vector store (async, `?sync=true` for blocking) |
-| GET | `/api/knowledge/index-status` | Get knowledge index status (indexed vs. total) |
+| POST | `/api/ml/index-knowledge` | Index knowledge documents into vector store (async) |
+| GET | `/api/knowledge/index-status` | Get knowledge index status |
 | POST | `/api/knowledge/search` | Semantic search across the knowledge library |
 
 ### Job Endpoints
@@ -95,27 +129,13 @@ Enable the pipeline in `dailydesk.settings.json`:
 | GET | `/api/jobs/metrics` | Job throughput, failure rates, and queue depth |
 | DELETE | `/api/jobs/{jobId}` | Delete a completed job |
 
-### Schedule & Workflow Endpoints
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/api/schedules` | List all job schedules |
-| POST | `/api/schedules` | Create a recurring schedule |
-| PUT | `/api/schedules/{id}` | Update a schedule (enable/disable, interval) |
-| DELETE | `/api/schedules/{id}` | Remove a schedule |
-| GET | `/api/daily-run/latest` | Most recent daily run summary |
-| GET | `/api/workflows` | List workflow templates |
-| POST | `/api/workflows` | Create a workflow template |
-| POST | `/api/workflows/{id}/run` | Execute a workflow template |
-| DELETE | `/api/workflows/{id}` | Remove a workflow template |
-
 ### Health Endpoint
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET | `/api/health` | Subsystem health: Ollama, Python, LiteDB, job worker |
 
-## Qdrant Setup (Phase 5 — Semantic Search)
+## Qdrant Setup (Semantic Search)
 
 Semantic search requires a local Qdrant vector database. Run Qdrant as a Docker container:
 
@@ -127,37 +147,24 @@ docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
 
 Qdrant is **optional** — all semantic search features fall back gracefully to keyword search when Qdrant is unavailable.
 
-## Local Roots
+## Workstation Setup
 
-Recommended workstation path:
+Recommended path on both machines:
 
 ```text
 C:\Users\<you>\Documents\GitHub\Office
 ```
 
-`Suite Runtime Control` resolves Office from workstation-local config first, then `C:\Users\<you>\Documents\GitHub\Office`. Office live knowledge/state now belong under Dropbox:
+Office state and knowledge files live under Dropbox:
 
 - `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\Knowledge`
 - `%USERPROFILE%\Dropbox\SuiteWorkspace\Office\State`
 
-## GitHub Remote Setup
-
-After you create the GitHub repo, wire this local repo to it:
-
-```powershell
-git remote add origin https://github.com/Koraji95-coder/Office.git
-git push -u origin main
-```
-
-## Other Workstation Setup
-
-On the other PC, clone this repo directly into the standard path:
+Clone on the second machine:
 
 ```powershell
 git clone https://github.com/Koraji95-coder/Office.git C:\Users\<you>\Documents\GitHub\Office
 ```
-
-Then clone `Suite` into `C:\Users\<you>\Documents\GitHub\Suite` and run Suite's workstation bootstrap from the `Suite` repo. If both repos are already in their standard roots, Suite does not need a `-DailyRepoUrl` argument.
 
 ## Build
 

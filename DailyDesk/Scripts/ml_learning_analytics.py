@@ -185,7 +185,7 @@ def _detect_plateau(attempts: list[dict[str, Any]], window: int = 10) -> dict[st
         return {
             "plateaued": True,
             "accuracy": round(second_acc, 3),
-            "recommendation": "Switch to oral defense or apply-style practice to break plateau",
+            "recommendation": "Switch to applied practice or change approach to break plateau",
         }
     elif improvement < -0.1:
         return {

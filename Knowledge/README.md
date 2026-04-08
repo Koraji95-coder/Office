@@ -1,6 +1,6 @@
-# Daily Desk Knowledge
+# Knowledge
 
-Daily Desk reads this folder to personalize training, coaching, and business guidance.
+This folder holds repo-owned seed content that is indexed into the RAG system and embedded ML pipeline.
 
 Supported file types:
 
@@ -11,12 +11,9 @@ Supported file types:
 
 Good uses for this folder:
 
-- class notes
-- standards summaries
-- exam prep notes
-- project notes
-- resume bullets
-- business ideas
-- written instructions about how you want the desk to coach you
+- technical standards summaries
+- project notes and reference docs
+- written context about how agents should behave
+- domain reference material for RAG retrieval
 
-The app scans this folder in read-only mode and builds a local coaching profile from what it finds.
+The RAG indexer (`scripts/rag/index.py`) scans this folder and builds a vector index used by the scoring pipeline and agent desks.

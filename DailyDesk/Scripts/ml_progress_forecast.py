@@ -168,7 +168,7 @@ def _heuristic_forecast(
                     "sessionsSincePlateau": min(
                         4, len(accuracies)
                     ),
-                    "recommendation": "Try oral defense or change difficulty level to break through.",
+                    "recommendation": "Try a different approach or change difficulty level to break through.",
                 }
             )
 

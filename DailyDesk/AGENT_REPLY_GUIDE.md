@@ -31,45 +31,30 @@ Return [output].
 Stay within [constraints].
 ```
 
-Example:
-
-```text
-Use my imported OneNote package on power-system protection.
-Create a study guide.
-Return key concepts, formulas, relay types, failure modes, common mistakes, and a 10-question self-check.
-Stay grounded in the notebook only. If the notebook does not contain enough information, say what is missing.
-```
-
 ## What Each Desk Is Good For
 
 ### Chief of Staff
 
 Use for:
 - deciding what to do next
-- routing work between study, Suite, CAD, and business
+- routing work between Suite, engineering, and business
 - turning too many ideas into one practical plan
 
 Best kinds of prompts:
-- `Give me the highest-leverage next move for today based on my current queue and training pressure.`
-- `Turn these 3 priorities into a morning plan, study block, and repo block.`
+- `Give me the highest-leverage next move for today based on my current queue.`
+- `Turn these 3 priorities into a morning plan and a repo block.`
 - `Tell me what to ignore today and why.`
 
 ### Engineering Desk
 
-This is the best desk for EE Mentor work.
-
 Use for:
-- explanations
-- study guides
-- quizzes
-- oral defenses
-- notebook-grounded learning
+- technical analysis and code review
+- architecture tradeoffs
+- implementation guidance
 
 Best kinds of prompts:
-- `Use my imported OneNote package to explain transformer differential protection like a tutor.`
-- `Quiz me one question at a time from my imported notebook. Wait for my answer before continuing.`
-- `Turn my notebook into a study guide with sections, formulas, and common mistakes.`
-- `Create a 20-question practice test from my notebook and include answer explanations at the end.`
+- `Review this design and flag the highest-risk tradeoffs.`
+- `Explain the concurrency model in the broker and what breaks if we change it.`
 
 ### Suite Context
 
@@ -77,11 +62,10 @@ Use for:
 - quiet Suite awareness
 - workflow interpretation
 - read-only repo or product context
-- workflow-pattern research tied to Suite
 
 Best kinds of prompts:
-- `Use Suite as background context only. Compare approval-routing patterns that fit our workflow.`
-- `Explain the tradeoffs of issue-set approval flow without proposing code changes yet.`
+- `Use Suite as background context only. Compare routing patterns that fit our workflow.`
+- `Explain the tradeoffs of the approval flow without proposing code changes yet.`
 
 ### Business Ops
 
@@ -89,29 +73,28 @@ Use for:
 - market research
 - competitor review
 - offer framing
-- narrowing broad research into a decision
 
 Best kinds of prompts:
-- `Research drafting workflow approval tools and return only features relevant to electrical production control.`
-- `Compare these 3 competitors by approval routing, audit trail, revision control, and pricing risk.`
+- `Research workflow automation tools and return only features relevant to production control.`
+- `Compare these competitors by approval routing, audit trail, and pricing risk.`
 
 ### ML Engineer
 
 Use for:
-- understanding the ML analytics and learning pipeline status
-- diagnosing weak topic clusters or learning plateaus
-- checking document embedding and knowledge indexing health
-- interpreting forecast anomalies or readiness scores
+- understanding the ML pipeline status
+- diagnosing scoring model health or data issues
+- checking RAG index coverage and embedding health
+- interpreting forecast anomalies or scoring drift
 
 Best kinds of prompts:
 - `What is the current ML pipeline status and when did it last run?`
-- `Show me the current weak topics and what the forecast says about my learning plateau.`
+- `Show me the scoring model performance and any data drift signals.`
 - `What is the embedding coverage for my imported knowledge documents?`
-- `Explain what the ML analytics say about my progress and what to do next.`
+- `Explain what the analytics say about recent PR scoring trends.`
 
 ## Understanding Agent Response Sections
 
-Each desk structures its answers using named sections. Knowing what each section means helps you evaluate the response and decide what to do next.
+Each desk structures its answers using named sections.
 
 ### Chief of Staff
 
@@ -119,15 +102,15 @@ Each desk structures its answers using named sections. Knowing what each section
 |---------|-----------------|
 | `NEXT MOVE` | The single highest-leverage action for right now |
 | `WHY` | The reasoning that makes this the right move |
-| `HANDOFF` | Where the work should go next (study, Suite, CAD, or business) |
+| `HANDOFF` | Where the work should go next (Suite, engineering, or business) |
 
 ### Engineering Desk
 
 | Section | What It Contains |
 |---------|-----------------|
 | `ANSWER` | The direct technical answer or explanation |
-| `CHECKS` | Key verification points, failure modes, or safety considerations |
-| `CAD OR SUITE LINK` | How this concept connects to CAD workflow or Suite context |
+| `CHECKS` | Key verification points, failure modes, or risks |
+| `SUITE LINK` | How this connects to Suite context or runtime signals |
 
 ### Suite Context
 
@@ -141,8 +124,8 @@ Each desk structures its answers using named sections. Knowing what each section
 
 | Section | What It Contains |
 |---------|-----------------|
-| `MOVE` | The specific internal operating move or offer-shaping step |
-| `WHY IT WINS` | The reason this move produces real value without hype |
+| `MOVE` | The specific operating move or offer-shaping step |
+| `WHY IT WINS` | The reason this move produces real value |
 | `WHAT TO PROVE` | The measurable proof point or next validation step |
 
 ### ML Engineer
@@ -151,20 +134,14 @@ Each desk structures its answers using named sections. Knowing what each section
 |---------|-----------------|
 | `ML STATUS` | Current pipeline state, last run timestamp, and component health |
 | `INSIGHTS` | Key findings from analytics, forecast, or embedding results |
-| `RECOMMENDATIONS` | Specific actions to improve pipeline health or learning outcomes |
+| `RECOMMENDATIONS` | Specific actions to improve pipeline health |
 | `SUITE INTEGRATION` | How ML results connect to Suite workflow or production context |
 
 ## Know The Difference Between Desk Chat And Inbox Work
 
 ### Desk Chat
 
-Desk chat is where you ask directly for an answer, explanation, study aid, or research result.
-
-Use it when you want:
-- an explanation now
-- a study guide now
-- a quiz now
-- a research memo now
+Desk chat is where you ask directly for an answer, explanation, or research result.
 
 ### Inbox
 
@@ -176,55 +153,37 @@ Use it when the app proposes:
 - a Suite-adjacent workflow investigation
 - a repo or implementation proposal
 
-Inbox is not the same as desk chat. Inbox items are proposed moves, not finished work.
+Inbox items are proposed moves, not finished work.
 
 ## What Approval Buttons Actually Mean
 
-This is the part that matters most.
-
 ### `Approve only`
 
-This records your decision.
+Records your decision. Does **not** start execution. Item moves to `Approved next`.
 
-It does **not** start research or execution.
-
-The item moves to `Approved next`.
-
-Use this when:
-- you agree with the direction
-- you want to keep it
-- you are not ready to start it yet
+Use when you agree with the direction but are not ready to start it yet.
 
 ### `Approve & queue`
 
-This records your decision and stages the item for follow-through.
-
-Use this when:
-- you want it kept in the active work lane
-- you do not need it to run immediately
+Records your decision and stages the item for follow-through.
 
 ### `Approve & run`
 
-This records your decision and starts the research follow-up immediately.
+Records your decision and starts the follow-up immediately.
 
-Use this when:
-- you want the result now
-- the item is clearly scoped
-- you already know what output you want
+Use when the item is clearly scoped and you want the result now.
 
 ### `Queue`
 
-This stages an already approved or self-serve item.
+Stages an already approved or self-serve item.
 
 ### `Run now`
 
-This starts the selected item immediately.
-
-If the item is a research follow-up, this is what actually makes the app do the work.
+Starts the selected item immediately.
 
 ## Workflow Templates
 
-Workflow templates are named sequences of background jobs that run in order. Use them when you need the pipeline, knowledge, or analytics updated as a unit.
+Workflow templates are named sequences of background jobs that run in order.
 
 ### Built-In Templates
 
@@ -232,120 +191,25 @@ Workflow templates are named sequences of background jobs that run in order. Use
 
 Runs the full daily pipeline: ML Pipeline, Export Suite Artifacts, and Index Knowledge Documents.
 
-Use when:
-- you are starting your work session and want everything current
-- you want all ML and knowledge state refreshed in one step
+Use when you want all ML and knowledge state refreshed in one step.
 
 Steps: ML Pipeline → Export Suite Artifacts → Index Knowledge Documents
 
-#### Exam Prep
-
-Focused workflow for study preparation: runs learning analytics, generates document embeddings, and re-indexes knowledge documents.
-
-Use when:
-- you are preparing for a practice test or oral defense
-- you want weak topics, knowledge coverage, and embeddings all current before a study session
-
-Steps: Run Learning Analytics → Generate Document Embeddings → Index Knowledge Documents
-
 #### Knowledge Refresh
 
-Re-indexes all knowledge documents and updates embeddings. Aborts if any step fails.
+Re-indexes all knowledge documents and updates embeddings.
 
-Use when:
-- you have imported new documents and want them indexed immediately
-- knowledge search results are stale or missing recent imports
+Use when you have imported new documents and want them indexed immediately.
 
 Steps: Index Knowledge Documents → Refresh Document Embeddings
 
 ### Running A Template
 
-Templates can be run directly from the workflow panel or via the Approve & run path in the inbox.
+Templates can be run from the workflow panel or via the Approve & run path in the inbox.
 If you want results immediately, use `Run now` after selecting the template.
 If you want it staged for later, use `Queue`.
 
-## How To Write Useful Approval Reasons
-
-A good approval reason should answer 3 things:
-
-1. Why this matters now
-2. What the return should focus on
-3. What to ignore
-
-Weak:
-
-```text
-Yes
-```
-
-Better:
-
-```text
-Useful because I need approval-routing patterns for electrical drafting.
-Focus on revision control, signoff states, audit trail, and package handoff.
-Ignore CRM, billing, and generic PM features.
-```
-
-Best:
-
-```text
-Approve and run.
-I need this to evaluate whether Suite should support drawing review routing and issue-set approvals.
-Return a short fit-gap summary, top 5 features, missing proof, and one recommendation.
-Ignore generic project-management features.
-```
-
-## Best Reply Patterns For Study And Learning
-
-If you want EE Mentor to help you learn, reply in one of these patterns.
-
-### Study Guide
-
-```text
-Use my imported OneNote package on [topic].
-Create a study guide.
-Return concepts, formulas, terminology, failure modes, common mistakes, and a short self-check.
-Stay grounded in the notebook only.
-```
-
-### Tutor Mode
-
-```text
-Use my imported OneNote package on [topic].
-Teach me this step by step like a tutor.
-Return one concept at a time with a short example.
-Stop after each concept and ask if I want the next one.
-```
-
-### Quiz Mode
-
-```text
-Use my imported OneNote package on [topic].
-Quiz me one question at a time.
-Do not reveal the answer until I respond.
-After each answer, explain why I was right or wrong.
-```
-
-### Oral Defense Mode
-
-```text
-Use my imported OneNote package on [topic].
-Run an oral defense.
-Ask one technical question at a time, wait for my answer, then grade it for correctness, completeness, and field judgment.
-```
-
-### Practice Test
-
-```text
-Use my imported OneNote package on [topic].
-Create a practice test.
-Return 15 questions with mixed difficulty and an answer key with explanations at the end.
-Stay within the notebook content.
-```
-
 ## Best Reply Patterns For ML Engineer
-
-Use ML Engineer when you want to understand or improve the learning pipeline.
 
 ### Check Pipeline Health
 
@@ -354,12 +218,12 @@ Show me the current ML pipeline status.
 Return when it last ran, what components are active, and any anomalies.
 ```
 
-### Diagnose Weak Topics
+### Diagnose Scoring Drift
 
 ```text
 Use my current ML analytics.
-List my weak topic clusters and what the forecast says about my plateau risk.
-Return one recommended study focus.
+List any scoring drift signals and what the forecast says about model health.
+Return one recommended action.
 ```
 
 ### Check Knowledge Coverage
@@ -369,120 +233,12 @@ What is the current embedding and indexing coverage for my imported knowledge do
 Return document count, embedding dimension, and any gaps.
 ```
 
-### Interpret Learning Forecast
+### Interpret Forecast
 
 ```text
 Use my current ML forecast.
-Explain the progress trend and flag any plateaus or anomalies.
+Explain the trend and flag any anomalies.
 Return one concrete next step.
-```
-
-## Best Reply Patterns For Electrical Drafting Workflows
-
-Use these patterns when working on drawing review, revision control, issue sets, or approval routing for electrical production work.
-
-### Drawing Review Routing
-
-```text
-Use Suite as background context only.
-Explain the approval-routing states that matter for electrical drawing review.
-Return: review states, transition triggers, signoff requirements, and operator risks.
-Do not suggest code changes yet.
-```
-
-### Revision Control and Audit Trail
-
-```text
-Research revision-control patterns for electrical drafting production workflows.
-Return: revision tracking, signoff states, audit trail requirements, and package handoff steps.
-Ignore CRM, billing, and generic PM features.
-Focus only on what affects drawing approval and transmittal.
-```
-
-### Issue Set Approval
-
-```text
-Use Suite as background context only.
-Compare issue-set approval flow patterns for electrical drafting teams.
-Return: issue states, approval gates, rejection paths, and resubmission rules.
-Keep it tied to review-first production control.
-```
-
-### Drawing QA Checklist
-
-```text
-Use my imported knowledge on electrical drawing QA.
-Create a review checklist for [drawing type].
-Return: standard checks, failure modes, code references, and sign-off criteria.
-Stay grounded in the imported knowledge only.
-```
-
-### Production Transmittal Workflow
-
-```text
-Use Suite as background context only.
-Explain the transmittal and package handoff workflow for electrical drawing sets.
-Return: package states, required approvals, delivery triggers, and what can fail silently.
-Do not propose implementation yet.
-```
-
-### Competitor Fit-Gap For Drafting Control
-
-```text
-Research [tool name] for electrical drafting production control.
-Return: approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD workflow fit.
-Return a short fit-gap summary and one recommendation.
-Ignore CRM, invoicing, and general PM features.
-```
-
-## Best Reply Patterns For Approval Routing and Workflow Fit
-
-Use these patterns when validating approval routing, issue-set handling, audit trail compliance,
-and overall workflow fit for electrical drafting production control.
-
-### Revision Tracking Alignment
-
-```text
-Use Suite as background context only.
-Verify that the revision tracking workflow aligns with the approval routing requirements.
-Return: revision states, transition rules, approval gates, and compliance gaps.
-Focus only on revision-to-approval alignment.
-```
-
-### Issue-Set Handling
-
-```text
-Use Suite as background context only.
-Describe how issue sets are grouped, submitted, and tracked through the approval workflow.
-Return: issue-set states, approval gates, rejection paths, and resubmission rules.
-Exclude CRM, billing, and general PM scope.
-```
-
-### Audit Trail Compliance
-
-```text
-Research audit trail requirements for electrical drafting approval workflows.
-Return: required audit fields, actor accountability, state transition records, and timestamp requirements.
-Verify compliance against revision tracking and issue-set approval steps.
-Ignore features unrelated to approval and signoff audit.
-```
-
-### Approval Routing Verification
-
-```text
-Use Suite as background context only.
-Verify the approval routing workflow covers all required signoff states and transitions.
-Return: routing rules, signoff accountabilities, escalation paths, and workflow fit gaps.
-Focus on fit with electrical drafting production control requirements.
-```
-
-### Workflow Fit Assessment
-
-```text
-Research workflow fit for electrical drafting production control tools.
-Return: revision tracking fit, issue-set handling fit, audit trail fit, approval routing fit, and AutoCAD integration fit.
-Return a fit-gap summary per category and one overall recommendation.
-Ignore CRM, invoicing, and general PM features.
 ```
 
 ## Best Reply Patterns For Research
@@ -504,80 +260,42 @@ Return only the differences that matter for [decision].
 Ignore generic marketing claims.
 ```
 
-Good research prompts are narrow.
-
-Weak:
-
-```text
-Research DraftFlow
-```
-
-Better:
-
-```text
-Research DraftFlow for electrical drafting production control.
-Return approval routing, revision tracking, issue-set handling, audit trail, and AutoCAD-related workflow fit.
-Ignore CRM, invoicing, and general PM features.
-```
-
 ## Best Reply Patterns For Chief Of Staff
-
-Use Chief when you are overloaded or need a decision.
-
-Good examples:
 
 ```text
 I have 90 minutes.
-Use my current queue, training pressure, and open approvals.
+Use my current queue and open approvals.
 Tell me the single highest-leverage move and the next 2 backup moves.
 ```
 
 ```text
-I have study work, Suite work, and business research competing right now.
+I have Suite work, ML pipeline work, and business research competing right now.
 Route the day into morning, midday, and evening blocks.
 Keep it realistic and cut anything non-essential.
 ```
 
 ## Best Reply Patterns For Suite Context
 
-Use Suite Context when you want read-only product or workflow interpretation.
-
-Good examples:
-
 ```text
 Use Suite as background context only.
-Explain the approval-routing patterns we should probably support.
+Explain the routing patterns we should probably support.
 Return a short list of states, transitions, and operator risks.
 Do not suggest code changes yet.
 ```
 
-```text
-Compare review-first workflow patterns that fit electrical drafting.
-Return only the patterns that affect drawing review, issue sets, approvals, and transmittals.
-```
-
 ## Best Reply Patterns For Business Ops
 
-Use Business Ops when you want market validation or offer framing.
-
-Good examples:
-
 ```text
-Research workflow approval tools for drafting and engineering teams.
-Return only features tied to revision control, signoff, audit trail, and package delivery.
-Ignore CRM, billing, and agency-focused features.
-```
-
-```text
-Turn this competitor research into a decision memo.
-Return ideal customer, strongest overlap with Suite, biggest gap, and one practical next move.
+Research workflow automation tools for engineering teams.
+Return only features tied to revision control, audit trail, and delivery control.
+Ignore CRM, billing, and generic PM features.
 ```
 
 ## What Usually Causes Bad Answers
 
 - asking for too much in one turn
 - not telling the agent what source to use
-- not saying whether you want study help, research, or a decision
+- not saying whether you want analysis, research, or a decision
 - not saying what to ignore
 - approving an item and expecting that alone to run it
 - using replies like `yes`, `ok`, or `look into this` with no scope
@@ -591,48 +309,6 @@ Use this checklist before you hit send:
 3. Did I say what to ignore?
 4. Do I want approval only, or do I want the work to start now?
 5. If this needs current facts, did I explicitly ask for research?
-
-## Paste-Ready Short Replies
-
-### Start a useful approved research item
-
-```text
-Approve and run.
-Focus on approval routing, audit trail, revision control, and handoff.
-Return a short fit-gap summary and one recommendation.
-Ignore generic PM features.
-```
-
-### Keep an item without running it
-
-```text
-Approve only.
-This is relevant, but not for now.
-Keep it for later comparison against Suite approval flow.
-```
-
-### Get a notebook-grounded study guide
-
-```text
-Use my imported OneNote package.
-Create a study guide on [topic].
-Stay grounded in the notebook only.
-```
-
-### Get quizzed properly
-
-```text
-Use my imported OneNote package on [topic].
-Quiz me one question at a time and wait for my answer.
-```
-
-### Force a narrow research answer
-
-```text
-Use live research.
-Return only what matters for [decision].
-Ignore broad market commentary and generic feature lists.
-```
 
 ## Current Practical Rule
 

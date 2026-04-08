@@ -265,7 +265,7 @@
 **What was done:**
 - Created five agent classes in `DailyDesk/Services/Agents/`:
   - `ChiefOfStaffAgent` — routes the day, accesses state and job list.
-  - `EngineeringDeskAgent` — coaching, CAD judgment, practice tests, oral defense.
+  - `EngineeringDeskAgent` — technical analysis, code review, architecture tradeoffs.
   - `SuiteContextAgent` — read-only Suite repo/runtime awareness.
   - `GrowthOpsAgent` — monetization, operator memory, suggestions.
   - `MLEngineerAgent` — ML pipeline, analytics, forecasts.
@@ -373,7 +373,7 @@
 
 **What was done:**
 - Created `WorkflowTemplate` model and `WorkflowStore` backed by LiteDB `workflow_templates` collection.
-- Three built-in templates: "Daily Run", "Exam Prep", "Knowledge Refresh".
+- Two built-in templates: "Daily Run", "Knowledge Refresh".
 - Endpoints: `GET /api/workflows`, `POST /api/workflows`, `POST /api/workflows/{id}/run`, `DELETE /api/workflows/{id}`.
 - Workflow validators added to `DailyDesk.Broker/Validators.cs`.
 

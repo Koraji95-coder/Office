@@ -142,7 +142,7 @@ This means the orchestrator is doing both business logic and input validation. V
 - Scattered `string.IsNullOrWhiteSpace` checks → Declarative `RuleFor(x => x.Property).NotEmpty()`.
 
 **What it does NOT replace:**
-- Orchestrator `InvalidOperationException` throws for state validation (e.g., "No active practice test") — these stay in the orchestrator.
+- Orchestrator `InvalidOperationException` throws for state validation (e.g., "No active job") — these stay in the orchestrator.
 - `Math.Clamp` for numeric clamping — this stays in the orchestrator.
 
 **Canonical usage patterns:**
