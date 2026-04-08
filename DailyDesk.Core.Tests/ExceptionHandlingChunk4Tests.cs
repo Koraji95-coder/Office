@@ -385,11 +385,9 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
             .Where(line => !line.TrimStart().StartsWith("//"));
         var codeOnly = string.Join('\n', codeLines);
 
-        Assert.DoesNotContain(
-            "ex.Message",
-            codeOnly,
-            StringComparison.Ordinal
-        );
+        Assert.DoesNotContain("ex.Message", codeOnly, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.ToString()", codeOnly, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.StackTrace", codeOnly, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -448,7 +446,7 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
     /// <summary>
     /// Extracts the text of the Pattern 4 code block from CONVENTIONS.md,
     /// starting at the <c>// Pattern 4: Broker endpoint catch</c> comment and
-    /// ending just before the closing <c>```</c> fence.
+    /// ending just before the closing <c>```</c> fence line.
     /// </summary>
     private static string ExtractPattern4CodeBlock(string conventions)
     {
@@ -457,10 +455,11 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
         if (start < 0)
             return string.Empty;
 
-        // Find the closing ``` fence that ends this code block.
-        var codeBlockEnd = conventions.IndexOf("```", start, StringComparison.Ordinal);
-        return codeBlockEnd >= 0
-            ? conventions[start..codeBlockEnd]
+        // Search for a ``` that appears at the start of a line (the closing fence),
+        // not the opening ``` fence or any opening fence of a nested block.
+        var closingFence = conventions.IndexOf("\n```", start, StringComparison.Ordinal);
+        return closingFence >= 0
+            ? conventions[start..closingFence]
             : conventions[start..];
     }
 
@@ -471,15 +470,26 @@ public sealed class ExceptionHandlingChunk4Tests : IClassFixture<BrokerWebApplic
     /// </summary>
     private static string ExtractGeneralCatchBlock(string pattern4Code)
     {
+        // Normalise runs of whitespace so that catch(Exception ex) and
+        // catch ( Exception ex ) both match the canonical form before indexing.
+        var normalised = System.Text.RegularExpressions.Regex.Replace(
+            pattern4Code, @"\s+", " ");
+
         // Locate the catch (Exception ex) line that is NOT a specific type
         // (ArgumentException / InvalidOperationException) and NOT a when-filter.
         const string catchSignature = "catch (Exception ex)";
-        var idx = pattern4Code.IndexOf(catchSignature, StringComparison.Ordinal);
+        var idx = normalised.IndexOf(catchSignature, StringComparison.Ordinal);
         if (idx < 0)
             return string.Empty;
 
-        // Return everything from that catch declaration to the end of the snippet.
-        return pattern4Code[idx..];
+        // Return the matching suffix from the *original* text by mapping the
+        // index position back via character count (both strings have the same
+        // number of tokens; we use the original to preserve newlines for the
+        // comment-stripping step in the caller).
+        var originalIdx = pattern4Code.IndexOf(catchSignature, StringComparison.Ordinal);
+        return originalIdx >= 0
+            ? pattern4Code[originalIdx..]
+            : pattern4Code[idx..];
     }
 
     // -----------------------------------------------------------------------
