@@ -23,6 +23,10 @@ from typing import Any
 # Precomputed constant: -ln(0.5) used in stability estimation
 _LN_2 = math.log(2.0)
 
+# Static error message returned when a training step raises an unexpected exception.
+# Using a static string avoids leaking internal exception details in output.
+_STATIC_TRAIN_ERROR = "An unexpected error occurred. See server logs for details."
+
 
 # ---------------------------------------------------------------------------
 # State root resolution
@@ -448,18 +452,18 @@ def main() -> None:
 
     try:
         clustering_metrics = _train_topic_clustering(topic_accuracy)
-    except Exception as exc:
-        clustering_metrics = {"saved": False, "reason": str(exc)}
+    except Exception:
+        clustering_metrics = {"saved": False, "reason": _STATIC_TRAIN_ERROR}
 
     try:
         readiness_metrics = _train_readiness_predictor(topic_accuracy)
-    except Exception as exc:
-        readiness_metrics = {"saved": False, "reason": str(exc)}
+    except Exception:
+        readiness_metrics = {"saved": False, "reason": _STATIC_TRAIN_ERROR}
 
     try:
         operator_metrics = _train_operator_classifier(operator_decisions)
-    except Exception as exc:
-        operator_metrics = {"saved": False, "reason": str(exc)}
+    except Exception:
+        operator_metrics = {"saved": False, "reason": _STATIC_TRAIN_ERROR}
 
     metrics: dict[str, Any] = {
         "retrained_at": datetime.now(timezone.utc).isoformat(),
