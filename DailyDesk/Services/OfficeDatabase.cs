@@ -82,6 +82,14 @@ public sealed class OfficeDatabase : IDisposable
     public ILiteCollection<IndexedDocumentRecord> KnowledgeIndex =>
         _db.GetCollection<IndexedDocumentRecord>("knowledge_index");
 
+    /// <summary>
+    /// Audit trail entries for electrical drawing revision state transitions.
+    /// Collection name: drawing_audit_trail.
+    /// Indexed by DrawingId and OccurredAt for efficient per-drawing history queries.
+    /// </summary>
+    public ILiteCollection<AuditTrailEntry> AuditTrailEntries =>
+        _db.GetCollection<AuditTrailEntry>("drawing_audit_trail");
+
     private void EnsureIndexes()
     {
         PracticeAttempts.EnsureIndex(x => x.CompletedAt);
@@ -98,6 +106,8 @@ public sealed class OfficeDatabase : IDisposable
         JobSchedules.EnsureIndex(x => x.Enabled);
         WorkflowTemplates.EnsureIndex(x => x.Id);
         KnowledgeIndex.EnsureIndex(x => x.DocumentPath);
+        AuditTrailEntries.EnsureIndex(x => x.DrawingId);
+        AuditTrailEntries.EnsureIndex(x => x.OccurredAt);
     }
 
     /// <summary>

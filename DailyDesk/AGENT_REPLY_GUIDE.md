@@ -485,6 +485,118 @@ Return a fit-gap summary per category and one overall recommendation.
 Ignore CRM, invoicing, and general PM features.
 ```
 
+## Audit Trail Implementation Details
+
+This section documents how audit trail entries are structured, stored, and accessed in the
+DailyDesk system. Use these details when implementing or verifying audit trail compliance
+for electrical drafting approval workflows.
+
+### AuditTrailEntry Structure
+
+Each audit event is captured as an `AuditTrailEntry` record defined in
+`DailyDesk/Models/AuditTrailEntry.cs`.
+
+| Field | Type | Purpose |
+|---|---|---|
+| `Id` | `string` | Unique identifier (32-character hex GUID, no hyphens) auto-assigned on creation |
+| `DrawingId` | `string` | Links the entry to the parent drawing |
+| `RevisionId` | `string` | Links the entry to the specific revision or issue set |
+| `Action` | `string` | Human-readable description of the action (e.g. `"approved"`, `"rejected"`) |
+| `Actor` | `string` | Name or identifier of the person who performed the action |
+| `FromState` | `DrawingSignoffState` | State the revision transitioned from |
+| `ToState` | `DrawingSignoffState` | State the revision transitioned to |
+| `Notes` | `string` | Optional free-text notes (e.g. rejection reason) |
+| `OccurredAt` | `DateTimeOffset` | UTC timestamp when the action occurred |
+
+### State Transition Recording
+
+Audit entries are created inline when a state transition is applied to a
+`DrawingRevisionRecord`. The `FromState` and `ToState` fields capture the before/after
+signoff states:
+
+```csharp
+var entry = new AuditTrailEntry
+{
+    DrawingId  = revision.DrawingId,
+    RevisionId = revision.Id,
+    Action     = "approved",
+    Actor      = "B.Jones",
+    FromState  = revision.State,                  // e.g. DrawingSignoffState.InReview
+    ToState    = DrawingSignoffState.Approved,
+    Notes      = string.Empty,
+    OccurredAt = DateTimeOffset.UtcNow,
+};
+revision.State = DrawingSignoffState.Approved;
+```
+
+For issue-set transitions, `DrawingSignoffState` and `IssueSetState` are semantically
+distinct enums. Record the issue-set state information in the `Action` and `Notes` fields
+rather than in `FromState`/`ToState`.
+
+### Storage
+
+Audit trail entries are persisted in a LiteDB collection via
+`OfficeDatabase.AuditTrailEntries` (collection name: `drawing_audit_trail`). The
+collection is indexed by `DrawingId` and `OccurredAt` for efficient per-drawing history
+queries. The `OfficeDatabase` service is defined in
+`DailyDesk/Services/OfficeDatabase.cs`.
+
+```csharp
+// Store a new entry
+db.AuditTrailEntries.Insert(entry);
+
+// Query the full history for a specific drawing, in chronological order
+var history = db.AuditTrailEntries
+    .Find(e => e.DrawingId == "DWG-001")
+    .OrderBy(e => e.OccurredAt)
+    .ToList();
+
+// Query entries for a specific revision
+var revisionHistory = db.AuditTrailEntries
+    .Find(e => e.RevisionId == revisionId)
+    .OrderBy(e => e.OccurredAt)
+    .ToList();
+```
+
+### Signoff States
+
+The `DrawingSignoffState` enum (defined in `DailyDesk/Models/DrawingSignoffState.cs`)
+defines the valid states for revision approval routing:
+
+| State | Meaning |
+|---|---|
+| `Draft` | Initial authoring; not yet submitted for review |
+| `InReview` | Submitted and under active review |
+| `Approved` | Passed all review gates; approved for issue |
+| `Rejected` | Requires rework before resubmission |
+| `Superseded` | Replaced by a later revision; no longer current |
+
+### Required Audit Fields
+
+Every audit entry must populate:
+
+- `DrawingId` — links the entry to the affected drawing (required for drawing-level history queries)
+- `RevisionId` — links the entry to the affected revision or issue set
+- `Action` — describes what happened (approval gate, rejection, resubmission, issue)
+- `Actor` — identifies who performed the action (actor accountability requirement)
+- `OccurredAt` — records when the action occurred in UTC (timestamp requirement)
+
+For `DrawingRevisionRecord` state transitions, `FromState` and `ToState` must also be set.
+
+Rejection events must include the rejection reason in `Notes`.
+
+### Audit Trail Compliance Checklist
+
+When validating audit trail compliance against revision tracking and approval workflows:
+
+1. Every state transition on a `DrawingRevisionRecord` produces exactly one `AuditTrailEntry`.
+2. `Actor` is never empty — every action must have an accountable person.
+3. `OccurredAt` is always set to UTC — never left at the property default.
+4. `FromState` and `ToState` are set for all `DrawingRevisionRecord` transitions.
+5. Rejection events include the rejection reason in `Notes`.
+6. Entries are stored via `OfficeDatabase.AuditTrailEntries` and indexed by `DrawingId`.
+7. Issue-set transitions use `Action` and `Notes` to carry state information.
+
 ## Best Reply Patterns For Research
 
 If the answer needs current web facts, say so directly.
