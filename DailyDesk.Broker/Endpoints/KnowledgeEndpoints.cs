@@ -91,9 +91,9 @@ internal static class KnowledgeEndpoints
             {
                 return Results.BadRequest(new { error = exception.Message });
             }
-            catch (InvalidOperationException exception)
+            catch (InvalidOperationException)
             {
-                return Results.BadRequest(new { error = exception.Message });
+                return Results.BadRequest(new { error = "The requested operation could not be completed." });
             }
             catch (Exception exception)
             {

@@ -38,6 +38,18 @@ The full exception — including message *and* stack trace — is already captur
 ## Safe Pattern (Pattern 4 — Broker Endpoint Catch)
 
 ```csharp
+catch (ArgumentException ex)
+{
+    // ArgumentException messages are authored in the orchestrator for user feedback.
+    return Results.BadRequest(new { error = ex.Message });
+}
+catch (InvalidOperationException)
+{
+    // ⚠ Never return ex.Message — use a static generic string.
+    // InvalidOperationException can originate from internal services whose messages
+    // may contain runtime details (e.g. Python subprocess output).
+    return Results.BadRequest(new { error = "The requested operation could not be completed." });
+}
 catch (Exception exception)
 {
     logger.LogError(exception, "Office broker {Endpoint} endpoint failed.", endpointName);
@@ -51,6 +63,11 @@ catch (Exception exception)
 
 Key points:
 
+* `ArgumentException.Message` is safe to return because these messages are always
+  authored in the orchestrator specifically as user-facing strings.
+* `InvalidOperationException.Message` must **not** be returned — use a static generic
+  string.  The message can originate from internal services (e.g. Python subprocess,
+  LiteDB) and may contain runtime details.
 * `logger.LogError(exception, …)` preserves the full exception (message + stack trace)
   in the structured log sink — no information is lost.
 * The `detail` field returned to the client is a **static generic string**.
@@ -63,7 +80,7 @@ Key points:
 | Source | Safe to return? | Notes |
 |--------|-----------------|-------|
 | `ArgumentException.Message` (Pattern 2) | ✅ Yes | These messages are authored in the orchestrator specifically to be user-facing |
-| `InvalidOperationException.Message` (Pattern 3) | ✅ Yes | Same — authored for user feedback |
+| `InvalidOperationException.Message` (Pattern 3) | ❌ No | Can originate from internal services (e.g. Python subprocess output); use a static generic string and log the exception |
 | FluentValidation error messages | ✅ Yes | Authored in validator constructors |
 | `Exception.Message` for unhandled catch-all | ❌ No | Replace with generic string; log full exception |
 | `Exception.StackTrace` | ❌ Never | Log only; never return to client |
@@ -78,8 +95,9 @@ When reviewing a PR that adds or modifies an API endpoint in `Program.cs`, confi
 - [ ] The catch-all `catch (Exception …)` block calls `logger.LogError(exception, …)`.
 - [ ] `Results.Problem(detail: …)` uses a **string literal**, not `exception.Message`.
 - [ ] No `exception.ToString()` or `exception.StackTrace` appears in any response body.
-- [ ] Specific `ArgumentException` / `InvalidOperationException` catches use `ex.Message`
-      only when the message was authored as a user-facing string in the orchestrator.
+- [ ] `ArgumentException` catches return `ex.Message` only when the message was authored as
+      a user-facing string in the orchestrator.
+- [ ] `InvalidOperationException` catches return a **static generic string** — never `ex.Message`.
 
 ---
 

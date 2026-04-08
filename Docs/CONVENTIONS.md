@@ -61,7 +61,16 @@ if (practiceTest is null)
 // Pattern 4: Broker endpoint catch
 catch (ArgumentException ex)
 {
+    // ArgumentException messages are always authored in the orchestrator for user feedback.
     return Results.BadRequest(new { error = ex.Message });
+}
+catch (InvalidOperationException)
+{
+    // ⚠ Never return ex.Message for InvalidOperationException — use a static generic string.
+    // The message can originate from internal services (e.g. Python subprocess output) and
+    // must not be forwarded to clients.
+    // See Docs/stack-trace-exposure-remediation.md for the full policy.
+    return Results.BadRequest(new { error = "The requested operation could not be completed." });
 }
 catch (Exception ex)
 {
@@ -154,9 +163,17 @@ app.MapPost("/api/{resource}/{action}", async (RequestType request, OfficeBroker
         var state = await orchestrator.GetStateAsync(ct);
         return Results.Ok(new { result, state });
     }
-    catch (InvalidOperationException ex)
+    catch (ArgumentException ex)
     {
+        // ArgumentException messages are always authored in the orchestrator for user feedback.
         return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (InvalidOperationException)
+    {
+        // ⚠ Never return ex.Message for InvalidOperationException — use a static generic string.
+        // The message can originate from internal services and must not be forwarded to clients.
+        // See Docs/stack-trace-exposure-remediation.md for the full policy.
+        return Results.BadRequest(new { error = "The requested operation could not be completed." });
     }
     catch (Exception ex)
     {
