@@ -19,24 +19,21 @@ $headers = @{ Authorization = "Bearer $ghToken"; Accept = "application/vnd.githu
 # === CONFIGURABLE: How many issues per cycle ===
 $issuesPerCycle = 6
 
+# Suite excluded while building ML training base
 # Fetch existing issues to avoid duplicates
 try {
     $officeIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Office/issues?state=open&per_page=20&labels=ai-suggested" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
-    $suiteIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Suite/issues?state=open&per_page=20&labels=ai-suggested" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
 
     $allOfficeIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Office/issues?state=open&per_page=30" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
-    $allSuiteIssues = (Invoke-RestMethod -Uri "https://api.github.com/repos/Koraji95-coder/Suite/issues?state=open&per_page=30" -Headers $headers) | ForEach-Object { "- #$($_.number): $($_.title)" }
 
     $officeAiCount = ($officeIssues | Measure-Object).Count
-    $suiteAiCount = ($suiteIssues | Measure-Object).Count
 
-    if ($officeAiCount -ge 20 -and $suiteAiCount -ge 20) {
-        Write-Host "Both repos at issue cap. Skipping."
+    if ($officeAiCount -ge 20) {
+        Write-Host "Office repo at issue cap. Skipping."
         exit 0
     }
 
     $allowOffice = if ($officeAiCount -lt 20) { "You MAY suggest Office issues. ($officeAiCount/20 open)" } else { "Do NOT suggest Office issues -- at cap ($officeAiCount/20)." }
-    $allowSuite = if ($suiteAiCount -lt 20) { "You MAY suggest Suite issues. ($suiteAiCount/20 open)" } else { "Do NOT suggest Suite issues -- at cap ($suiteAiCount/20)." }
 } catch {
     Write-Host "Failed to fetch existing issues: $($_.Exception.Message)"
     exit 1
@@ -95,7 +92,6 @@ You are an autonomous technical project manager. Your job is to find exactly 1 h
 Rules:
 - Suggest exactly 1 issue. No more.
 - $allowOffice
-- $allowSuite
 - Do NOT duplicate any existing issue below.
 - Focus on: test coverage gaps, missing docs, technical debt, CI/CD hardening, or developer experience improvements.
 - The issue must be specific and actionable -- not vague.
@@ -106,9 +102,6 @@ EXISTING OPEN ISSUES (do not duplicate):
 
 OFFICE:
 $($allOfficeIssues -join "`n")
-
-SUITE:
-$($allSuiteIssues -join "`n")
 $cycleContext
 
 CODE CONTEXT FROM THE CODEBASE (use this to find real problems):
@@ -138,6 +131,12 @@ Respond ONLY with valid JSON. No markdown, no explanation:
 
         if (-not $issue.repo -or -not $issue.title -or -not $issue.body) {
             Write-Host "Invalid response from Ollama, skipping."
+            continue
+        }
+
+        # Safety net: Suite excluded while building ML training base
+        if ($issue.repo -ne "Office") {
+            Write-Host "Skipping non-Office suggestion ($($issue.repo)). Suite excluded while building ML training base."
             continue
         }
 

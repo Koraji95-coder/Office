@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Creates and registers the following scheduled tasks under the \Office\ folder:
-      - RAG-Nightly-Reindex   : Re-indexes Office + Suite repos into ChromaDB every 90 minutes.
+      - RAG-Nightly-Reindex   : Re-indexes Office repo into the ChromaDB RAG database every 90 minutes.
       - Auto-PR-Review        : Reviews and scores Copilot PRs, auto-merges high-scoring ones.
       - AIAutoPipeline        : Creates AI-suggested GitHub issues from RAG context.
       - Health-Check          : Pings Ollama every 15 minutes and alerts Discord if down.
@@ -165,7 +165,7 @@ Register-OfficeTask `
     -Name "RAG-Nightly-Reindex" `
     -Trigger $ragTrigger `
     -Action $ragAction `
-    -Description "Re-indexes Office and Suite repos into the ChromaDB RAG database every 90 minutes."
+    -Description "Re-indexes Office repo into the ChromaDB RAG database every 90 minutes."
 
 # ──────────────────────────────────────────────
 # 2. Auto-PR-Review -- every 30 minutes
